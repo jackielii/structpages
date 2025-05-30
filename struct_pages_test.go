@@ -21,9 +21,9 @@ func printPageItem(t *testing.T, indent string, item *PageNode) {
 	t.Helper()
 	t.Logf("%sName: %s", indent, item.Name)
 	t.Logf("%sRoute: %s", indent, item.Route)
-	t.Logf("%sPage: %v", indent, sprintMethod(item.Page))
-	t.Logf("%sPartial: %v", indent, sprintMethod(item.Partial))
-	t.Logf("%sArgs: %v", indent, sprintMethod(item.Args))
+	t.Logf("%sPage: %v", indent, formatMethod(item.Page))
+	t.Logf("%sPartial: %v", indent, formatMethod(item.Partial))
+	t.Logf("%sArgs: %v", indent, formatMethod(item.Args))
 	for _, child := range item.Children {
 		printPageItem(t, indent+"  ", child)
 	}

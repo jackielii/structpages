@@ -19,5 +19,5 @@ func (l *Level2) Page() templComponent    { return noopComponent{} }
 func (l *Level2) Partial() templComponent { return noopComponent{} }
 
 func TestPrint(t *testing.T) {
-	NewStructPages().MountPages(&printeRouter{}, "/", &TopPage{})
+	NewStructPages().MountPages(&printRouter{}, "/", &TopPage{})
 }
