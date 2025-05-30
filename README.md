@@ -1,3 +1,3 @@
-# stx
-**S**truct-based **T**emplating with htm**X**
+# srx
+**S**truct-based **R**outing with htm**X**
 

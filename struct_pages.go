@@ -1,4 +1,4 @@
-package stx
+package srx
 
 import (
 	"fmt"
@@ -232,7 +232,7 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 			var err error
 			args, err = extractError(args)
 			if err != nil {
-				pr.onError(w, r, fmt.Errorf("Error calling Args method on %s: %w", page.Name, err))
+				pr.onError(w, r, fmt.Errorf("error calling Args method on %s: %w", page.Name, err))
 				return
 			}
 		}
@@ -308,8 +308,8 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 	if len(in) == lenFilled {
 		return method.Func.Call(in)
 	}
+	// convention: if a method has more arguments than provided, we try to fill them with initArgs
 	for i := lenFilled; i < len(in); i++ {
-		// convention: if a method has more arguments than provided, we try to fill them with initArgs
 		argType := method.Type.In(i)
 		st := argType
 		pt := argType

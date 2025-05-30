@@ -1,4 +1,4 @@
-package stx
+package srx
 
 import (
 	"net/http"
