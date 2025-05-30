@@ -7,15 +7,16 @@ import (
 )
 
 type PageNode struct {
-	Name     string
-	Title    string
-	Route    string
-	Value    reflect.Value
-	Partial  *reflect.Method
-	Page     *reflect.Method
-	Args     *reflect.Method
-	Parent   *PageNode
-	Children []*PageNode
+	Name        string
+	Title       string
+	Method      string
+	Route       string
+	Value       reflect.Value
+	Args        *reflect.Method
+	Components  map[string]*reflect.Method
+	Middlewares *reflect.Method
+	Parent      *PageNode
+	Children    []*PageNode
 }
 
 func (pn *PageNode) FullRoute() string {
@@ -31,8 +32,10 @@ func (p PageNode) String() string {
 	sb.WriteString("name: " + p.Name)
 	sb.WriteString(", title: " + p.Title)
 	sb.WriteString(", route: " + p.Route)
-	sb.WriteString(", page: " + formatMethod(p.Page))
-	sb.WriteString(", partial: " + formatMethod(p.Partial))
+	sb.WriteString(", middlewares: " + formatMethod(p.Middlewares))
+	for name, comp := range p.Components {
+		sb.WriteString(", component: " + name + " -> " + formatMethod(comp))
+	}
 	sb.WriteString(", args: " + formatMethod(p.Args))
 	sb.WriteString("}")
 	return sb.String()

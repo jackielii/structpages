@@ -1,18 +1,16 @@
 package srx
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"path"
 	"reflect"
-	"runtime"
 )
+
+type middlewareFunc = func(http.Handler, *PageNode) http.Handler
 
 type StructPages struct {
 	onError     func(http.ResponseWriter, *http.Request, error)
-	middlewares []func(http.Handler, *PageNode) http.Handler
+	middlewares []middlewareFunc
 }
 
 func NewStructPages(options ...func(*StructPages)) *StructPages {
@@ -41,40 +39,42 @@ func WithMiddlewares(middlewares ...func(http.Handler, *PageNode) http.Handler) 
 
 func (sp *StructPages) MountPages(router Router, route string, page any, initArgs ...any) {
 	pc := parsePageTree(route, page, initArgs...)
-	sp.registerPageItem(router, pc, pc.rootNode, route)
+	sp.registerPageItem(router, pc, pc.rootNode)
 }
 
-func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, parentRoute string) {
+func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode) {
 	if page.Route == "" {
 		panic("Page item route is empty: " + page.Name)
 	}
-	if page.Page == nil && page.Partial == nil {
-		println("Registering route group", "name", page.Name, "route", path.Join(parentRoute, page.Route))
+	pageComp := page.Components["Page"]
+	partialComp := page.Components["Partial"]
+	if page.Children != nil {
+		// nested pages has to be registered first to avoid conflicts with the parent route
+		// defer func() {
+		// println("Registering route group", "name", page.Name, "route", page.FullRoute())
 		router.Route(page.Route, func(router Router) {
 			for _, child := range page.Children {
-				pr.registerPageItem(router, pc, child, page.Route)
+				pr.registerPageItem(router, pc, child)
 			}
 		})
+		// }()
+	}
+	if pageComp == nil && partialComp == nil {
 		return
 	}
-	if page.Page == nil {
+	if pageComp == nil {
 		panic("Page item " + page.Name + " does not have a Page method")
 	}
-	if page.Page.Type.NumIn() > 1 && page.Args == nil {
+	if pageComp.Type.NumIn() > 1 && page.Args == nil {
 		panic("Page method on " + page.Name + " requires args, but Args method not declared")
 	}
-	if page.Partial != nil && page.Partial.Type.NumIn() > 1 && page.Args == nil {
+	if partialComp != nil && partialComp.Type.NumIn() > 1 && page.Args == nil {
 		panic("Partial method on " + page.Name + " requires args, but Args method not declared")
 	}
-	// TODO: this is problematic as the function itself may panic
-	// dry run Args method to make sure the required arguments are available
-	// if page.Args != nil {
-	// 	emptyRequest, _ := http.NewRequest("GET", "/", nil)
-	// 	pc.callMethod(page.Value, *page.Args, reflect.ValueOf(emptyRequest))
-	// }
 
-	println("Registering page item", "name", page.Name, "route", path.Join(parentRoute, page.Route), "title", page.Title)
+	// println("Registering page item", "name", page.Name, "route", path.Join(parentRoute, page.Route), "title", page.Title)
 	var handler http.Handler
+	// TODO: move handler creation to configuration
 	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var args []reflect.Value
 		if page.Args != nil {
@@ -88,50 +88,44 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		}
 
 		if isHTMX(r) {
-			if page.Partial != nil {
-				comp := pc.callTemplMethod(page.Value, *page.Partial, args...)
+			if partialComp != nil {
+				comp := pc.callTemplMethod(page.Value, *partialComp, args...)
 				if err := comp.Render(r.Context(), w); err != nil {
 					pr.onError(w, r, err)
 				}
 			} else {
-				comp := pc.callTemplMethod(page.Value, *page.Page, args...)
+				comp := pc.callTemplMethod(page.Value, *pageComp, args...)
 				w.Header().Set("HX-Retarget", "body")
 				if err := comp.Render(r.Context(), w); err != nil {
 					pr.onError(w, r, err)
 				}
 			}
 		} else {
-			comp := pc.callTemplMethod(page.Value, *page.Page, args...)
+			comp := pc.callTemplMethod(page.Value, *pageComp, args...)
 			if err := comp.Render(r.Context(), w); err != nil {
 				pr.onError(w, r, err)
 			}
 		}
 	})
+	// apply page middlewares
+	if page.Middlewares != nil {
+		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
+		if len(res) != 1 {
+			panic(fmt.Sprintf("Middlewares method on %s did not return single result", page.Name))
+		}
+		middlewares, ok := res[0].Interface().([]middlewareFunc)
+		if !ok {
+			panic(fmt.Sprintf("Middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
+		}
+		for _, mw := range middlewares {
+			handler = mw(handler, page)
+		}
+	}
+	// apply global middlewares
 	for _, middleware := range pr.middlewares {
 		handler = middleware(handler, page)
 	}
-	router.HandleMethod("get", page.Route, handler)
-}
-
-type templComponent interface {
-	Render(context.Context, io.Writer) error
-}
-
-func returnsTemplComponent(t reflect.Method) bool {
-	templComponent := reflect.TypeOf((*templComponent)(nil)).Elem()
-	if t.Type.NumOut() != 1 {
-		return false
-	}
-	return t.Type.Out(0).Implements(templComponent)
-}
-
-func isPromotedMethod(method reflect.Method) bool {
-	// Check if the method is promoted from an embedded type
-	// https://github.com/golang/go/issues/73883
-	wPC := method.Func.Pointer()
-	wFunc := runtime.FuncForPC(wPC)
-	wFile, wLine := wFunc.FileLine(wPC)
-	return wFile == "<autogenerated>" && wLine == 1
+	router.HandleMethod(page.Method, page.Route, handler)
 }
 
 var errorType = reflect.TypeOf((*error)(nil)).Elem()

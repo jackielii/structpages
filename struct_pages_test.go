@@ -21,8 +21,9 @@ func printPageItem(t *testing.T, indent string, item *PageNode) {
 	t.Helper()
 	t.Logf("%sName: %s", indent, item.Name)
 	t.Logf("%sRoute: %s", indent, item.Route)
-	t.Logf("%sPage: %v", indent, formatMethod(item.Page))
-	t.Logf("%sPartial: %v", indent, formatMethod(item.Partial))
+	for name, comp := range item.Components {
+		t.Logf("%sComponent: %s (%s)", indent, name, formatMethod(comp))
+	}
 	t.Logf("%sArgs: %v", indent, formatMethod(item.Args))
 	for _, child := range item.Children {
 		printPageItem(t, indent+"  ", child)
@@ -31,7 +32,7 @@ func printPageItem(t *testing.T, indent string, item *PageNode) {
 
 type TestItem1 struct{}
 
-func (i *TestItem1) Page() templComponent {
+func (i *TestItem1) Page() component {
 	return noopComponent{}
 }
 
