@@ -16,10 +16,10 @@ type (
 	Level2 struct{}
 )
 
-func (l *Level1) Page() component    { return noopComponent{} }
-func (l *Level1) Partial() component { return noopComponent{} }
-func (l *Level2) Page() component    { return noopComponent{} }
-func (l *Level2) Partial() component { return noopComponent{} }
+func (l *Level1) Page() component    { return testComponent{} }
+func (l *Level1) Partial() component { return testComponent{} }
+func (l *Level2) Page() component    { return testComponent{} }
+func (l *Level2) Partial() component { return testComponent{} }
 
 func TestPrint(t *testing.T) {
 	s := PrintRoutes(&TopPage{})

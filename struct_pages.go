@@ -46,8 +46,6 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	if page.Route == "" {
 		panic("Page item route is empty: " + page.Name)
 	}
-	pageComp := page.Components["Page"]
-	partialComp := page.Components["Partial"]
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
 		// defer func() {
@@ -59,54 +57,11 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		})
 		// }()
 	}
-	if pageComp == nil && partialComp == nil {
+	// println("Registering page item", "name:", page.Name, page.Method, page.FullRoute(), "title:", page.Title)
+	handler := pr.buildHandler(page, pc)
+	if handler == nil {
 		return
 	}
-	if pageComp == nil {
-		panic("Page item " + page.Name + " does not have a Page method")
-	}
-	if pageComp.Type.NumIn() > 1 && page.Args == nil {
-		panic("Page method on " + page.Name + " requires args, but Args method not declared")
-	}
-	if partialComp != nil && partialComp.Type.NumIn() > 1 && page.Args == nil {
-		panic("Partial method on " + page.Name + " requires args, but Args method not declared")
-	}
-
-	// println("Registering page item", "name", page.Name, "route", path.Join(parentRoute, page.Route), "title", page.Title)
-	var handler http.Handler
-	// TODO: move handler creation to configuration
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var args []reflect.Value
-		if page.Args != nil {
-			args = pc.callMethod(page.Value, *page.Args, reflect.ValueOf(r))
-			var err error
-			args, err = extractError(args)
-			if err != nil {
-				pr.onError(w, r, fmt.Errorf("error calling Args method on %s: %w", page.Name, err))
-				return
-			}
-		}
-
-		if isHTMX(r) {
-			if partialComp != nil {
-				comp := pc.callTemplMethod(page.Value, *partialComp, args...)
-				if err := comp.Render(r.Context(), w); err != nil {
-					pr.onError(w, r, err)
-				}
-			} else {
-				comp := pc.callTemplMethod(page.Value, *pageComp, args...)
-				w.Header().Set("HX-Retarget", "body")
-				if err := comp.Render(r.Context(), w); err != nil {
-					pr.onError(w, r, err)
-				}
-			}
-		} else {
-			comp := pc.callTemplMethod(page.Value, *pageComp, args...)
-			if err := comp.Render(r.Context(), w); err != nil {
-				pr.onError(w, r, err)
-			}
-		}
-	})
 	// apply page middlewares
 	if page.Middlewares != nil {
 		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
@@ -128,7 +83,72 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	router.HandleMethod(page.Method, page.Route, handler)
 }
 
-var errorType = reflect.TypeOf((*error)(nil)).Elem()
+func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
+	if h := sp.getHttpHandler(page.Value); h != nil {
+		return h
+	}
+	if len(page.Components) == 0 {
+		return nil
+	}
+	pageComp := page.Components["Page"]
+	partialComp := page.Components["Partial"]
+	if pageComp == nil {
+		panic(fmt.Sprintf("Page item %s does not have a Page component", page.Name))
+	}
+	// if pageComp == nil {
+	// 	panic("Page item " + page.Name + " does not have a Page method")
+	// }
+	// if pageComp.Type.NumIn() > 1 && page.Args == nil {
+	// 	panic("Page method on " + page.Name + " requires args, but Args method not declared")
+	// }
+	// if partialComp != nil && partialComp.Type.NumIn() > 1 && page.Args == nil {
+	// 	panic("Partial method on " + page.Name + " requires args, but Args method not declared")
+	// }
+
+	// TODO: move handler creation to configuration
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var args []reflect.Value
+		if page.Args != nil {
+			args = pc.callMethod(page.Value, *page.Args, reflect.ValueOf(r))
+			var err error
+			args, err = extractError(args)
+			if err != nil {
+				sp.onError(w, r, fmt.Errorf("error calling Args method on %s: %w", page.Name, err))
+				return
+			}
+		}
+
+		if isHTMX(r) {
+			if partialComp != nil {
+				comp := pc.callTemplMethod(page.Value, *partialComp, args...)
+				if err := comp.Render(r.Context(), w); err != nil {
+					sp.onError(w, r, err)
+				}
+			} else {
+				comp := pc.callTemplMethod(page.Value, *pageComp, args...)
+				w.Header().Set("HX-Retarget", "body")
+				if err := comp.Render(r.Context(), w); err != nil {
+					sp.onError(w, r, err)
+				}
+			}
+		} else {
+			comp := pc.callTemplMethod(page.Value, *pageComp, args...)
+			if err := comp.Render(r.Context(), w); err != nil {
+				sp.onError(w, r, err)
+			}
+		}
+	})
+}
+
+type httpErrHandler interface {
+	ServeHTTP(http.ResponseWriter, *http.Request) error
+}
+
+var (
+	errorType      = reflect.TypeOf((*error)(nil)).Elem()
+	handlerType    = reflect.TypeOf((*http.Handler)(nil)).Elem()
+	errHandlerType = reflect.TypeOf((*httpErrHandler)(nil)).Elem()
+)
 
 func extractError(args []reflect.Value) ([]reflect.Value, error) {
 	var err error
@@ -152,4 +172,35 @@ func formatMethod(method *reflect.Method) string {
 
 func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
+}
+
+func (pr *StructPages) getHttpHandler(v reflect.Value) http.Handler {
+	st, pt := v.Type(), v.Type()
+	if st.Kind() == reflect.Ptr {
+		st = st.Elem()
+	} else {
+		pt = reflect.PointerTo(st)
+	}
+	method, ok := st.MethodByName("ServeHTTP")
+	if !ok || isPromotedMethod(method) {
+		method, ok = pt.MethodByName("ServeHTTP")
+		if !ok || isPromotedMethod(method) {
+			return nil
+		}
+	}
+
+	if v.Type().Implements(handlerType) {
+		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning handler")
+		return v.Interface().(http.Handler)
+	}
+	if v.Type().Implements(errHandlerType) {
+		h := v.Interface().(httpErrHandler)
+		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning err handler")
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := h.ServeHTTP(w, r); err != nil {
+				pr.onError(w, r, err)
+			}
+		})
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package srx
 
 import (
+	"fmt"
 	"path"
 	"reflect"
 	"strings"
@@ -29,14 +30,27 @@ func (pn *PageNode) FullRoute() string {
 func (p PageNode) String() string {
 	var sb strings.Builder
 	sb.WriteString("PageItem{")
-	sb.WriteString("name: " + p.Name)
-	sb.WriteString(", title: " + p.Title)
-	sb.WriteString(", route: " + p.Route)
-	sb.WriteString(", middlewares: " + formatMethod(p.Middlewares))
-	for name, comp := range p.Components {
-		sb.WriteString(", component: " + name + " -> " + formatMethod(comp))
+	sb.WriteString("\n  name: " + p.Name)
+	sb.WriteString("\n  title: " + p.Title)
+	sb.WriteString("\n  route: " + p.Route)
+	sb.WriteString("\n  middlewares: " + formatMethod(p.Middlewares))
+	if len(p.Components) == 0 {
+		sb.WriteString("\n  components: []")
 	}
-	sb.WriteString(", args: " + formatMethod(p.Args))
-	sb.WriteString("}")
+	if p.Value.Type().AssignableTo(handlerType) {
+		sb.WriteString("\n  is http.Handler: true")
+	}
+	for name, comp := range p.Components {
+		sb.WriteString("\n  component: " + name + " -> " + formatMethod(comp))
+	}
+	sb.WriteString("\n  args: " + formatMethod(p.Args))
+	for i, child := range p.Children {
+		fmt.Fprintf(&sb, "\n  child %d:", i+1)
+		childStr := strings.TrimRight(child.String(), "\n")
+		for _, line := range strings.SplitAfter(childStr, "\n") {
+			sb.WriteString("  " + line)
+		}
+	}
+	sb.WriteString("\n}")
 	return sb.String()
 }

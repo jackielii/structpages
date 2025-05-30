@@ -15,7 +15,7 @@ type stdRouter struct {
 	router *http.ServeMux
 }
 
-func NewStdRouter(router *http.ServeMux) *stdRouter {
+func NewRouter(router *http.ServeMux) *stdRouter {
 	if router == nil {
 		router = http.DefaultServeMux
 	}
@@ -23,11 +23,11 @@ func NewStdRouter(router *http.ServeMux) *stdRouter {
 }
 
 func (r *stdRouter) Route(pattern string, fn func(Router)) {
-	subRouter := &stdRouter{
+	// println("Registering route group", "pattern", path.Join(r.prefix, pattern))
+	fn(&stdRouter{
 		prefix: path.Join(r.prefix, pattern),
 		router: r.router,
-	}
-	fn(subRouter)
+	})
 }
 
 func (r *stdRouter) HandleMethod(method, pattern string, handler http.Handler) {
@@ -36,6 +36,7 @@ func (r *stdRouter) HandleMethod(method, pattern string, handler http.Handler) {
 	}
 	pattern = path.Join(r.prefix, pattern)
 	pattern = method + " " + pattern
+	// println("Registering route", "method", method, "pattern", pattern)
 	r.router.Handle(pattern, handler)
 }
 

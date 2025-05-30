@@ -7,7 +7,7 @@ import (
 )
 
 func TestStdRouter(t *testing.T) {
-	router := NewStdRouter(http.NewServeMux())
+	router := NewRouter(http.NewServeMux())
 
 	{
 		// Test HandleMethod

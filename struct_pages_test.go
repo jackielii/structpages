@@ -3,88 +3,60 @@ package srx
 import (
 	"context"
 	"io"
-	"reflect"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
-//	func Test_parsePageItem(t *testing.T) {
-//		pc := parsePageTree("/", &TopPages{})
-//		printPageItem(t, "", pc.rootNode)
-//	}
-type noopComponent struct{}
-
-func (noopComponent) Render(ctx context.Context, w io.Writer) error {
-	return nil
+type testComponent struct {
+	content string
 }
 
-func printPageItem(t *testing.T, indent string, item *PageNode) {
-	t.Helper()
-	t.Logf("%sName: %s", indent, item.Name)
-	t.Logf("%sRoute: %s", indent, item.Route)
-	for name, comp := range item.Components {
-		t.Logf("%sComponent: %s (%s)", indent, name, formatMethod(comp))
+func (t testComponent) Render(ctx context.Context, w io.Writer) error {
+	_, err := w.Write([]byte(t.content))
+	return err
+}
+
+type TestHandlerPage struct{}
+
+func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("TestHttpHandler"))
+}
+
+func TestHttpHandler(t *testing.T) {
+	type topPage struct {
+		s TestHandlerPage  `route:"/struct Test struct handler"`
+		p *TestHandlerPage `route:"POST /pointer Test pointer handler"`
 	}
-	t.Logf("%sArgs: %v", indent, formatMethod(item.Args))
-	for _, child := range item.Children {
-		printPageItem(t, indent+"  ", child)
+
+	// println(PrintRoutes(&topPage{}))
+	mux := http.NewServeMux()
+	r := NewRouter(mux)
+	sp := NewStructPages()
+	sp.MountPages(r, "/", &topPage{})
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/struct", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "TestHttpHandler" {
+			t.Errorf("expected body %q, got %q", "TestHttpHandler", rec.Body.String())
+		}
 	}
-}
 
-type TestItem1 struct{}
-
-func (i *TestItem1) Page() component {
-	return noopComponent{}
-}
-
-type TestTop1 struct {
-	FirstField  *TestItem1 `route:"first" title:"First Item"`
-	SecondField *TestItem1 `route:"second" title:"Second Item"`
-}
-
-func TestParseWithFieldName(t *testing.T) {
-	pc := parsePageTree("/", &TestTop1{})
-	printPageItem(t, "", pc.rootNode)
-}
-
-func tt() (context.Context, io.Reader, error) {
-	return nil, nil, nil
-}
-
-func TestAssignableToError(_ *testing.T) {
-	t := reflect.ValueOf(tt)
-	numOut := t.Type().NumOut()
-	last := t.Type().Out(numOut - 1)
-	println("assignable to error:", last.AssignableTo(reflect.TypeOf((*error)(nil)).Elem()))
-	println("equal to error:", last == reflect.TypeOf((*error)(nil)).Elem())
-}
-
-type TopPages2 struct {
-	Level1 struct {
-		Level2 struct {
-			Level3 struct {
-				Level4 struct {
-					Level5 struct{}
-				} `route:"level5" title:"Level 5"`
-			} `route:"level4" title:"Level 4"`
-		} `route:"level3" title:"Level 3"`
-	} `route:"level1" title:"Level 1"`
-}
-
-func TestParseNestedPages(t *testing.T) {
-	pc := parsePageTree("/", &TopPages2{})
-	printPageItem(t, "", pc.rootNode)
-	// println("level5 full route:", pc.rootNode.Children[0].Children[0].Children[0].Children[0].FullRoute())
-	// assert.Equal(t, "/level1/level3/level4/level5", pc.rootNode.Children[0].Children[0].Children[0].Children[0].FullRoute())
-	// if len(pc.rootNode.Children) != 1 {
-	// 	t.Errorf("Expected 1 child, got %d", len(pc.rootNode.Children))
-	// }
-	// if len(pc.rootNode.Children[0].Children) != 1 {
-	// 	t.Errorf("Expected 1 child, got %d", len(pc.rootNode.Children[0].Children))
-	// }
-	// if len(pc.rootNode.Children[0].Children[0].Children) != 1 {
-	// 	t.Errorf("Expected 1 child, got %d", len(pc.rootNode.Children[0].Children[0].Children))
-	// }
-	// if len(pc.rootNode.Children[0].Children[0].Children[0].Children) != 1 {
-	// 	t.Errorf("Expected 1 child, got %d", len(pc.rootNode.Children[0].Children[0].Children[0].Children))
-	// }
+	{
+		req := httptest.NewRequest(http.MethodPost, "/pointer", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "TestHttpHandler" {
+			t.Errorf("expected body %q, got %q", "TestHttpHandler", rec.Body.String())
+		}
+	}
 }

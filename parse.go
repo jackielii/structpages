@@ -116,10 +116,11 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 	// }
 	in := make([]reflect.Value, method.Type.NumIn())
 	in[0] = v // first argument is the receiver
-	for i := range min(len(in), len(args)) {
+	lenFilled := 1
+	for i := range min(len(in)-1, len(args)) {
 		in[i+1] = args[i]
+		lenFilled++
 	}
-	lenFilled := len(args) + 1
 	if len(in) <= lenFilled {
 		return method.Func.Call(in)
 	}

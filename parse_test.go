@@ -1,6 +1,7 @@
 package srx
 
 import (
+	"fmt"
 	"net/http"
 	"reflect"
 	"testing"
@@ -113,4 +114,13 @@ func TestParseTag(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseSimple(t *testing.T) {
+	type topPage struct {
+		f1 *TestHandlerPage `route:"/ Test Page"`
+		f2 *TestHandlerPage `route:"/f2 Test Page"`
+	}
+	node := parsePageTree("/", &topPage{})
+	fmt.Println(node.rootNode.String())
 }

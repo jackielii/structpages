@@ -69,3 +69,70 @@ func TestChiRouter(t *testing.T) {
 		}
 	}
 }
+
+type TestHandlerPage struct{}
+
+func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("TestHttpHandler"))
+}
+
+func TestHttpHandler(t *testing.T) {
+	type topPage struct {
+		s TestHandlerPage  `route:"/struct Test struct handler"`
+		p *TestHandlerPage `route:"POST /pointer Test pointer handler"`
+	}
+
+	// println(PrintRoutes(&topPage{}))
+	r := NewChiRouter(chi.NewRouter())
+	sp := srx.NewStructPages()
+	sp.MountPages(r, "/", &topPage{})
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/struct", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "TestHttpHandler" {
+			t.Errorf("expected body %q, got %q", "TestHttpHandler", rec.Body.String())
+		}
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodPost, "/pointer", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "TestHttpHandler" {
+			t.Errorf("expected body %q, got %q", "TestHttpHandler", rec.Body.String())
+		}
+	}
+}
+
+func TestWithPathValue(t *testing.T) {
+	type withId struct {
+		s TestHandlerPage `route:"POST /new Test struct handler with path value"`
+	}
+	type topPage struct {
+		withId `route:"/withid/{id} Test with ID handler"`
+	}
+	r := NewChiRouter(chi.NewRouter())
+	sp := srx.NewStructPages()
+	sp.MountPages(r, "/", &topPage{})
+
+	req := httptest.NewRequest(http.MethodPost, "/withid/456/new", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	if rec.Body.String() != "TestHttpHandler" {
+		t.Errorf("expected body %q, got %q", "ChiRouter with ID: 456", rec.Body.String())
+	}
+}
