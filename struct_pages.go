@@ -64,6 +64,7 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	}
 	// apply page middlewares
 	if page.Middlewares != nil {
+		// TODO: should apply parent middlewares first, probably passed down from the page node
 		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
 		if len(res) != 1 {
 			panic(fmt.Sprintf("Middlewares method on %s did not return single result", page.Name))
