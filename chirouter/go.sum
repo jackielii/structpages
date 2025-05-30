@@ -1,0 +1,4 @@
+github.com/go-chi/chi/v5 v5.2.1 h1:KOIHODQj58PmL80G2Eak4WdvUzjSJSm0vG72crDCqb8=
+github.com/go-chi/chi/v5 v5.2.1/go.mod h1:L2yAIGWB3H+phAw1NxKwWM+7eUH/lU8pOMm5hHcoops=
+github.com/jackielii/srx v0.0.0-20250530174122-8ba4f17c3ef6 h1:t5wo1F+AbCvbmBzc89kUJu+C92h8CyQQ7eOZkAy6hj4=
+github.com/jackielii/srx v0.0.0-20250530174122-8ba4f17c3ef6/go.mod h1:eJCpS+8YtBQ1i2xVv48zGHNZ89M57IaBIg8wy8MHj7o=

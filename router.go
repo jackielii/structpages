@@ -3,35 +3,11 @@ package srx
 import (
 	"net/http"
 	"path"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type Router interface {
 	Route(path string, fn func(Router))
 	HandleMethod(method, path string, handler http.Handler)
-}
-
-type chiRouter struct {
-	router chi.Router
-}
-
-func NewChiRouter(r chi.Router) *chiRouter {
-	return &chiRouter{router: r}
-}
-
-func (r *chiRouter) Route(path string, fn func(Router)) {
-	r.router.Route(path, func(r chi.Router) {
-		fn(&chiRouter{router: r})
-	})
-}
-
-func (r *chiRouter) HandleMethod(method, path string, handler http.Handler) {
-	r.router.Method(method, path, handler)
-}
-
-func (r *chiRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	r.router.ServeHTTP(w, req)
 }
 
 type stdRouter struct {
