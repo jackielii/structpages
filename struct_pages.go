@@ -1,16 +1,14 @@
 package srx
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
+	"io"
 	"net/http"
 	"path"
 	"reflect"
 	"runtime"
 	"strings"
-
-	"github.com/a-h/templ"
-	"github.com/angelofallars/htmx-go"
 )
 
 type StructPages struct {
@@ -47,7 +45,6 @@ func WithMiddlewares(middlewares ...func(http.HandlerFunc, *PageNode) http.Handl
 func NewStructPages(options ...func(*StructPages)) *StructPages {
 	reg := &StructPages{
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
-			slog.Error("Error rendering page", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
 	}
@@ -224,7 +221,7 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	// 	pc.callMethod(page.Value, *page.Args, reflect.ValueOf(emptyRequest))
 	// }
 
-	slog.Info("Registering page item", "name", page.Name, "route", path.Join(parentRoute, page.Route), "title", page.Title)
+	println("Registering page item", "name", page.Name, "route", path.Join(parentRoute, page.Route), "title", page.Title)
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		var args []reflect.Value
 		if page.Args != nil {
@@ -237,7 +234,7 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 			}
 		}
 
-		if htmx.IsHTMX(r) {
+		if isHTMX(r) {
 			if page.Partial != nil {
 				comp := pc.callTemplMethod(page.Value, *page.Partial, args...)
 				if err := comp.Render(r.Context(), w); err != nil {
@@ -245,9 +242,8 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 				}
 			} else {
 				comp := pc.callTemplMethod(page.Value, *page.Page, args...)
-				if err := htmx.NewResponse().
-					Retarget("body").
-					RenderTempl(r.Context(), w, comp); err != nil {
+				w.Header().Set("HX-Retarget", "body")
+				if err := comp.Render(r.Context(), w); err != nil {
 					pr.onError(w, r, err)
 				}
 			}
@@ -264,8 +260,12 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	router.Get(page.Route, handler)
 }
 
+type templComponent interface {
+	Render(context.Context, io.Writer) error
+}
+
 func returnsTemplComponent(t reflect.Method) bool {
-	templComponent := reflect.TypeOf((*templ.Component)(nil)).Elem()
+	templComponent := reflect.TypeOf((*templComponent)(nil)).Elem()
 	if t.Type.NumOut() != 1 {
 		return false
 	}
@@ -340,12 +340,12 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 	return method.Func.Call(in)
 }
 
-func (p *parseContext) callTemplMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) templ.Component {
+func (p *parseContext) callTemplMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) templComponent {
 	results := p.callMethod(v, method, args...)
 	if len(results) != 1 {
 		panic("Method " + method.Name + " must return a single templ.Component")
 	}
-	comp, ok := results[0].Interface().(templ.Component)
+	comp, ok := results[0].Interface().(templComponent)
 	if !ok {
 		panic("Method " + method.Name + " does not return a templ.Component")
 	}
@@ -372,4 +372,8 @@ func formatMethod(method reflect.Method) string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("%s.%s", method.Type.In(0).String(), method.Name)
+}
+
+func isHTMX(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
 }

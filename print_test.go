@@ -2,8 +2,6 @@ package srx
 
 import (
 	"testing"
-
-	"github.com/a-h/templ"
 )
 
 type (
@@ -15,10 +13,10 @@ type (
 	Level2 struct{}
 )
 
-func (l *Level1) Page() templ.Component    { return templ.NopComponent }
-func (l *Level1) Partial() templ.Component { return templ.NopComponent }
-func (l *Level2) Page() templ.Component    { return templ.NopComponent }
-func (l *Level2) Partial() templ.Component { return templ.NopComponent }
+func (l *Level1) Page() templComponent    { return noopComponent{} }
+func (l *Level1) Partial() templComponent { return noopComponent{} }
+func (l *Level2) Page() templComponent    { return noopComponent{} }
+func (l *Level2) Partial() templComponent { return noopComponent{} }
 
 func TestPrint(t *testing.T) {
 	NewStructPages().MountPages(&printeRouter{}, "/", &TopPage{})
