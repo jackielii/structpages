@@ -3,7 +3,6 @@ package srx
 import (
 	"net/http"
 	"path"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -41,13 +40,16 @@ type stdRouter struct {
 }
 
 func NewStdRouter(router *http.ServeMux) *stdRouter {
+	if router == nil {
+		router = http.DefaultServeMux
+	}
 	return &stdRouter{router: router}
 }
 
 func (r *stdRouter) Route(pattern string, fn func(Router)) {
 	subRouter := &stdRouter{
 		prefix: path.Join(r.prefix, pattern),
-		router: http.NewServeMux(),
+		router: r.router,
 	}
 	fn(subRouter)
 }
@@ -58,26 +60,9 @@ func (r *stdRouter) HandleMethod(method, pattern string, handler http.Handler) {
 	}
 	pattern = path.Join(r.prefix, pattern)
 	pattern = method + " " + pattern
-	println("Registering route:", pattern)
 	r.router.Handle(pattern, handler)
 }
 
 func (r *stdRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.router.ServeHTTP(w, req)
-}
-
-func stripPrefix(pattern string, h http.Handler) http.Handler {
-	if pattern == "" {
-		return h
-	}
-	if !strings.Contains(pattern, "{") && !strings.Contains(pattern, "}") {
-		return http.StripPrefix(pattern, h)
-	}
-	panic("not implemented yet: stripPrefix with path parameters")
-	// return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	// 	parts := strings.Split(pattern, "/")
-	// 	for _, part := range parts {
-	// 		if
-	// 	h.ServeHTTP(w, r)
-	// })
 }
