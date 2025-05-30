@@ -1,2 +1,2 @@
 # stx
-Struct-based Templating with htmX
+*S*truct-based *T*emplating with htm*X*
