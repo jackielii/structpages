@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackielii/srx"
+	"github.com/jackielii/structpages"
 )
 
 func TestChiRouter(t *testing.T) {
@@ -29,7 +29,7 @@ func TestChiRouter(t *testing.T) {
 	}
 	{
 		// Test Route method
-		r.Route("/test", func(r srx.Router) {
+		r.Route("/test", func(r structpages.Router) {
 			r.HandleMethod(http.MethodGet, "/sub", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("ChiRouter Subroute"))
@@ -51,7 +51,7 @@ func TestChiRouter(t *testing.T) {
 	}
 	{
 		// test route with path value
-		r.Route("/withid/{id}", func(r srx.Router) {
+		r.Route("/withid/{id}", func(r structpages.Router) {
 			r.HandleMethod(http.MethodGet, "/end", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				id := chi.URLParam(r, "id")
 				w.WriteHeader(http.StatusOK)
@@ -85,7 +85,7 @@ func TestHttpHandler(t *testing.T) {
 
 	// println(PrintRoutes(&topPage{}))
 	r := NewChiRouter(chi.NewRouter())
-	sp := srx.NewStructPages()
+	sp := structpages.NewStructPages()
 	sp.MountPages(r, "/", &topPage{})
 
 	{
@@ -121,7 +121,7 @@ func TestWithPathValue(t *testing.T) {
 		withId `route:"/withid/{id} Test with ID handler"`
 	}
 	r := NewChiRouter(chi.NewRouter())
-	sp := srx.NewStructPages()
+	sp := structpages.NewStructPages()
 	sp.MountPages(r, "/", &topPage{})
 
 	req := httptest.NewRequest(http.MethodPost, "/withid/456/new", nil)

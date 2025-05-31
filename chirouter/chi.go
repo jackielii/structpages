@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackielii/srx"
+	"github.com/jackielii/structpages"
 )
 
 type chiRouter struct {
@@ -15,7 +15,7 @@ func NewChiRouter(r chi.Router) *chiRouter {
 	return &chiRouter{router: r}
 }
 
-func (r *chiRouter) Route(path string, fn func(srx.Router)) {
+func (r *chiRouter) Route(path string, fn func(structpages.Router)) {
 	r.router.Route(path, func(r chi.Router) {
 		fn(&chiRouter{router: r})
 	})

@@ -1,4 +1,4 @@
-module github.com/jackielii/stx/chirouter
+module github.com/jackielii/structpages/chirouter
 
 go 1.24.3
 
