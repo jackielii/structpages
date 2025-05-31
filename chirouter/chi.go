@@ -22,7 +22,11 @@ func (r *chiRouter) Route(path string, fn func(structpages.Router)) {
 }
 
 func (r *chiRouter) HandleMethod(method, path string, handler http.Handler) {
-	r.router.Method(method, path, handler)
+	if method == "ALL" || method == "" {
+		r.router.Handle(path, handler)
+	} else {
+		r.router.Method(method, path, handler)
+	}
 }
 
 func (r *chiRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {

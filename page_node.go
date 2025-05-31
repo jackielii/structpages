@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"fmt"
+	"iter"
 	"path"
 	"reflect"
 	"strings"
@@ -53,4 +54,24 @@ func (p PageNode) String() string {
 	}
 	sb.WriteString("\n}")
 	return sb.String()
+}
+
+func walk(p *PageNode, yield func(*PageNode) bool) bool {
+	if !yield(p) {
+		return false
+	}
+	for _, child := range p.Children {
+		if !walk(child, yield) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *PageNode) All() iter.Seq[*PageNode] {
+	return func(yield func(*PageNode) bool) {
+		if !walk(p, yield) {
+			return
+		}
+	}
 }

@@ -31,11 +31,10 @@ func (r *stdRouter) Route(pattern string, fn func(Router)) {
 }
 
 func (r *stdRouter) HandleMethod(method, pattern string, handler http.Handler) {
-	if method == "" {
-		method = http.MethodGet
-	}
 	pattern = path.Join(r.prefix, pattern)
-	pattern = method + " " + pattern
+	if method != methodAll && method != "" {
+		pattern = method + " " + pattern
+	}
 	// println("Registering route", "method", method, "pattern", pattern)
 	r.router.Handle(pattern, handler)
 }

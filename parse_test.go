@@ -1,8 +1,6 @@
 package structpages
 
 import (
-	"fmt"
-	"net/http"
 	"reflect"
 	"testing"
 )
@@ -25,7 +23,7 @@ func TestParseTag(t *testing.T) {
 				path   string
 				title  string
 			}{
-				method: http.MethodGet,
+				method: methodAll,
 				path:   "/",
 				title:  "",
 			},
@@ -38,7 +36,7 @@ func TestParseTag(t *testing.T) {
 				path   string
 				title  string
 			}{
-				method: http.MethodGet,
+				method: methodAll,
 				path:   "/example",
 				title:  "",
 			},
@@ -51,7 +49,7 @@ func TestParseTag(t *testing.T) {
 				path   string
 				title  string
 			}{
-				method: http.MethodGet,
+				method: methodAll,
 				path:   "INVALID",
 				title:  "/example",
 			},
@@ -90,7 +88,7 @@ func TestParseTag(t *testing.T) {
 				path   string
 				title  string
 			}{
-				method: http.MethodGet,
+				method: methodAll,
 				path:   "INVALID",
 				title:  "/example Invalid Method",
 			},
@@ -119,8 +117,30 @@ func TestParseTag(t *testing.T) {
 func TestParseSimple(t *testing.T) {
 	type topPage struct {
 		f1 *TestHandlerPage `route:"/ Test Page"`
-		f2 *TestHandlerPage `route:"/f2 Test Page"`
+		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
 	}
-	node := parsePageTree("/", &topPage{})
-	fmt.Println(node.rootNode.String())
+	pc := parsePageTree("/", &topPage{})
+	if pc.root == nil {
+		t.Fatal("parsePageTree returned nil")
+	}
+	s := pc.root.String()
+	println(s)
+}
+
+func TestUrlFor(t *testing.T) {
+	type topPage struct {
+		f1 *TestHandlerPage `route:"/f1 Test Page"`
+		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
+	}
+	pc := parsePageTree("/", &topPage{})
+	if pc.root == nil {
+		t.Fatal("parsePageTree returned nil")
+	}
+	url, err := pc.urlFor(&TestHandlerPage{})
+	if err != nil {
+		t.Fatalf("urlFor failed: %v", err)
+	}
+	if url != "/f1" {
+		t.Errorf("Expected URL '/f1', got '%s'", url)
+	}
 }

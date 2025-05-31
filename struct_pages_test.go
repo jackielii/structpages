@@ -61,10 +61,18 @@ func TestHttpHandler(t *testing.T) {
 	}
 }
 
-type middlewarePages struct{}
+type middlewarePages struct {
+	middlewareChildPage `route:"/child Child"`
+}
 
-func (middlewarePages) Middlewares() []middlewareFunc {
-	return []middlewareFunc{
+type middlewareChildPage struct{}
+
+func (middlewareChildPage) Page() component {
+	return testComponent{content: "Test middleware child page"}
+}
+
+func (middlewarePages) Middlewares() []MiddlewareFunc {
+	return []MiddlewareFunc{
 		func(next http.Handler, node *PageNode) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("X-Test-Middleware", "foobar")
@@ -82,20 +90,37 @@ func TestMiddlewares(t *testing.T) {
 	type topPage struct {
 		middlewarePages `route:"/middleware Test middleware handler"`
 	}
-	println(PrintRoutes(&topPage{}))
+	println(PrintRoutes("/", &topPage{}))
 	r := NewRouter(http.NewServeMux())
 	sp := NewStructPages()
 	sp.MountPages(r, "/", &topPage{})
-	req := httptest.NewRequest(http.MethodGet, "/middleware", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/middleware", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Header().Get("X-Test-Middleware") != "foobar" {
+			t.Errorf("expected header X-Test-Middleware to be 'foobar', got %s", rec.Header().Get("X-Test-Middleware"))
+		}
+		if rec.Body.String() != "Test middleware handler" {
+			t.Errorf("expected body %q, got %q", "Test middleware handler", rec.Body.String())
+		}
 	}
-	if rec.Header().Get("X-Test-Middleware") != "foobar" {
-		t.Errorf("expected header X-Test-Middleware to be 'foobar', got %s", rec.Header().Get("X-Test-Middleware"))
-	}
-	if rec.Body.String() != "Test middleware handler" {
-		t.Errorf("expected body %q, got %q", "Test middleware handler", rec.Body.String())
+	{
+		// test child page also has the middleware applied
+		req := httptest.NewRequest(http.MethodGet, "/middleware/child", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Header().Get("X-Test-Middleware") != "foobar" {
+			t.Errorf("expected header X-Test-Middleware to be 'foobar', got %s", rec.Header().Get("X-Test-Middleware"))
+		}
+		if rec.Body.String() != "Test middleware child page" {
+			t.Errorf("expected body %q, got %q", "Test middleware child page", rec.Body.String())
+		}
 	}
 }

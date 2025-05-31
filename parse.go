@@ -13,23 +13,21 @@ import (
 )
 
 type parseContext struct {
-	rootNode *PageNode
-	initArgs map[reflect.Type]reflect.Value
+	root *PageNode
+
+	// args hold type vs values
+	// type is always a pointer type
+	// value is always a pointer to the value
+	args map[reflect.Type]reflect.Value
 }
 
 func parsePageTree(route string, page any, initArgs ...any) *parseContext {
-	args := make(map[reflect.Type]reflect.Value)
-	for _, arg := range initArgs {
-		if arg == nil {
-			continue
-		}
-		typ := reflect.TypeOf(arg)
-		val := reflect.ValueOf(arg)
-		args[typ] = val
+	pc := &parseContext{args: make(map[reflect.Type]reflect.Value)}
+	for _, v := range initArgs {
+		pc.addValue(v)
 	}
-	pc := &parseContext{initArgs: args}
 	topNode := pc.parsePageTree(route, "", page)
-	pc.rootNode = topNode
+	pc.root = topNode
 	return pc
 }
 
@@ -136,27 +134,22 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 		} else {
 			pt = reflect.PointerTo(st)
 		}
-		sval, sok := p.initArgs[st]
-		pval, pok := p.initArgs[pt]
-		if !sok && !pok {
+		pval, pok := p.args[pt]
+		if !pok {
 			panic(fmt.Sprintf("Method %s requires argument of type %s, but no initArgs provided", formatMethod(&method), st.String()))
 		}
 		var val reflect.Value
-		if sok && needPtr {
-			val = sval.Addr()
-		} else if sok && !needPtr {
-			val = sval
-		} else if pok && needPtr {
-			val = pval
-		} else {
+		if !needPtr {
 			val = pval.Elem()
+		} else {
+			val = pval
 		}
 		in[i] = val
 	}
 	return method.Func.Call(in)
 }
 
-func (p *parseContext) callTemplMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) component {
+func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) component {
 	results := p.callMethod(v, method, args...)
 	if len(results) != 1 {
 		panic("Method " + method.Name + " must return a single templ.Component")
@@ -168,8 +161,43 @@ func (p *parseContext) callTemplMethod(v reflect.Value, method reflect.Method, a
 	return comp
 }
 
+func (p *parseContext) addValue(v any) {
+	if v == nil {
+		return
+	}
+	typ := reflect.TypeOf(v)
+	pv := reflect.ValueOf(v)
+	if typ.Kind() != reflect.Ptr {
+		typ = reflect.PointerTo(typ)
+		pv = pv.Addr()
+	}
+	if _, ok := p.args[typ]; !ok {
+		p.args[typ] = pv
+	}
+}
+
+func (p *parseContext) urlFor(v any) (string, error) {
+	if f, ok := v.(func(*PageNode) bool); ok {
+		for node := range p.root.All() {
+			if f(node) {
+				return node.FullRoute(), nil
+			}
+		}
+	}
+	pt := reflect.TypeOf(v)
+	if pt.Kind() != reflect.Ptr {
+		pt = reflect.PointerTo(pt)
+	}
+	for node := range p.root.All() {
+		if node.Value.Type() == pt {
+			return node.FullRoute(), nil
+		}
+	}
+	return "", fmt.Errorf("no page found for type %s", pt.String())
+}
+
 func parseTag(route string) (method string, path string, title string) {
-	method = http.MethodGet
+	method = methodAll
 	parts := strings.Fields(route)
 	if len(parts) == 0 {
 		path = "/"
@@ -184,12 +212,14 @@ func parseTag(route string) (method string, path string, title string) {
 		path = parts[1]
 		title = strings.Join(parts[2:], " ")
 	} else {
-		method = http.MethodGet
+		method = methodAll
 		path = parts[0]
 		title = strings.Join(parts[1:], " ")
 	}
 	return
 }
+
+const methodAll = "ALL"
 
 var validMethod = []string{
 	http.MethodGet,
@@ -201,6 +231,7 @@ var validMethod = []string{
 	http.MethodConnect,
 	http.MethodOptions,
 	http.MethodTrace,
+	methodAll,
 }
 
 type component interface {

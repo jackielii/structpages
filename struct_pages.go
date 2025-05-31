@@ -6,45 +6,58 @@ import (
 	"reflect"
 )
 
-type middlewareFunc = func(http.Handler, *PageNode) http.Handler
+type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 
 type StructPages struct {
 	onError     func(http.ResponseWriter, *http.Request, error)
-	middlewares []middlewareFunc
+	middlewares []MiddlewareFunc
 }
 
 func NewStructPages(options ...func(*StructPages)) *StructPages {
-	reg := &StructPages{
+	sp := &StructPages{
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
 	}
 	for _, opt := range options {
-		opt(reg)
+		opt(sp)
 	}
-	return reg
+	return sp
 }
 
 func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) func(*StructPages) {
-	return func(pr *StructPages) {
-		pr.onError = onError
+	return func(sp *StructPages) {
+		sp.onError = onError
 	}
 }
 
-func WithMiddlewares(middlewares ...func(http.Handler, *PageNode) http.Handler) func(*StructPages) {
-	return func(pr *StructPages) {
-		pr.middlewares = append(pr.middlewares, middlewares...)
+func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
+	return func(sp *StructPages) {
+		sp.middlewares = append(sp.middlewares, middlewares...)
 	}
 }
 
 func (sp *StructPages) MountPages(router Router, route string, page any, initArgs ...any) {
 	pc := parsePageTree(route, page, initArgs...)
-	sp.registerPageItem(router, pc, pc.rootNode)
+	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
+	sp.registerPageItem(router, pc, pc.root, middlewares)
 }
 
-func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode) {
+func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, middlewares []MiddlewareFunc) {
 	if page.Route == "" {
 		panic("Page item route is empty: " + page.Name)
+	}
+	if page.Middlewares != nil {
+		// TODO: should apply parent middlewares first, probably passed down from the page node
+		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
+		if len(res) != 1 {
+			panic(fmt.Errorf("Middlewares method on %s did not return single result", page.Name))
+		}
+		mws, ok := res[0].Interface().([]MiddlewareFunc)
+		if !ok {
+			panic(fmt.Errorf("Middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
+		}
+		middlewares = append(middlewares, mws...)
 	}
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
@@ -52,33 +65,21 @@ func (pr *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		// println("Registering route group", "name", page.Name, "route", page.FullRoute())
 		router.Route(page.Route, func(router Router) {
 			for _, child := range page.Children {
-				pr.registerPageItem(router, pc, child)
+				sp.registerPageItem(router, pc, child, middlewares)
 			}
 		})
 		// }()
 	}
 	// println("Registering page item", "name:", page.Name, page.Method, page.FullRoute(), "title:", page.Title)
-	handler := pr.buildHandler(page, pc)
+	handler := sp.buildHandler(page, pc)
 	if handler == nil {
+		if len(page.Children) == 0 {
+			// when handdler is nil and no children, it means this page is not a valid endpoint
+			panic(fmt.Errorf("Page item %s does not have a valid handler or children", page.Name))
+		}
 		return
 	}
-	// apply page middlewares
-	if page.Middlewares != nil {
-		// TODO: should apply parent middlewares first, probably passed down from the page node
-		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
-		if len(res) != 1 {
-			panic(fmt.Sprintf("Middlewares method on %s did not return single result", page.Name))
-		}
-		middlewares, ok := res[0].Interface().([]middlewareFunc)
-		if !ok {
-			panic(fmt.Sprintf("Middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
-		}
-		for _, mw := range middlewares {
-			handler = mw(handler, page)
-		}
-	}
-	// apply global middlewares
-	for _, middleware := range pr.middlewares {
+	for _, middleware := range middlewares {
 		handler = middleware(handler, page)
 	}
 	router.HandleMethod(page.Method, page.Route, handler)
@@ -94,19 +95,10 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	pageComp := page.Components["Page"]
 	partialComp := page.Components["Partial"]
 	if pageComp == nil {
-		panic(fmt.Sprintf("Page item %s does not have a Page component", page.Name))
+		panic(fmt.Errorf("Page item %s does not have a Page component", page.Name))
 	}
-	// if pageComp == nil {
-	// 	panic("Page item " + page.Name + " does not have a Page method")
-	// }
-	// if pageComp.Type.NumIn() > 1 && page.Args == nil {
-	// 	panic("Page method on " + page.Name + " requires args, but Args method not declared")
-	// }
-	// if partialComp != nil && partialComp.Type.NumIn() > 1 && page.Args == nil {
-	// 	panic("Partial method on " + page.Name + " requires args, but Args method not declared")
-	// }
 
-	// TODO: move handler creation to configuration
+	// TODO: move handler creation to configuration so that non-htmx use cases can be handled
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var args []reflect.Value
 		if page.Args != nil {
@@ -121,19 +113,19 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 
 		if isHTMX(r) {
 			if partialComp != nil {
-				comp := pc.callTemplMethod(page.Value, *partialComp, args...)
+				comp := pc.callComponentMethod(page.Value, *partialComp, args...)
 				if err := comp.Render(r.Context(), w); err != nil {
 					sp.onError(w, r, err)
 				}
 			} else {
-				comp := pc.callTemplMethod(page.Value, *pageComp, args...)
+				comp := pc.callComponentMethod(page.Value, *pageComp, args...)
 				w.Header().Set("HX-Retarget", "body")
 				if err := comp.Render(r.Context(), w); err != nil {
 					sp.onError(w, r, err)
 				}
 			}
 		} else {
-			comp := pc.callTemplMethod(page.Value, *pageComp, args...)
+			comp := pc.callComponentMethod(page.Value, *pageComp, args...)
 			if err := comp.Render(r.Context(), w); err != nil {
 				sp.onError(w, r, err)
 			}
@@ -175,7 +167,7 @@ func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
 
-func (pr *StructPages) getHttpHandler(v reflect.Value) http.Handler {
+func (sp *StructPages) getHttpHandler(v reflect.Value) http.Handler {
 	st, pt := v.Type(), v.Type()
 	if st.Kind() == reflect.Ptr {
 		st = st.Elem()
@@ -199,7 +191,7 @@ func (pr *StructPages) getHttpHandler(v reflect.Value) http.Handler {
 		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning err handler")
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := h.ServeHTTP(w, r); err != nil {
-				pr.onError(w, r, err)
+				sp.onError(w, r, err)
 			}
 		})
 	}
