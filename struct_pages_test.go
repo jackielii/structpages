@@ -1,4 +1,4 @@
-package srx
+package structpages
 
 import (
 	"context"
