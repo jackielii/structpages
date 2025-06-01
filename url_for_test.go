@@ -52,6 +52,20 @@ func Test_formatPathSegments(t *testing.T) {
 			want: "/path/{arg1}/{arg2}",
 			err:  errors.New("pattern /path/{arg1}/{arg2}: not enough arguments provided for segment: {arg1}"),
 		},
+		{
+			name: "path with map args",
+			path: "/path/{arg1}/{arg2}",
+			args: []any{map[string]any{"arg1": "value1", "arg2": "value2"}},
+			want: "/path/value1/value2",
+			err:  nil,
+		},
+		{
+			name: "path with map args missing key",
+			path: "/path/{arg1}/{arg2}",
+			args: []any{map[string]any{"arg1": "value1"}},
+			want: "/path/{arg1}/{arg2}",
+			err:  errors.New("pattern /path/{arg1}/{arg2}: argument arg2 not found in provided args"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

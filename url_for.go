@@ -40,6 +40,12 @@ func UrlFor(ctx context.Context, page any, args ...any) (string, error) {
 
 // TODO: see: go/src/net/http/pattern.go for more accurate path parsing
 func formatPathSegments(pattern string, args ...any) (string, error) {
+	var argMap map[string]any
+	if len(args) == 1 {
+		if arg, ok := args[0].(map[string]any); ok {
+			argMap = arg
+		}
+	}
 	parts := strings.Split(pattern, "/")
 	j := 0
 	for i, part := range parts {
@@ -47,11 +53,21 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 			continue
 		}
 		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			if j >= len(args) {
-				return pattern, fmt.Errorf("pattern %s: not enough arguments provided for segment: %s", pattern, part)
+			if argMap != nil {
+				key := part[1 : len(part)-1] // remove { and }
+				if value, ok := argMap[key]; ok {
+					parts[i] = fmt.Sprint(value)
+					continue
+				} else {
+					return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, key)
+				}
+			} else {
+				if j >= len(args) {
+					return pattern, fmt.Errorf("pattern %s: not enough arguments provided for segment: %s", pattern, part)
+				}
+				parts[i] = fmt.Sprint(args[j])
+				j++
 			}
-			parts[i] = fmt.Sprint(args[j])
-			j++
 		}
 	}
 	return strings.Join(parts, "/"), nil
