@@ -193,7 +193,7 @@ func (p *parseContext) urlFor(v any) (string, error) {
 			return node.FullRoute(), nil
 		}
 	}
-	return "", fmt.Errorf("no page found for type %s", pt.String())
+	return "", fmt.Errorf("urlfor: no page node found for %s", pt.String())
 }
 
 func parseTag(route string) (method string, path string, title string) {

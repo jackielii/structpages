@@ -40,35 +40,55 @@ func UrlFor(ctx context.Context, page any, args ...any) (string, error) {
 
 // TODO: see: go/src/net/http/pattern.go for more accurate path parsing
 func formatPathSegments(pattern string, args ...any) (string, error) {
-	var argMap map[string]any
-	if len(args) == 1 {
-		if arg, ok := args[0].(map[string]any); ok {
-			argMap = arg
-		}
-	}
+	segments := make([]string, 0)
+	indicies := make([]int, 0)
 	parts := strings.Split(pattern, "/")
-	j := 0
 	for i, part := range parts {
 		if part == "{$}" {
 			continue
 		}
 		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			if argMap != nil {
-				key := part[1 : len(part)-1] // remove { and }
-				if value, ok := argMap[key]; ok {
-					parts[i] = fmt.Sprint(value)
-					continue
-				} else {
-					return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, key)
-				}
-			} else {
-				if j >= len(args) {
-					return pattern, fmt.Errorf("pattern %s: not enough arguments provided for segment: %s", pattern, part)
-				}
-				parts[i] = fmt.Sprint(args[j])
-				j++
-			}
+			segments = append(segments, part[1:len(part)-1]) // remove { and }
+			indicies = append(indicies, i)
 		}
 	}
+	if len(args) == len(segments) {
+		for i := range segments {
+			parts[indicies[i]] = fmt.Sprint(args[i])
+		}
+	} else if len(args)/2 >= len(segments) {
+		m := make(map[string]any)
+		for i := 0; i < len(args); i += 2 {
+			key, ok := args[i].(string)
+			if !ok {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, segments[i])
+			}
+			m[key] = args[i+1]
+		}
+		for i, segment := range segments {
+			if value, ok := m[segment]; ok {
+				parts[indicies[i]] = fmt.Sprint(value)
+			} else {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, segment)
+			}
+		}
+	} else if len(args) == 1 {
+		arg, ok := args[0].(map[string]any)
+		if !ok {
+			return pattern, fmt.Errorf("pattern %s: use map[string]any for single arg or provide the full args", pattern)
+		}
+		for i, segment := range segments {
+			if value, ok := arg[segment]; ok {
+				parts[indicies[i]] = fmt.Sprint(value)
+			} else {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, segment)
+			}
+		}
+	} else if len(args) < len(segments) {
+		return pattern, fmt.Errorf("pattern %s: not enough arguments provided for segment: %s", pattern, segments)
+	} else if len(args) > len(segments) {
+		// return pattern, fmt.Errorf("pattern %s: too many arguments provided for segment: %s", pattern, segments)
+	}
+
 	return strings.Join(parts, "/"), nil
 }
