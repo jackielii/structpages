@@ -138,7 +138,7 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 		}
 		pval, pok := p.args[pt]
 		if !pok {
-			panic(fmt.Sprintf("Method %s requires argument of type %s, but no initArgs provided", formatMethod(&method), st.String()))
+			panic(fmt.Sprintf("Method %s requires argument of type %s, but no Props method or it didn't provide required value", formatMethod(&method), st.String()))
 		}
 		var val reflect.Value
 		if !needPtr {
