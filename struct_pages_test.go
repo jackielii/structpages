@@ -124,3 +124,91 @@ func TestMiddlewares(t *testing.T) {
 		}
 	}
 }
+
+type DefaultConfigPage struct{}
+
+func (DefaultConfigPage) Page() component {
+	return testComponent{content: "Default config page"}
+}
+
+func (DefaultConfigPage) HxTarget() component {
+	return testComponent{content: "hx target defaultConfigPage"}
+}
+
+// type ConfiTestPage struct{}
+//
+// func (ConfiTestPage) PageConfig(r *http.Request) (string, error) {
+// 	return "DefaultConfigPage", nil
+// }
+
+func TestPageConfig(t *testing.T) {
+	sp := NewStructPages()
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		DefaultConfigPage `route:"/default Default config page"`
+	}
+	sp.MountPages(r, "/", &topPage{})
+	{
+		req := httptest.NewRequest(http.MethodGet, "/default", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "Default config page" {
+			t.Errorf("expected body %q, got %q", "Default config page", rec.Body.String())
+		}
+	}
+}
+
+func TestHTMXPageConfig(t *testing.T) {
+	sp := NewStructPages(WithDefaultPageConfig(HTMXPageConfig))
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		DefaultConfigPage `route:"/default Default config page"`
+	}
+	sp.MountPages(r, "/", &topPage{})
+
+	req := httptest.NewRequest(http.MethodGet, "/default", nil)
+	req.Header.Set("Hx-Request", "true")
+	req.Header.Set("Hx-Target", "hx-target")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	expectedBody := "hx target defaultConfigPage"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
+	}
+}
+
+type CustomConfigPage struct{}
+
+func (CustomConfigPage) Custom() component {
+	return testComponent{content: "Custom config page"}
+}
+
+func (CustomConfigPage) PageConfig(r *http.Request) (string, error) {
+	return "Custom", nil
+}
+
+func TestCustomPageConfig(t *testing.T) {
+	sp := NewStructPages()
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		CustomConfigPage `route:"/custom Custom config page"`
+	}
+	sp.MountPages(r, "/", &topPage{})
+
+	req := httptest.NewRequest(http.MethodGet, "/custom", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	expectedBody := "Custom config page"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
+	}
+}

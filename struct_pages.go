@@ -9,8 +9,9 @@ import (
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 
 type StructPages struct {
-	onError     func(http.ResponseWriter, *http.Request, error)
-	middlewares []MiddlewareFunc
+	onError           func(http.ResponseWriter, *http.Request, error)
+	middlewares       []MiddlewareFunc
+	defaultPageConfig func(r *http.Request) (string, error)
 }
 
 func NewStructPages(options ...func(*StructPages)) *StructPages {
@@ -23,6 +24,12 @@ func NewStructPages(options ...func(*StructPages)) *StructPages {
 		opt(sp)
 	}
 	return sp
+}
+
+func WithDefaultPageConfig(configFunc func(r *http.Request) (string, error)) func(*StructPages) {
+	return func(sp *StructPages) {
+		sp.defaultPageConfig = configFunc
+	}
 }
 
 func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) func(*StructPages) {
@@ -92,17 +99,11 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	if len(page.Components) == 0 {
 		return nil
 	}
-	pageComp := page.Components["Page"]
-	partialComp := page.Components["Partial"]
-	if pageComp == nil {
-		panic(fmt.Errorf("Page item %s does not have a Page component", page.Name))
-	}
 
-	// TODO: move handler creation to configuration so that non-htmx use cases can be handled
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var args []reflect.Value
-		if page.Args != nil {
-			args = pc.callMethod(page.Value, *page.Args, reflect.ValueOf(r))
+		if page.Props != nil {
+			args = pc.callMethod(page.Value, *page.Props, reflect.ValueOf(r))
 			var err error
 			args, err = extractError(args)
 			if err != nil {
@@ -111,24 +112,20 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			}
 		}
 
-		if isHTMX(r) {
-			if partialComp != nil {
-				comp := pc.callComponentMethod(page.Value, *partialComp, args...)
-				if err := comp.Render(r.Context(), w); err != nil {
-					sp.onError(w, r, err)
-				}
-			} else {
-				comp := pc.callComponentMethod(page.Value, *pageComp, args...)
-				w.Header().Set("HX-Retarget", "body")
-				if err := comp.Render(r.Context(), w); err != nil {
-					sp.onError(w, r, err)
-				}
-			}
-		} else {
-			comp := pc.callComponentMethod(page.Value, *pageComp, args...)
-			if err := comp.Render(r.Context(), w); err != nil {
-				sp.onError(w, r, err)
-			}
+		compFunc, err := sp.findComponent(pc, page, r)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
+			return
+		}
+
+		if compFunc == nil {
+			sp.onError(w, r, fmt.Errorf("page %s does not have a Page or PageConfig method", page.Name))
+			return
+		}
+
+		comp := pc.callComponentMethod(page.Value, *compFunc, args...)
+		if err := comp.Render(r.Context(), w); err != nil {
+			sp.onError(w, r, err)
 		}
 	})
 }
@@ -157,14 +154,14 @@ func extractError(args []reflect.Value) ([]reflect.Value, error) {
 }
 
 func formatMethod(method *reflect.Method) string {
-	if method == nil || method.Func == (reflect.Value{}) {
+	if method == nil || !method.Func.IsValid() {
 		return "<nil>"
 	}
-	return fmt.Sprintf("%s.%s", method.Type.In(0).String(), method.Name)
-}
-
-func isHTMX(r *http.Request) bool {
-	return r.Header.Get("HX-Request") == "true"
+	receiver := method.Type.In(0)
+	if receiver.Kind() == reflect.Ptr {
+		receiver = receiver.Elem()
+	}
+	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
 
 func (sp *StructPages) getHttpHandler(v reflect.Value) http.Handler {
@@ -196,4 +193,38 @@ func (sp *StructPages) getHttpHandler(v reflect.Value) http.Handler {
 		})
 	}
 	return nil
+}
+
+func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (*reflect.Method, error) {
+	if pn.Config != nil {
+		args := []reflect.Value{reflect.ValueOf(r)}
+		res := pc.callMethod(pn.Value, *pn.Config, args...)
+		res, err := extractError(res)
+		if err != nil {
+			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+		}
+		if len(res) >= 1 && res[0].Type().Kind() == reflect.String {
+			name := res[0].String()
+			if comp, ok := pn.Components[name]; ok {
+				return comp, nil
+			}
+			return nil, fmt.Errorf("PageConfig method for %s returned unknown component name: %s", pn.Name, name)
+		}
+	}
+	if sp.defaultPageConfig != nil {
+		name, err := sp.defaultPageConfig(r)
+		if err != nil {
+			return nil, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
+		}
+		page, ok := pn.Components[name]
+		if !ok {
+			return nil, fmt.Errorf("default PageConfig for %s returned unknown component name: %s", pn.Name, name)
+		}
+		return page, nil
+	}
+	page, ok := pn.Components["Page"]
+	if !ok {
+		return nil, fmt.Errorf("no Page component or PageConfig method found for %s", pn.Name)
+	}
+	return page, nil
 }

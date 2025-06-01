@@ -78,6 +78,8 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 				continue
 			}
 			switch method.Name {
+			case "PageConfig":
+				item.Config = &method
 			case "Middlewares":
 				item.Middlewares = &method
 			case "Init":
@@ -87,8 +89,8 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
 				}
 				_ = res
-			case "Args":
-				item.Args = &method
+			case "Props":
+				item.Props = &method
 			}
 		}
 	}
