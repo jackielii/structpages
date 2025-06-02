@@ -1,6 +1,8 @@
 # structpages
 
-Struct Pages
+Struct Pages provides a way to define routing using struct and method tags. It
+integrates with the [http.ServeMux] or chi.Router, allowing you to quickly build
+up pages and components without too much boilerplate.
 
 ## Features
 

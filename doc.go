@@ -1,6 +1,6 @@
 // structpages provides a way to define routing using struct and method tags.
-// It integrates with the std ServeMux or chi.Router, allowing you to quickly
-// build up pages and components.
+// It integrates with the [http.ServeMux] or [chi.Router], allowing you to quickly
+// build up pages and components without too much boilerplate.
 //
 // It supports templ components as built-in, but also allow other templating
 // engines to be used.
