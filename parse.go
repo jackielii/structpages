@@ -186,16 +186,21 @@ func (p *parseContext) urlFor(v any) (string, error) {
 			}
 		}
 	}
-	pt := reflect.TypeOf(v)
-	if pt.Kind() != reflect.Ptr {
-		pt = reflect.PointerTo(pt)
-	}
+	ptv := pointerType(reflect.TypeOf(v))
 	for node := range p.root.All() {
-		if node.Value.Type() == pt {
+		pt := pointerType(node.Value.Type())
+		if ptv == pt {
 			return node.FullRoute(), nil
 		}
 	}
-	return "", fmt.Errorf("urlfor: no page node found for %s", pt.String())
+	return "", fmt.Errorf("urlfor: no page node found for %s", ptv.String())
+}
+
+func pointerType(v reflect.Type) reflect.Type {
+	if v.Kind() == reflect.Ptr {
+		return v
+	}
+	return reflect.PointerTo(v)
 }
 
 func parseTag(route string) (method string, path string, title string) {
