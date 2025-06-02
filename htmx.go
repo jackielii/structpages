@@ -21,7 +21,8 @@ func mixedCase(s string) string {
 		return s
 	}
 	if strings.Contains(s, " ") {
-		panic("mixedCase: input string should not contain spaces")
+		// TODO hx-target can't contain spaces, can we panic?
+		return ""
 	}
 	parts := strings.Split(s, "-")
 	for i, part := range parts {
