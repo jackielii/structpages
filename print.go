@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func PrintRoutes(route string, v any) string {
+func (StructPages) PrintRoutes(route string, v any) string {
 	r := &printRouter{}
 	var sb strings.Builder
 	sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {

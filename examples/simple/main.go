@@ -10,7 +10,7 @@ import (
 var sp = structpages.New()
 
 func init() {
-	log.Printf("Routes:\n%s", structpages.PrintRoutes("/", index{}))
+	log.Printf("Routes:\n%s", sp.PrintRoutes("/", index{}))
 }
 
 func main() {
