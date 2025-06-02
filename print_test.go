@@ -22,6 +22,6 @@ func (l *Level2) Page() component    { return testComponent{} }
 func (l *Level2) Partial() component { return testComponent{} }
 
 func TestPrint(t *testing.T) {
-	s := New().PrintRoutes("/", &TopPage{})
+	s := PrintRoutes(&TopPage{}, "/", "Top Page")
 	fmt.Println(s)
 }

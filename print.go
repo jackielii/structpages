@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (StructPages) PrintRoutes(route string, v any) string {
+func PrintRoutes(v any, route string, title string) string {
 	r := &printRouter{}
 	var sb strings.Builder
 	sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
@@ -17,7 +17,7 @@ func (StructPages) PrintRoutes(route string, v any) string {
 		// fmt.Fprintf(&r.sb, "%sMiddleware for %s\n", strings.Repeat(" ", r.indent), pn.FullRoute())
 		return h
 	}))
-	sp.MountPages(r, v, route, "")
+	sp.MountPages(r, v, route, title)
 	// return r.sb.String()
 	return sb.String()
 }

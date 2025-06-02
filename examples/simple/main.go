@@ -9,13 +9,10 @@ import (
 
 var sp = structpages.New()
 
-func init() {
-	log.Printf("Routes:\n%s", sp.PrintRoutes("/", index{}))
-}
-
 func main() {
-	r := structpages.NewRouter(http.NewServeMux())
+	r := structpages.NewRouter(nil)
 	sp.MountPages(r, index{}, "/", "index")
+	log.Printf("Routes:\n%s", structpages.PrintRoutes(index{}, "/", "index"))
 	log.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", nil)
 }

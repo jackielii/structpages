@@ -47,6 +47,7 @@ func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 
 func (sp *StructPages) MountPages(router Router, page any, route, title string, initArgs ...any) {
 	pc := parsePageTree(route, page, initArgs...)
+	pc.root.Title = title
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
 	sp.registerPageItem(router, pc, pc.root, middlewares)
 }
