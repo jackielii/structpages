@@ -1,0 +1,83 @@
+package main
+
+type index struct {
+	product `route:"/product Product"`
+	team    `route:"/team Team"`
+	contact `route:"/contact Contact"`
+}
+
+templ (p index) Page() {
+	@html() {
+		@p.Main()
+	}
+}
+
+templ (index) Main() {
+	<h1>Welcome to the Index Page</h1>
+	<p>Navigate to the product, team, or contact pages using the links below:</p>
+}
+
+type product struct{}
+
+templ (p product) Page() {
+	@html() {
+		@p.Main()
+	}
+}
+
+templ (product) Main() {
+	<h1>Product Page</h1>
+	<p>This is the product page.</p>
+}
+
+type team struct{}
+
+templ (p team) Page() {
+	@html() {
+		@p.Main()
+	}
+}
+
+templ (team) Main() {
+	<h1>Team Page</h1>
+	<p>This is the team page.</p>
+}
+
+type contact struct{}
+
+templ (p contact) Page() {
+	@html() {
+		@p.Main()
+	}
+}
+
+templ (contact) Main() {
+	<h1>Contact Page</h1>
+	<p>This is the contact page.</p>
+}
+
+templ html() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<title>HTMX Example</title>
+		</head>
+		<body>
+			<header class="navbar">
+				<nav>
+					<ul role="list">
+						<li><a hx-get="/" hx-push-url="true" hx-target="#main">Home</a></li>
+						<li><a hx-get="/product" hx-push-url="true" hx-target="#main">Product</a></li>
+						<li><a hx-get="/team" hx-push-url="true" hx-target="#main">Team</a></li>
+						<li><a hx-get="/contact" hx-push-url="true" hx-target="#main">Contact</a></li>
+					</ul>
+				</nav>
+			</header>
+			<main id="main">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}
