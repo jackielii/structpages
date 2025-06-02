@@ -1,10 +1,12 @@
 package structpages
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"reflect"
 	"slices"
+	"sync"
 )
 
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
@@ -126,10 +128,33 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 		}
 
 		comp := pc.callComponentMethod(page.Value, *compFunc, args...)
-		if err := comp.Render(r.Context(), w); err != nil {
-			sp.onError(w, r, err)
-		}
+		sp.render(w, r, comp)
 	})
+}
+
+func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comp component) {
+	buf := getBuffer()
+	defer releaseBuffer(buf)
+	if err := comp.Render(r.Context(), buf); err != nil {
+		sp.onError(w, r, err)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(buf.Bytes())
+}
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
+func getBuffer() *bytes.Buffer {
+	return bufferPool.Get().(*bytes.Buffer)
+}
+
+func releaseBuffer(b *bytes.Buffer) {
+	b.Reset()
+	bufferPool.Put(b)
 }
 
 type httpErrHandler interface {
