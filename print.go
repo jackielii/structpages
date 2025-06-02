@@ -9,7 +9,7 @@ import (
 func PrintRoutes(route string, v any) string {
 	r := &printRouter{}
 	var sb strings.Builder
-	sp := NewStructPages(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
+	sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
 		fmt.Fprintf(&sb, "%s\t%s\t%s\n", pn.Method, pn.FullRoute(), pn.Title)
 		// for name := range pn.Components {
 		// 	fmt.Fprintf(&r.sb, "- %sComponent %s\n", strings.Repeat(" ", r.indent), name)

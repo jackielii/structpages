@@ -14,7 +14,7 @@ type StructPages struct {
 	defaultPageConfig func(r *http.Request) (string, error)
 }
 
-func NewStructPages(options ...func(*StructPages)) *StructPages {
+func New(options ...func(*StructPages)) *StructPages {
 	sp := &StructPages{
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -107,7 +107,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			var err error
 			args, err = extractError(args)
 			if err != nil {
-				sp.onError(w, r, fmt.Errorf("error calling Args method on %s: %w", page.Name, err))
+				sp.onError(w, r, fmt.Errorf("error calling Props method on %s: %w", page.Name, err))
 				return
 			}
 		}

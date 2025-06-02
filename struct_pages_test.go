@@ -33,7 +33,7 @@ func TestHttpHandler(t *testing.T) {
 	// println(PrintRoutes(&topPage{}))
 	mux := http.NewServeMux()
 	r := NewRouter(mux)
-	sp := NewStructPages()
+	sp := New()
 	sp.MountPages(r, "/", &topPage{})
 
 	{
@@ -92,7 +92,7 @@ func TestMiddlewares(t *testing.T) {
 	}
 	println(PrintRoutes("/", &topPage{}))
 	r := NewRouter(http.NewServeMux())
-	sp := NewStructPages()
+	sp := New()
 	sp.MountPages(r, "/", &topPage{})
 	{
 		req := httptest.NewRequest(http.MethodGet, "/middleware", nil)
@@ -142,7 +142,7 @@ func (DefaultConfigPage) HxTarget() component {
 // }
 
 func TestPageConfig(t *testing.T) {
-	sp := NewStructPages()
+	sp := New()
 	r := NewRouter(http.NewServeMux())
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
@@ -162,7 +162,7 @@ func TestPageConfig(t *testing.T) {
 }
 
 func TestHTMXPageConfig(t *testing.T) {
-	sp := NewStructPages(WithDefaultPageConfig(HTMXPageConfig))
+	sp := New(WithDefaultPageConfig(HTMXPageConfig))
 	r := NewRouter(http.NewServeMux())
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
@@ -194,7 +194,7 @@ func (CustomConfigPage) PageConfig(r *http.Request) (string, error) {
 }
 
 func TestCustomPageConfig(t *testing.T) {
-	sp := NewStructPages()
+	sp := New()
 	r := NewRouter(http.NewServeMux())
 	type topPage struct {
 		CustomConfigPage `route:"/custom Custom config page"`
