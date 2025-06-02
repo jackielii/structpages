@@ -92,7 +92,7 @@ func TestMiddlewares(t *testing.T) {
 	type topPage struct {
 		middlewarePages `route:"/middleware Test middleware handler"`
 	}
-	println(PrintRoutes("/", &topPage{}))
+	// println(PrintRoutes("/", &topPage{}))
 	r := NewRouter(http.NewServeMux())
 	sp := New()
 	sp.MountPages(r, &topPage{}, "/", "top page")
