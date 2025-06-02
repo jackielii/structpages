@@ -127,7 +127,7 @@ func TestParseSimple(t *testing.T) {
 	println(s)
 }
 
-func TestUrlFor(t *testing.T) {
+func Test_pc_UrlFor(t *testing.T) {
 	type topPage struct {
 		f1 *TestHandlerPage `route:"/f1 Test Page"`
 		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
@@ -136,11 +136,22 @@ func TestUrlFor(t *testing.T) {
 	if pc.root == nil {
 		t.Fatal("parsePageTree returned nil")
 	}
-	url, err := pc.urlFor(&TestHandlerPage{})
-	if err != nil {
-		t.Fatalf("urlFor failed: %v", err)
+	{
+		url, err := pc.urlFor(&TestHandlerPage{})
+		if err != nil {
+			t.Fatalf("urlFor failed: %v", err)
+		}
+		if url != "/f1" {
+			t.Errorf("Expected URL '/f1', got '%s'", url)
+		}
 	}
-	if url != "/f1" {
-		t.Errorf("Expected URL '/f1', got '%s'", url)
+	{
+		url, err := pc.urlFor(&topPage{})
+		if err != nil {
+			t.Fatalf("urlFor failed: %v", err)
+		}
+		if url != "/" {
+			t.Errorf("Expected URL '/', got '%s'", url)
+		}
 	}
 }

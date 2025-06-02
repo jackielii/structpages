@@ -1,5 +1,10 @@
 package main
 
+import (
+	"context"
+	"github.com/jackielii/structpages"
+)
+
 type index struct {
 	product `route:"/product Product"`
 	team    `route:"/team Team"`
@@ -68,10 +73,10 @@ templ html() {
 			<header class="navbar">
 				<nav>
 					<ul role="list">
-						<li><a hx-get="/" hx-push-url="true" hx-target="#main">Home</a></li>
-						<li><a hx-get="/product" hx-push-url="true" hx-target="#main">Product</a></li>
-						<li><a hx-get="/team" hx-push-url="true" hx-target="#main">Team</a></li>
-						<li><a hx-get="/contact" hx-push-url="true" hx-target="#main">Contact</a></li>
+						<li><a hx-get={ urlFor(ctx, index{}) } hx-push-url="true" hx-target="#main">Home</a></li>
+						<li><a hx-get={ urlFor(ctx, product{}) } hx-push-url="true" hx-target="#main">Product</a></li>
+						<li><a hx-get={ urlFor(ctx, team{}) } hx-push-url="true" hx-target="#main">Team</a></li>
+						<li><a hx-get={ urlFor(ctx, contact{}) } hx-push-url="true" hx-target="#main">Contact</a></li>
 					</ul>
 				</nav>
 			</header>
@@ -80,4 +85,20 @@ templ html() {
 			</main>
 		</body>
 	</html>
+}
+
+templ errorPage(err error) {
+	@html() {
+		@errorComp(err)
+	}
+}
+
+templ errorComp(err error) {
+	<h1>Error</h1>
+	<p>{ err.Error() }</p>
+}
+
+func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
+	s, err := structpages.UrlFor(ctx, page, args...)
+	return templ.SafeURL(s), err
 }

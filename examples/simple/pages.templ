@@ -1,5 +1,8 @@
 package main
 
+import "context"
+import "github.com/jackielii/structpages"
+
 type index struct {
 	product `route:"/product Product"`
 	team    `route:"/team Team"`
@@ -51,10 +54,10 @@ templ html() {
 			<header class="navbar">
 				<nav>
 					<ul role="list">
-						<li><a href="/">Home</a></li>
-						<li><a href="/product">Product</a></li>
-						<li><a href="/team">Team</a></li>
-						<li><a href="/contact">Contact</a></li>
+						<li><a href={ urlFor(ctx, index{}) }>Home</a></li>
+						<li><a href={ urlFor(ctx, product{}) }>Product</a></li>
+						<li><a href={ urlFor(ctx, team{}) }>Team</a></li>
+						<li><a href={ urlFor(ctx, contact{}) }>Contact</a></li>
 					</ul>
 				</nav>
 			</header>
@@ -63,4 +66,9 @@ templ html() {
 			</main>
 		</body>
 	</html>
+}
+
+func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
+	s, err := structpages.UrlFor(ctx, page, args...)
+	return templ.SafeURL(s), err
 }

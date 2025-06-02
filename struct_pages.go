@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 )
 
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
@@ -44,7 +45,7 @@ func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 	}
 }
 
-func (sp *StructPages) MountPages(router Router, route string, page any, initArgs ...any) {
+func (sp *StructPages) MountPages(router Router, page any, route, title string, initArgs ...any) {
 	pc := parsePageTree(route, page, initArgs...)
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
 	sp.registerPageItem(router, pc, pc.root, middlewares)
@@ -86,7 +87,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		}
 		return
 	}
-	for _, middleware := range middlewares {
+	for _, middleware := range slices.Backward(middlewares) {
 		handler = middleware(handler, page)
 	}
 	router.HandleMethod(page.Method, page.Route, handler)

@@ -2,6 +2,8 @@ package structpages
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -78,6 +80,81 @@ func Test_formatPathSegments(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("formatPathSegments() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+type index struct {
+	product `route:"/product Product"`
+	team    `route:"/team Team"`
+	contact `route:"/contact Contact"`
+}
+type (
+	product struct{}
+	team    struct{}
+	contact struct{}
+)
+
+func (index) Page() component   { return testComponent{"index"} }
+func (product) Page() component { return testComponent{"product"} }
+func (team) Page() component    { return testComponent{"team"} }
+func (contact) Page() component { return testComponent{"contact"} }
+
+func TestUrlFor(t *testing.T) {
+	tests := []struct {
+		name     string
+		page     any
+		args     []any
+		expected string
+	}{
+		{
+			name:     "Product page",
+			page:     &product{},
+			args:     nil,
+			expected: "/product",
+		},
+		{
+			name:     "Team page",
+			page:     &team{},
+			args:     nil,
+			expected: "/team",
+		},
+		{
+			name:     "Contact page",
+			page:     contact{},
+			args:     nil,
+			expected: "/contact",
+		},
+		{
+			name:     "Index page",
+			page:     index{},
+			args:     nil,
+			expected: "/",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					url, err := UrlFor(r.Context(), tt.page, tt.args...)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					w.Write([]byte(url))
+				})
+			}))
+			r := NewRouter(http.NewServeMux())
+			sp.MountPages(r, &index{}, "/", "index")
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if rec.Body.String() != tt.expected {
+				t.Errorf("expected body %q, got %q", tt.expected, rec.Body.String())
 			}
 		})
 	}

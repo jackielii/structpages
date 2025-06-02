@@ -17,7 +17,7 @@ func PrintRoutes(route string, v any) string {
 		// fmt.Fprintf(&r.sb, "%sMiddleware for %s\n", strings.Repeat(" ", r.indent), pn.FullRoute())
 		return h
 	}))
-	sp.MountPages(r, route, v)
+	sp.MountPages(r, v, route, "")
 	// return r.sb.String()
 	return sb.String()
 }

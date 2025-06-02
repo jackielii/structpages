@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type testComponent struct {
@@ -34,7 +36,7 @@ func TestHttpHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	r := NewRouter(mux)
 	sp := New()
-	sp.MountPages(r, "/", &topPage{})
+	sp.MountPages(r, &topPage{}, "/", "")
 
 	{
 		req := httptest.NewRequest(http.MethodGet, "/struct", nil)
@@ -93,7 +95,7 @@ func TestMiddlewares(t *testing.T) {
 	println(PrintRoutes("/", &topPage{}))
 	r := NewRouter(http.NewServeMux())
 	sp := New()
-	sp.MountPages(r, "/", &topPage{})
+	sp.MountPages(r, &topPage{}, "/", "top page")
 	{
 		req := httptest.NewRequest(http.MethodGet, "/middleware", nil)
 		rec := httptest.NewRecorder()
@@ -147,7 +149,7 @@ func TestPageConfig(t *testing.T) {
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
 	}
-	sp.MountPages(r, "/", &topPage{})
+	sp.MountPages(r, &topPage{}, "/", "top page")
 	{
 		req := httptest.NewRequest(http.MethodGet, "/default", nil)
 		rec := httptest.NewRecorder()
@@ -167,7 +169,7 @@ func TestHTMXPageConfig(t *testing.T) {
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
 	}
-	sp.MountPages(r, "/", &topPage{})
+	sp.MountPages(r, &topPage{}, "/", "top page")
 
 	req := httptest.NewRequest(http.MethodGet, "/default", nil)
 	req.Header.Set("Hx-Request", "true")
@@ -199,7 +201,7 @@ func TestCustomPageConfig(t *testing.T) {
 	type topPage struct {
 		CustomConfigPage `route:"/custom Custom config page"`
 	}
-	sp.MountPages(r, "/", &topPage{})
+	sp.MountPages(r, &topPage{}, "/", "top page")
 
 	req := httptest.NewRequest(http.MethodGet, "/custom", nil)
 	rec := httptest.NewRecorder()
@@ -210,5 +212,70 @@ func TestCustomPageConfig(t *testing.T) {
 	expectedBody := "Custom config page"
 	if rec.Body.String() != expectedBody {
 		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
+	}
+}
+
+type middlewareOrderPage struct{}
+
+func (middlewareOrderPage) Page() component {
+	return testComponent{content: "Middleware Order Page\n"}
+}
+
+func (middlewareOrderPage) Middlewares() []MiddlewareFunc {
+	return []MiddlewareFunc{
+		makeMiddleware("page mw 1"),
+		makeMiddleware("page mw 2"),
+		makeMiddleware("page mw 3"),
+	}
+}
+
+func makeMiddleware(name string) MiddlewareFunc {
+	return func(next http.Handler, node *PageNode) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Middleware before: " + name + "\n"))
+			next.ServeHTTP(w, r)
+			w.Write([]byte("Middleware after: " + name + "\n"))
+		})
+	}
+}
+
+func TestMiddlewareOrder(t *testing.T) {
+	sp := New(
+		WithMiddlewares(
+			makeMiddleware("global mw 1"),
+			makeMiddleware("global mw 2"),
+			makeMiddleware("global mw 3"),
+		),
+	)
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		middlewareOrderPage `route:"/"`
+	}
+	sp.MountPages(r, &topPage{}, "/", "top page")
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	expectedBody := `Middleware before: global mw 1
+Middleware before: global mw 2
+Middleware before: global mw 3
+Middleware before: page mw 1
+Middleware before: page mw 2
+Middleware before: page mw 3
+Middleware Order Page
+Middleware after: page mw 3
+Middleware after: page mw 2
+Middleware after: page mw 1
+Middleware after: global mw 3
+Middleware after: global mw 2
+Middleware after: global mw 1
+`
+	if diff := cmp.Diff(expectedBody, rec.Body.String()); diff != "" {
+		t.Errorf("unexpected body (-want +got):\n%s", diff)
 	}
 }
