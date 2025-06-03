@@ -1,0 +1,229 @@
+package main
+
+import (
+	"context"
+	"github.com/jackielii/structpages"
+	"net/http"
+	"strconv"
+)
+
+type index struct {
+	add        `route:"POST /add AddTodo" form:"text"`
+	toggle     `route:"POST /toggle/{id} ToggleTodo"`
+	deleteTodo `route:"DELETE /delete/{id} DeleteTodo"`
+}
+
+templ (p index) Page() {
+	@html() {
+		<div class="todo-app">
+			<h1>TODO App</h1>
+			<form hx-post={ urlFor(ctx, add{}) } hx-target="#todo-list" hx-swap="innerHTML">
+				<div class="form-group">
+					<input type="text" name="text" placeholder="Add a new todo..." required/>
+					<button type="submit">Add Todo</button>
+				</div>
+			</form>
+			<div id="todo-list">
+				@todoList()
+			</div>
+		</div>
+	}
+}
+
+type add struct{}
+
+func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	if r.Method == "POST" {
+		text := r.FormValue("text")
+		if text != "" {
+			addTodo(text)
+		}
+	}
+	templ.Handler(todoList()).ServeHTTP(w, r)
+	return nil
+}
+
+type toggle struct{}
+
+func (t toggle) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	if r.Method == "POST" {
+		toggleTodo(id)
+	}
+	templ.Handler(todoList()).ServeHTTP(w, r)
+	return nil
+}
+
+type deleteTodo struct{}
+
+func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	if r.Method == "DELETE" {
+		removeTodo(id)
+	}
+	templ.Handler(todoList()).ServeHTTP(w, r)
+	return nil
+}
+
+templ todoList() {
+	<ul class="todo-list">
+		for _, todo := range getTodos() {
+			<li class={ "todo-item", templ.KV("completed", todo.Completed) }>
+				<div class="todo-content">
+					<input
+						type="checkbox"
+						checked?={ todo.Completed }
+						hx-post={ urlFor(ctx, toggle{}, "id", todo.ID) }
+						hx-target="#todo-list"
+						hx-swap="innerHTML"
+					/>
+					<span class="todo-text">{ todo.Text }</span>
+				</div>
+				<button
+					class="delete-btn"
+					hx-delete={ urlFor(ctx, deleteTodo{}, "id", todo.ID) }
+					hx-target="#todo-list"
+					hx-swap="innerHTML"
+					hx-confirm="Are you sure you want to delete this todo?"
+				>
+					×
+				</button>
+			</li>
+		}
+	</ul>
+	if len(getTodos()) == 0 {
+		<p class="empty-state">No todos yet. Add one above!</p>
+	}
+}
+
+templ html() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<title>TODO App</title>
+			<style>
+				.todo-app {
+					max-width: 600px;
+					margin: 2rem auto;
+					padding: 2rem;
+				}
+				
+				.form-group {
+					display: flex;
+					gap: 0.5rem;
+					margin-bottom: 2rem;
+				}
+				
+				.form-group input {
+					flex: 1;
+					padding: 0.75rem;
+					border: 1px solid #ddd;
+					border-radius: 4px;
+				}
+				
+				.form-group button {
+					padding: 0.75rem 1.5rem;
+					background: #007bff;
+					color: white;
+					border: none;
+					border-radius: 4px;
+					cursor: pointer;
+				}
+				
+				.form-group button:hover {
+					background: #0056b3;
+				}
+				
+				.todo-list {
+					list-style: none;
+					padding: 0;
+				}
+				
+				.todo-item {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 1rem;
+					border: 1px solid #eee;
+					border-radius: 4px;
+					margin-bottom: 0.5rem;
+					background: white;
+				}
+				
+				.todo-item.completed {
+					opacity: 0.6;
+				}
+				
+				.todo-item.completed .todo-text {
+					text-decoration: line-through;
+				}
+				
+				.todo-content {
+					display: flex;
+					align-items: center;
+					gap: 0.75rem;
+					flex: 1;
+				}
+				
+				.todo-text {
+					flex: 1;
+				}
+				
+				.delete-btn {
+					background: #dc3545;
+					color: white;
+					border: none;
+					border-radius: 50%;
+					width: 2rem;
+					height: 2rem;
+					cursor: pointer;
+					font-size: 1.2rem;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+				}
+				
+				.delete-btn:hover {
+					background: #c82333;
+				}
+				
+				.empty-state {
+					text-align: center;
+					color: #666;
+					font-style: italic;
+					padding: 2rem;
+				}
+			</style>
+		</head>
+		<body>
+			<main id="content">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}
+
+templ errorPage(err error) {
+	@html() {
+		@errorComp(err)
+	}
+}
+
+templ errorComp(err error) {
+	<h1>Error</h1>
+	<p>{ err.Error() }</p>
+}
+
+// We using a patched version of templ to generate, see: https://github.com/a-h/templ/pull/1171
+func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
+	s, err := structpages.UrlFor(ctx, page, args...)
+	return templ.SafeURL(s), err
+}
