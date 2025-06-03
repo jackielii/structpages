@@ -69,7 +69,22 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 			indicies = append(indicies, i)
 		}
 	}
-	if len(args) == len(indicies) {
+	if len(args) == 0 && len(indicies) == 0 {
+		return pattern, nil // no args and no params, return the pattern as is
+	}
+	if len(args) == 0 && len(indicies) > 0 {
+		return pattern, fmt.Errorf("pattern %s: no arguments provided", pattern)
+	}
+	if arg, ok := args[0].(map[string]any); ok {
+		for _, idx := range indicies {
+			name := segments[idx].name
+			if value, ok := arg[name]; ok {
+				segments[idx].value = fmt.Sprint(value)
+			} else {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+			}
+		}
+	} else if len(args) == len(indicies) {
 		for i, idx := range indicies {
 			segments[idx].value = fmt.Sprint(args[i])
 		}
@@ -85,19 +100,6 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := m[name]; ok {
-				segments[idx].value = fmt.Sprint(value)
-			} else {
-				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
-			}
-		}
-	} else if len(args) == 1 {
-		arg, ok := args[0].(map[string]any)
-		if !ok {
-			return pattern, fmt.Errorf("pattern %s: use map[string]any for single arg or provide the full args", pattern)
-		}
-		for _, idx := range indicies {
-			name := segments[idx].name
-			if value, ok := arg[name]; ok {
 				segments[idx].value = fmt.Sprint(value)
 			} else {
 				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)

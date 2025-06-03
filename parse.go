@@ -160,11 +160,11 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) component {
 	results := p.callMethod(v, method, args...)
 	if len(results) != 1 {
-		panic("Method " + method.Name + " must return a single templ.Component")
+		panic("Method " + method.Name + " must return a single result")
 	}
 	comp, ok := results[0].Interface().(component)
 	if !ok {
-		panic("Method " + method.Name + " does not return a templ.Component")
+		panic("Method " + method.Name + " does not return value of type component")
 	}
 	return comp
 }
@@ -252,11 +252,11 @@ type component interface {
 }
 
 func isComponent(t reflect.Method) bool {
-	templComponent := reflect.TypeOf((*component)(nil)).Elem()
+	typ := reflect.TypeOf((*component)(nil)).Elem()
 	if t.Type.NumOut() != 1 {
 		return false
 	}
-	return t.Type.Out(0).Implements(templComponent)
+	return t.Type.Out(0).Implements(typ)
 }
 
 func isPromotedMethod(method reflect.Method) bool {

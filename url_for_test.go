@@ -41,8 +41,9 @@ func Test_formatPathSegments(t *testing.T) {
 			path: "/path/{arg1}/{arg2}",
 			args: []any{"value1"},
 			want: "/path/{arg1}/{arg2}",
-			err:  errors.New("pattern /path/{arg1}/{arg2}: use map[string]any for single arg or provide the full args"),
+			err:  errors.New("pattern /path/{arg1}/{arg2}: not enough arguments provided, args: [value1]"),
 		},
+		// we allow more args
 		// {
 		// 	name: "path with more args",
 		// 	path: "/path/{arg1}/{arg2}",
@@ -55,7 +56,7 @@ func Test_formatPathSegments(t *testing.T) {
 			path: "/path/{arg1}/{arg2}",
 			args: []any{},
 			want: "/path/{arg1}/{arg2}",
-			err:  errors.New("pattern /path/{arg1}/{arg2}: not enough arguments provided, args: []"),
+			err:  errors.New("pattern /path/{arg1}/{arg2}: no arguments provided"),
 		},
 		{
 			name: "path with map args",
@@ -71,6 +72,24 @@ func Test_formatPathSegments(t *testing.T) {
 			want: "/path/{arg1}/{arg2}",
 			err:  errors.New("pattern /path/{arg1}/{arg2}: argument arg2 not found in provided args: [map[arg1:value1]]"),
 		},
+		{
+			name: "single arg with map",
+			path: "/path/{arg1}",
+			args: []any{map[string]any{"arg1": "value1"}},
+			want: "/path/value1",
+		},
+		{
+			name: "single arg with single value",
+			path: "/path/{arg1}",
+			args: []any{"value1"},
+			want: "/path/value1",
+		},
+		{
+			name: "first arg with map, second with value",
+			path: "/path/{arg1}/{arg2}",
+			args: []any{map[string]any{"arg1": "value1", "arg2": "value2"}, "value3"},
+			want: "/path/value1/value2",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +102,9 @@ func Test_formatPathSegments(t *testing.T) {
 				if diff := cmp.Diff(tt.err.Error(), err.Error()); diff != "" {
 					t.Errorf("formatPathSegments() error mismatch (-want +got):\n%s", diff)
 				}
+			}
+			if tt.err == nil && err != nil {
+				t.Errorf("formatPathSegments() unexpected error: %v", err)
 			}
 			if got != tt.want {
 				t.Errorf("formatPathSegments() = %v, want %v", got, tt.want)
