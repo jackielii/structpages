@@ -132,6 +132,7 @@ func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comp compo
 	defer releaseBuffer(buf)
 	if err := comp.Render(r.Context(), buf); err != nil {
 		sp.onError(w, r, err)
+		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(buf.Bytes())
