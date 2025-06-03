@@ -87,7 +87,7 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 			if value, ok := m[name]; ok {
 				segments[idx].value = fmt.Sprint(value)
 			} else {
-				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, name)
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
 			}
 		}
 	} else if len(args) == 1 {
@@ -100,7 +100,7 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 			if value, ok := arg[name]; ok {
 				segments[idx].value = fmt.Sprint(value)
 			} else {
-				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args", pattern, name)
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
 			}
 		}
 	} else if len(args) < len(indicies) {

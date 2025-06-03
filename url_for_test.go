@@ -69,7 +69,7 @@ func Test_formatPathSegments(t *testing.T) {
 			path: "/path/{arg1}/{arg2}",
 			args: []any{map[string]any{"arg1": "value1"}},
 			want: "/path/{arg1}/{arg2}",
-			err:  errors.New("pattern /path/{arg1}/{arg2}: argument arg2 not found in provided args"),
+			err:  errors.New("pattern /path/{arg1}/{arg2}: argument arg2 not found in provided args: [map[arg1:value1]]"),
 		},
 	}
 	for _, tt := range tests {
