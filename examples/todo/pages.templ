@@ -17,9 +17,19 @@ templ (p index) Page() {
 	@html() {
 		<div class="todo-app">
 			<h1>TODO App</h1>
-			<form hx-post={ urlFor(ctx, add{}) } hx-target="#todo-list" hx-swap="innerHTML">
+			<form
+				hx-post={ urlFor(ctx, add{}) }
+				hx-target="#todo-list"
+				hx-swap="innerHTML"
+				hx-on:htmx:after-request="this.reset()"
+			>
 				<div class="form-group">
-					<input type="text" name="text" placeholder="Add a new todo..." required/>
+					<input
+						type="text"
+						name="text"
+						placeholder="Add a new todo..."
+						required
+					/>
 					<button type="submit">Add Todo</button>
 				</div>
 			</form>
