@@ -279,3 +279,60 @@ Middleware after: global mw 1
 		t.Errorf("unexpected body (-want +got):\n%s", diff)
 	}
 }
+
+type testPropsPage struct{}
+
+func (testPropsPage) Page(s string) component             { return testComponent{content: s} }
+func (testPropsPage) Content(s string) component          { return testComponent{content: s} }
+func (testPropsPage) Another(s string) component          { return testComponent{content: s} }
+func (testPropsPage) Props() (string, error)              { return "Default Props", nil }
+func (testPropsPage) PageProps(r *http.Request) string    { return "Page Props" }
+func (testPropsPage) ContentProps(r *http.Request) string { return "Content Props" }
+
+func TestProps(t *testing.T) {
+	sp := New(WithDefaultPageConfig(HTMXPageConfig))
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		testPropsPage `route:"/props Test Props Page"`
+	}
+	sp.MountPages(r, &topPage{}, "/", "top page")
+
+	tests := []struct {
+		name         string
+		hxTarget     string
+		expectedBody string
+	}{
+		{
+			name:         "Page Props",
+			expectedBody: "Page Props",
+		},
+		{
+			name:         "Content Props",
+			hxTarget:     "content",
+			expectedBody: "Content Props",
+		},
+		{
+			name:         "Another Props fallback to Props",
+			hxTarget:     "another",
+			expectedBody: "Default Props",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/props", nil)
+			if tt.hxTarget != "" {
+				req.Header.Set("Hx-Request", "true")
+				req.Header.Set("Hx-Target", tt.hxTarget)
+			}
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if diff := cmp.Diff(tt.expectedBody, rec.Body.String()); diff != "" {
+				t.Errorf("unexpected body (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

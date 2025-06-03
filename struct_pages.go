@@ -105,29 +105,24 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var args []reflect.Value
-		if page.Props != nil {
-			args = pc.callMethod(page.Value, *page.Props, reflect.ValueOf(r))
-			var err error
-			args, err = extractError(args)
-			if err != nil {
-				sp.onError(w, r, fmt.Errorf("error calling Props method on %s: %w", page.Name, err))
-				return
-			}
-		}
-
-		compFunc, err := sp.findComponent(pc, page, r)
+		compMethod, err := sp.findComponent(pc, page, r)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
 			return
 		}
 
-		if compFunc == nil {
+		args, err := sp.getProps(pc, page, compMethod, r)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error finding props for %s: %w", page.Name, err))
+			return
+		}
+
+		if !compMethod.Func.IsValid() {
 			sp.onError(w, r, fmt.Errorf("page %s does not have a Page or PageConfig method", page.Name))
 			return
 		}
 
-		comp := pc.callComponentMethod(page.Value, *compFunc, args...)
+		comp := pc.callComponentMethod(page.Value, compMethod, args...)
 		sp.render(w, r, comp)
 	})
 }
@@ -222,36 +217,51 @@ func (sp *StructPages) getHttpHandler(v reflect.Value) http.Handler {
 	return nil
 }
 
-func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (*reflect.Method, error) {
+func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
 	if pn.Config != nil {
-		args := []reflect.Value{reflect.ValueOf(r)}
-		res := pc.callMethod(pn.Value, *pn.Config, args...)
+		res := pc.callMethod(pn.Value, *pn.Config, reflect.ValueOf(r))
 		res, err := extractError(res)
 		if err != nil {
-			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
 		}
 		if len(res) >= 1 && res[0].Type().Kind() == reflect.String {
 			name := res[0].String()
 			if comp, ok := pn.Components[name]; ok {
 				return comp, nil
 			}
-			return nil, fmt.Errorf("PageConfig method for %s returned unknown component name: %s", pn.Name, name)
+			return reflect.Method{}, fmt.Errorf("PageConfig method for %s returned unknown component name: %s", pn.Name, name)
 		}
 	}
 	if sp.defaultPageConfig != nil {
 		name, err := sp.defaultPageConfig(r)
 		if err != nil {
-			return nil, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
+			return reflect.Method{}, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
 		}
 		page, ok := pn.Components[name]
 		if !ok {
-			return nil, fmt.Errorf("default PageConfig for %s returned unknown component name: %s", pn.Name, name)
+			return reflect.Method{}, fmt.Errorf("default PageConfig for %s returned unknown component name: %s", pn.Name, name)
 		}
 		return page, nil
 	}
 	page, ok := pn.Components["Page"]
 	if !ok {
-		return nil, fmt.Errorf("no Page component or PageConfig method found for %s", pn.Name)
+		return reflect.Method{}, fmt.Errorf("no Page component or PageConfig method found for %s", pn.Name)
 	}
 	return page, nil
+}
+
+func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod reflect.Method, r *http.Request) ([]reflect.Value, error) {
+	pageName := compMethod.Name
+	var propMethod reflect.Method
+	for _, name := range []string{pageName + "Props", "Props"} {
+		if pm, ok := pn.Props[name]; ok {
+			propMethod = pm
+			break
+		}
+	}
+	if propMethod.Func.IsValid() {
+		props := pc.callMethod(pn.Value, propMethod, reflect.ValueOf(r))
+		return extractError(props)
+	}
+	return nil, nil
 }

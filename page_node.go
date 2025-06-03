@@ -14,8 +14,8 @@ type PageNode struct {
 	Method      string
 	Route       string
 	Value       reflect.Value
-	Props       *reflect.Method
-	Components  map[string]*reflect.Method
+	Props       map[string]reflect.Method
+	Components  map[string]reflect.Method
 	Config      *reflect.Method
 	Middlewares *reflect.Method
 	Parent      *PageNode
@@ -44,9 +44,11 @@ func (p PageNode) String() string {
 		sb.WriteString("\n  components: []")
 	}
 	for name, comp := range p.Components {
-		sb.WriteString("\n  component: " + name + " -> " + formatMethod(comp))
+		sb.WriteString("\n  component: " + name + " -> " + formatMethod(&comp))
 	}
-	sb.WriteString("\n  props: " + formatMethod(p.Props))
+	for name, props := range p.Props {
+		sb.WriteString("\n  prop: " + name + " -> " + formatMethod(&props))
+	}
 	for i, child := range p.Children {
 		fmt.Fprintf(&sb, "\n  child %d:", i+1)
 		childStr := strings.TrimRight(child.String(), "\n")

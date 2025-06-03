@@ -72,11 +72,19 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 			// }
 			if isComponent(method) {
 				if item.Components == nil {
-					item.Components = make(map[string]*reflect.Method)
+					item.Components = make(map[string]reflect.Method)
 				}
-				item.Components[method.Name] = &method
+				item.Components[method.Name] = method
 				continue
 			}
+			if strings.HasSuffix(method.Name, "Props") {
+				if item.Props == nil {
+					item.Props = make(map[string]reflect.Method)
+				}
+				item.Props[method.Name] = method
+				continue
+			}
+
 			switch method.Name {
 			case "PageConfig":
 				item.Config = &method
@@ -89,8 +97,6 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
 				}
 				_ = res
-			case "Props":
-				item.Props = &method
 			}
 		}
 	}
