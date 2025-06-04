@@ -169,9 +169,9 @@ func TestUrlFor(t *testing.T) {
 		},
 		{
 			name:     "duplicate type with wildcard",
-			page:     func(p *PageNode) bool { return p.Name == "f1" },
-			args:     []any{"f1", "extra/path"},
-			expected: "/contact/extra/path",
+			page:     []any{func(p *PageNode) bool { return p.Name == "f1" }, "?p={p}"},
+			args:     []any{"f1", "extra/path", "p", "0"},
+			expected: "/contact/extra/path?p=0",
 		},
 	}
 	for _, tt := range tests {
