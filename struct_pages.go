@@ -95,7 +95,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 }
 
 func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
-	if h := sp.getHttpHandler(page.Value); h != nil {
+	if h := sp.asHandler(page.Value); h != nil {
 		return h
 	}
 	if len(page.Components) == 0 {
@@ -170,7 +170,7 @@ func formatMethod(method *reflect.Method) string {
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
 
-func (sp *StructPages) getHttpHandler(v reflect.Value) http.Handler {
+func (sp *StructPages) asHandler(v reflect.Value) http.Handler {
 	st, pt := v.Type(), v.Type()
 	if st.Kind() == reflect.Ptr {
 		st = st.Elem()
