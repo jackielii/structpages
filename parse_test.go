@@ -3,6 +3,8 @@ package structpages
 import (
 	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseTag(t *testing.T) {
@@ -124,7 +126,9 @@ func TestParseSimple(t *testing.T) {
 		t.Fatal("parsePageTree returned nil")
 	}
 	s := pc.root.String()
-	println(s)
+	if s == "" {
+		t.Fatal("Page tree string representation is empty")
+	}
 }
 
 func Test_pc_UrlFor(t *testing.T) {
@@ -153,5 +157,75 @@ func Test_pc_UrlFor(t *testing.T) {
 		if url != "/" {
 			t.Errorf("Expected URL '/', got '%s'", url)
 		}
+	}
+}
+
+func Test_parseContext_getArg(t *testing.T) {
+	str := "test"
+	type strct struct{}
+	tests := []struct {
+		name string
+		args []any
+		in   reflect.Type
+		want any
+	}{
+		{
+			name: "Simple type",
+			args: []any{str},
+			in:   reflect.TypeOf("test"),
+			want: "test",
+		},
+		{
+			name: "Pointer type",
+			args: []any{&str},
+			in:   reflect.TypeOf((*string)(nil)),
+			want: &str,
+		},
+		{
+			name: "save pointer, ask for value",
+			args: []any{&str},
+			in:   reflect.TypeOf(""),
+			want: "test",
+		},
+		// {
+		// 	name: "save value, ask for pointer",
+		// 	args: []any{str},
+		// 	in:   reflect.TypeOf((*string)(nil)),
+		// 	want: &str,
+		// },
+		{
+			name: "Struct type",
+			args: []any{strct{}},
+			in:   reflect.TypeOf(strct{}),
+			want: strct{},
+		},
+		{
+			name: "Pointer to struct type",
+			args: []any{&strct{}},
+			in:   reflect.TypeOf((*strct)(nil)),
+			want: &strct{},
+		},
+		{
+			name: "save pointer to struct, ask for value",
+			args: []any{&strct{}},
+			in:   reflect.TypeOf((*strct)(nil)).Elem(),
+			want: strct{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := make(argRegistry)
+			for _, arg := range tt.args {
+				args.addArg(arg)
+			}
+			got, ok := args.getArg(tt.in)
+			if !ok {
+				t.Errorf("getArg() did not find type %v", tt.in)
+				return
+			}
+			if diff := cmp.Diff(got.Interface(), tt.want); diff != "" {
+				t.Errorf("getArg() mismatch (-got +want):\n%s", diff)
+			}
+		})
 	}
 }
