@@ -95,7 +95,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 }
 
 func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
-	if h := sp.asHandler(page.Value); h != nil {
+	if h := sp.asHandler(pc, page); h != nil {
 		return h
 	}
 	if len(page.Components) == 0 {
@@ -147,16 +147,15 @@ var (
 )
 
 func extractError(args []reflect.Value) ([]reflect.Value, error) {
-	var err error
 	if len(args) >= 1 && args[len(args)-1].Type().AssignableTo(errorType) {
 		i := args[len(args)-1].Interface()
 		args = args[:len(args)-1]
 		if i == nil {
 			return args, nil
 		}
-		err = i.(error)
+		return args, i.(error)
 	}
-	return args, err
+	return args, nil
 }
 
 func formatMethod(method *reflect.Method) string {
@@ -170,7 +169,8 @@ func formatMethod(method *reflect.Method) string {
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
 
-func (sp *StructPages) asHandler(v reflect.Value) http.Handler {
+func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
+	v := pn.Value
 	st, pt := v.Type(), v.Type()
 	if st.Kind() == reflect.Ptr {
 		st = st.Elem()
@@ -200,6 +200,26 @@ func (sp *StructPages) asHandler(v reflect.Value) http.Handler {
 			}
 		})
 	}
+	// extended ServeHTTP method with extra arguments
+	if method.Type.NumIn() > 3 { // receiver, http.ResponseWriter, *http.Request
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var wv reflect.Value
+			if method.Type.NumOut() > 1 {
+				bw := newBuffered(w)
+				defer bw.close() // ignore error, no way to recover from it. maybe log it?
+				wv = reflect.ValueOf(bw)
+			} else {
+				wv = reflect.ValueOf(w)
+			}
+			results := pc.callMethod(v, method, wv, reflect.ValueOf(r))
+			_, err := extractError(results)
+			if err != nil {
+				sp.onError(w, r, err)
+				return
+			}
+		})
+	}
+
 	return nil
 }
 
