@@ -31,7 +31,10 @@ func withPcCtx(pc *parseContext) MiddlewareFunc {
 // Additionally, you can pass []any to page to join multiple path segments together.
 // Strings will be joined as is. Example:
 //
-//	UrlFor(ctx, []any{ListProductPage{}, "?page={page}"}, "category", categoryId, "page", pageNumber)
+//	UrlFor(ctx, []any{Page{}, "?foo={bar}"}, "bar", "baz")
+//
+// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
+// It can be useful when you have multiple pages with the same type but different routes.
 func UrlFor(ctx context.Context, page any, args ...any) (string, error) {
 	pc := pcCtx.Value(ctx)
 	if pc == nil {
@@ -54,7 +57,11 @@ func UrlFor(ctx context.Context, page any, args ...any) (string, error) {
 			pattern += p
 		}
 	}
-	return formatPathSegments(pattern, args...)
+	path, err := formatPathSegments(pattern, args...)
+	if err != nil {
+		return "", fmt.Errorf("urlfor: %w", err)
+	}
+	return strings.Replace(path, "{$}", "", 1), nil
 }
 
 // TODO: see: go/src/net/http/pattern.go for more accurate path parsing
