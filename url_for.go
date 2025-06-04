@@ -160,6 +160,9 @@ func parseSegments(pattern string) (segments []segment, err error) {
 			segments = append(segments, segment{name: "{$}"})
 			continue
 		}
+		if strings.HasSuffix(name, "...") {
+			name = name[:len(name)-3] // remove the trailing '...'
+		}
 		segments = append(segments, segment{name: name, param: true})
 	}
 	return segments, nil

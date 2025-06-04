@@ -117,6 +117,7 @@ type index struct {
 	product `route:"/product Product"`
 	team    `route:"/team Team"`
 	contact `route:"/contact Contact"`
+	f1      contact `route:"/contact/{f1...} Contact"`
 }
 type (
 	product struct{}
@@ -165,6 +166,12 @@ func TestUrlFor(t *testing.T) {
 			page:     []any{product{}, "?page={page}{extra}"},
 			args:     []any{"page", "1", "extra", "&sort=asc"},
 			expected: "/product?page=1&sort=asc",
+		},
+		{
+			name:     "duplicate type with wildcard",
+			page:     func(p *PageNode) bool { return p.Name == "f1" },
+			args:     []any{"f1", "extra/path"},
+			expected: "/contact/extra/path",
 		},
 	}
 	for _, tt := range tests {
@@ -249,6 +256,14 @@ func Test_parseSegments(t *testing.T) {
 			want: []segment{
 				{name: "arg1", param: true},
 				{name: "arg2", param: true},
+			},
+		},
+		{
+			name:    "wildcard pattern",
+			pattern: "/path/{wildcard...}",
+			want: []segment{
+				{name: "/path/"},
+				{name: "wildcard", param: true},
 			},
 		},
 	}
