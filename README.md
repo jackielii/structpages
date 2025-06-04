@@ -8,7 +8,7 @@ up pages and components without too much boilerplate.
 
 - Struct based routing
 - Templ support built-in
-- Built on top of http.ServeMux or chi.Router
+- Built on top of http.ServeMux
 - Middleware support
 - HTMX partial rendering
 
