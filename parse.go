@@ -279,13 +279,13 @@ func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 	}
 
 	for t, v := range args {
-		if pt.Implements(t) {
+		if pt.AssignableTo(t) {
 			if needsPtr {
 				return v.Addr(), true
 			}
 			return v, true
 		}
-		if st.Implements(t) {
+		if st.AssignableTo(t) {
 			if needsElem {
 				return v.Elem(), true
 			}
