@@ -146,14 +146,14 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) (component, error) {
 	results, err := p.callMethod(v, method, args...)
 	if err != nil {
-		return nil, fmt.Errorf("Error calling component method %s: %w", formatMethod(&method), err)
+		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(&method), err)
 	}
 	if len(results) != 1 {
-		return nil, fmt.Errorf("Method %s must return a single result, got %d", formatMethod(&method), len(results))
+		return nil, fmt.Errorf("method %s must return a single result, got %d", formatMethod(&method), len(results))
 	}
 	comp, ok := results[0].Interface().(component)
 	if !ok {
-		return nil, fmt.Errorf("Method %s does not return value of type component", formatMethod(&method))
+		return nil, fmt.Errorf("method %s does not return value of type component", formatMethod(&method))
 	}
 	return comp, nil
 }
