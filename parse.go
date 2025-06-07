@@ -87,8 +87,11 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 			case "Middlewares":
 				item.Middlewares = &method
 			case "Init":
-				res := p.callMethod(item.Value, method)
-				res, err := extractError(res)
+				res, err := p.callMethod(item.Value, method)
+				if err != nil {
+					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
+				}
+				res, err = extractError(res)
 				if err != nil {
 					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
 				}
@@ -102,7 +105,7 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 
 // callMethod calls the emthod with receiver value v and arguments args.
 // it uses types from p.args to fill in missing arguments.
-func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) []reflect.Value {
+func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) ([]reflect.Value, error) {
 	receiver := method.Type.In(0)
 	// make sure receiver and value match, if method takes a pointer, convert value to pointer
 	if receiver.Kind() == reflect.Ptr && v.Kind() != reflect.Ptr {
@@ -112,7 +115,7 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 		v = v.Elem()
 	}
 	if receiver.Kind() != v.Kind() {
-		panic(fmt.Sprintf("Method %s receiver type mismatch: expected %s, got %s", formatMethod(&method), receiver.String(), v.Type().String()))
+		return nil, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s", formatMethod(&method), receiver.String(), v.Type().String())
 	}
 	// we allow calling methods with fewer arguments than defined
 	// if len(args) > method.Type.NumIn()-1 {
@@ -126,30 +129,33 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 		lenFilled++
 	}
 	if len(in) <= lenFilled {
-		return method.Func.Call(in)
+		return method.Func.Call(in), nil
 	}
 	// convention: if a method has more arguments than provided, we try to fill them with initArgs
 	for i := lenFilled; i < len(in); i++ {
 		argType := method.Type.In(i)
 		val, ok := p.args.getArg(argType)
 		if !ok {
-			panic(fmt.Sprintf("Method %s requires argument of type %s, but not found", formatMethod(&method), argType.String()))
+			return nil, fmt.Errorf("method %s requires argument of type %s, but not found", formatMethod(&method), argType.String())
 		}
 		in[i] = val
 	}
-	return method.Func.Call(in)
+	return method.Func.Call(in), nil
 }
 
-func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) component {
-	results := p.callMethod(v, method, args...)
+func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) (component, error) {
+	results, err := p.callMethod(v, method, args...)
+	if err != nil {
+		return nil, fmt.Errorf("Error calling component method %s: %w", formatMethod(&method), err)
+	}
 	if len(results) != 1 {
-		panic("Method " + method.Name + " must return a single result")
+		return nil, fmt.Errorf("Method %s must return a single result, got %d", formatMethod(&method), len(results))
 	}
 	comp, ok := results[0].Interface().(component)
 	if !ok {
-		panic("Method " + method.Name + " does not return value of type component")
+		return nil, fmt.Errorf("Method %s does not return value of type component", formatMethod(&method))
 	}
-	return comp
+	return comp, nil
 }
 
 func (p *parseContext) urlFor(v any) (string, error) {

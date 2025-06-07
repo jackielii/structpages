@@ -58,7 +58,10 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	}
 	if page.Middlewares != nil {
 		// TODO: should apply parent middlewares first, probably passed down from the page node
-		res := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
+		res, err := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
+		if err != nil {
+			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
+		}
 		if len(res) != 1 {
 			panic(fmt.Errorf("Middlewares method on %s did not return single result", page.Name))
 		}
@@ -109,9 +112,9 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		args, err := sp.getProps(pc, page, compMethod, r)
+		props, err := sp.getProps(pc, page, compMethod, r)
 		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error finding props for %s: %w", page.Name, err))
+			sp.onError(w, r, fmt.Errorf("error calling props component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
 		}
 
@@ -120,7 +123,11 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		comp := pc.callComponentMethod(page.Value, compMethod, args...)
+		comp, err := pc.callComponentMethod(page.Value, compMethod, props...)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
+			return
+		}
 		sp.render(w, r, comp)
 	})
 }
@@ -203,7 +210,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	// extended ServeHTTP method with extra arguments
 	if method.Type.NumIn() > 3 { // receiver, http.ResponseWriter, *http.Request
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var wv reflect.Value
+			var wv reflect.Value // ResponseWriter, will be buffered if handler returns error
 			if method.Type.NumOut() > 1 {
 				bw := newBuffered(w)
 				defer bw.close() // ignore error, no way to recover from it. maybe log it?
@@ -211,8 +218,12 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			} else {
 				wv = reflect.ValueOf(w)
 			}
-			results := pc.callMethod(v, method, wv, reflect.ValueOf(r))
-			_, err := extractError(results)
+			results, err := pc.callMethod(v, method, wv, reflect.ValueOf(r))
+			if err != nil {
+				sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+				return
+			}
+			_, err = extractError(results)
 			if err != nil {
 				sp.onError(w, r, err)
 				return
@@ -225,8 +236,11 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 
 func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
 	if pn.Config != nil {
-		res := pc.callMethod(pn.Value, *pn.Config, reflect.ValueOf(r))
-		res, err := extractError(res)
+		res, err := pc.callMethod(pn.Value, *pn.Config, reflect.ValueOf(r))
+		if err != nil {
+			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+		}
+		res, err = extractError(res)
 		if err != nil {
 			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
 		}
@@ -266,7 +280,10 @@ func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod refle
 		}
 	}
 	if propMethod.Func.IsValid() {
-		props := pc.callMethod(pn.Value, propMethod, reflect.ValueOf(r))
+		props, err := pc.callMethod(pn.Value, propMethod, reflect.ValueOf(r))
+		if err != nil {
+			return nil, fmt.Errorf("error calling props method %s.%s: %w", pn.Name, propMethod.Name, err)
+		}
 		return extractError(props)
 	}
 	return nil, nil
