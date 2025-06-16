@@ -45,8 +45,8 @@ func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 	}
 }
 
-func (sp *StructPages) MountPages(router Router, page any, route, title string, initArgs ...any) {
-	pc := parsePageTree(route, page, initArgs...)
+func (sp *StructPages) MountPages(router Router, page any, route, title string, args ...any) {
+	pc := parsePageTree(route, page, args...)
 	pc.root.Title = title
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
 	sp.registerPageItem(router, pc, pc.root, middlewares)
@@ -57,8 +57,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		panic("Page item route is empty: " + page.Name)
 	}
 	if page.Middlewares != nil {
-		// TODO: should apply parent middlewares first, probably passed down from the page node
-		res, err := pc.callMethod(page.Value, *page.Middlewares, reflect.ValueOf(page))
+		res, err := pc.callMethod(page.Value, *page.Middlewares)
 		if err != nil {
 			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
 		}
