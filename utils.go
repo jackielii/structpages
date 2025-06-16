@@ -23,27 +23,24 @@ func releaseBuffer(b *bytes.Buffer) {
 
 type buffered struct {
 	http.ResponseWriter
-	headerWritten bool
-	buf           *bytes.Buffer
+	status int
+	buf    *bytes.Buffer
 }
 
 func newBuffered(w http.ResponseWriter) *buffered {
-	return &buffered{ResponseWriter: w, buf: getBuffer()}
+	return &buffered{ResponseWriter: w, buf: getBuffer(), status: http.StatusOK}
 }
-
-// func (w *buffered) WriteHeader(statusCode int) {
-// 	if w.headerWritten {
-// 		return
-// 	}
-// 	w.headerWritten = true
-// 	w.ResponseWriter.WriteHeader(statusCode)
-// }
 
 func (w *buffered) Write(b []byte) (int, error) {
 	return w.buf.Write(b)
 }
 
+func (w *buffered) WriteHeader(statusCode int) {
+	w.status = statusCode
+}
+
 func (w *buffered) close() error {
+	w.ResponseWriter.WriteHeader(w.status)
 	_, err := w.ResponseWriter.Write(w.buf.Bytes())
 	defer releaseBuffer(w.buf)
 	return err

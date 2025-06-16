@@ -199,6 +199,8 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 		h := v.Interface().(httpErrHandler)
 		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning err handler")
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// because we have to handle errors, and error handler could write header
+			// potentially we want to clear the buffer writer
 			bw := newBuffered(w)
 			defer bw.close() // ignore error, no way to recover from it. maybe log it?
 			if err := h.ServeHTTP(bw, r); err != nil {
@@ -211,6 +213,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var wv reflect.Value // ResponseWriter, will be buffered if handler returns error
 			if method.Type.NumOut() > 1 {
+				// same logic: if it returns value, we need to buffer it
 				bw := newBuffered(w)
 				defer bw.close() // ignore error, no way to recover from it. maybe log it?
 				wv = reflect.ValueOf(bw)
