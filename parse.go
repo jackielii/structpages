@@ -89,7 +89,7 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 			case "Middlewares":
 				item.Middlewares = &method
 			case "Init":
-				res, err := p.callMethod(item.Value, method)
+				res, err := p.callMethod(item, method)
 				if err != nil {
 					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
 				}
@@ -107,7 +107,8 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 
 // callMethod calls the emthod with receiver value v and arguments args.
 // it uses types from p.args to fill in missing arguments.
-func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) ([]reflect.Value, error) {
+func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...reflect.Value) ([]reflect.Value, error) {
+	v := pn.Value
 	receiver := method.Type.In(0)
 	// make sure receiver and value match, if method takes a pointer, convert value to pointer
 	if receiver.Kind() == reflect.Ptr && v.Kind() != reflect.Ptr {
@@ -133,21 +134,28 @@ func (p *parseContext) callMethod(v reflect.Value, method reflect.Method, args .
 	if len(in) <= lenFilled {
 		return method.Func.Call(in), nil
 	}
+	pnv := reflect.ValueOf(pn)
 	// convention: if a method has more arguments than provided, we try to fill them with initArgs
 	for i := lenFilled; i < len(in); i++ {
 		argType := method.Type.In(i)
-		val, ok := p.args.getArg(argType)
-		if !ok {
-			return nil, fmt.Errorf("method %s requires argument of type %s, but not found", formatMethod(&method), argType.String())
+		if argType == pnv.Type() {
+			in[i] = pnv // if the argument is of type *PageNode, use the current node
+		} else if argType == pnv.Type().Elem() {
+			in[i] = pnv.Elem()
+		} else {
+			val, ok := p.args.getArg(argType)
+			if !ok {
+				return nil, fmt.Errorf("method %s requires argument of type %s, but not found", formatMethod(&method), argType.String())
+			}
+			in[i] = val
 		}
-		in[i] = val
 		lenFilled++
 	}
 	return method.Func.Call(in), nil
 }
 
-func (p *parseContext) callComponentMethod(v reflect.Value, method reflect.Method, args ...reflect.Value) (component, error) {
-	results, err := p.callMethod(v, method, args...)
+func (p *parseContext) callComponentMethod(pn *PageNode, method reflect.Method, args ...reflect.Value) (component, error) {
+	results, err := p.callMethod(pn, method, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(&method), err)
 	}

@@ -57,7 +57,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		panic("Page item route is empty: " + page.Name)
 	}
 	if page.Middlewares != nil {
-		res, err := pc.callMethod(page.Value, *page.Middlewares)
+		res, err := pc.callMethod(page, *page.Middlewares)
 		if err != nil {
 			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
 		}
@@ -122,7 +122,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		comp, err := pc.callComponentMethod(page.Value, compMethod, props...)
+		comp, err := pc.callComponentMethod(page, compMethod, props...)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
@@ -217,7 +217,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			} else {
 				wv = reflect.ValueOf(w)
 			}
-			results, err := pc.callMethod(v, method, wv, reflect.ValueOf(r))
+			results, err := pc.callMethod(pn, method, wv, reflect.ValueOf(r))
 			if err != nil {
 				sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				return
@@ -235,7 +235,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 
 func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
 	if pn.Config != nil {
-		res, err := pc.callMethod(pn.Value, *pn.Config, reflect.ValueOf(r))
+		res, err := pc.callMethod(pn, *pn.Config, reflect.ValueOf(r))
 		if err != nil {
 			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
 		}
@@ -279,7 +279,7 @@ func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod refle
 		}
 	}
 	if propMethod.Func.IsValid() {
-		props, err := pc.callMethod(pn.Value, propMethod, reflect.ValueOf(r))
+		props, err := pc.callMethod(pn, propMethod, reflect.ValueOf(r))
 		if err != nil {
 			return nil, fmt.Errorf("error calling props method %s.%s: %w", pn.Name, propMethod.Name, err)
 		}
