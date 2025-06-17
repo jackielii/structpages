@@ -31,17 +31,13 @@ func newBuffered(w http.ResponseWriter) *buffered {
 	return &buffered{ResponseWriter: w, buf: getBuffer(), status: http.StatusOK}
 }
 
-func (w *buffered) Write(b []byte) (int, error) {
-	return w.buf.Write(b)
-}
-
-func (w *buffered) WriteHeader(statusCode int) {
-	w.status = statusCode
-}
+func (w *buffered) Write(b []byte) (int, error) { return w.buf.Write(b) }
+func (w *buffered) WriteHeader(statusCode int)  { w.status = statusCode }
+func (w *buffered) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *buffered) close() error {
 	w.ResponseWriter.WriteHeader(w.status)
 	_, err := w.ResponseWriter.Write(w.buf.Bytes())
-	defer releaseBuffer(w.buf)
+	releaseBuffer(w.buf)
 	return err
 }
