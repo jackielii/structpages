@@ -23,7 +23,8 @@ linters-settings:
     local-prefixes: github.com/jackielii/structpages
 
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
 
   gocyclo:
     min-complexity: 15

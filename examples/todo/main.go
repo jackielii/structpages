@@ -72,7 +72,6 @@ func main() {
 	)
 	router := structpages.NewRouter(http.DefaultServeMux)
 	sp.MountPages(router, index{}, "/", "index")
-	log.Printf("Registered pages:\n%s", structpages.PrintRoutes(index{}, "/", "index"))
 	log.Println("Starting TODO app on :8080")
 	http.ListenAndServe(":8080", router)
 }
@@ -85,4 +84,3 @@ func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	errorPage(err).Render(r.Context(), w)
 }
-
