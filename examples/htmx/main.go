@@ -4,29 +4,32 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/jackielii/structpages"
 )
 
 // PrintRoutes is a simple middleware that prints all routes to stdout
-func PrintRoutes() structpages.MiddlewareFunc {
-	fmt.Println("\nRoutes:")
-	fmt.Println("Method\tPattern\t\tTitle")
-	fmt.Println("------\t-------\t\t-----")
+func PrintRoutes(sb *strings.Builder) structpages.MiddlewareFunc {
+	fmt.Fprintln(sb, "\nRoutes:")
+	fmt.Fprintln(sb, "Method\tPattern\t\tTitle")
+	fmt.Fprintln(sb, "------\t-------\t\t-----")
 	return func(h http.Handler, pn *structpages.PageNode) http.Handler {
-		fmt.Printf("%s\t%s\t\t%s\n", pn.Method, pn.FullRoute(), pn.Title)
+		fmt.Fprintf(sb, "%s\t%- 12s\t%s\n", pn.Method, pn.FullRoute(), pn.Title)
 		return h
 	}
 }
 
 func main() {
+	var routes strings.Builder
 	sp := structpages.New(
 		structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
 		structpages.WithErrorHandler(errorHandler),
-		structpages.WithMiddlewares(PrintRoutes()),
+		structpages.WithMiddlewares(PrintRoutes(&routes)),
 	)
 	router := structpages.NewRouter(http.DefaultServeMux)
 	sp.MountPages(router, index{}, "/", "index")
+	fmt.Println("Available routes:\n", routes.String())
 	log.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", router)
 }
