@@ -273,9 +273,9 @@ Generate type-safe URLs for your pages:
 First, create a wrapper function for use in templ files:
 
 ```go
-// urlFor wraps structpages.UrlFor for templ templates
+// urlFor wraps structpages.URLFor for templ templates
 func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
-    url, err := structpages.UrlFor(ctx, page, args...)
+    url, err := structpages.URLFor(ctx, page, args...)
     return templ.URL(url), err
 }
 ```
@@ -299,7 +299,7 @@ type pages struct {
 }
 
 // In Go code (e.g., in handlers or middleware)
-url, err := structpages.UrlFor(ctx, userProfile{}, "123")
+url, err := structpages.URLFor(ctx, userProfile{}, "123")
 // Returns: /users/123
 ```
 
