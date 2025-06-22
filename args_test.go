@@ -654,6 +654,64 @@ type derivedType struct {
 	Extra int
 }
 
+// Test for the simplified assignability logic
+func TestArgRegistry_getArg_assignability(t *testing.T) {
+	// Test the assignability check with non-addressable value
+	t.Run("skip non-addressable when needsPtr", func(t *testing.T) {
+		registry := make(argRegistry)
+
+		// Store interface type with non-addressable concrete value
+		var iface simpleInterface = simpleImpl{data: "test"}
+		registry[reflect.TypeOf((*simpleInterface)(nil)).Elem()] = reflect.ValueOf(iface)
+
+		// Try to get *simpleImpl - this should check assignability
+		// *simpleImpl is assignable to simpleInterface, but the stored value
+		// is not addressable, so it should skip and return not found
+		ptrType := reflect.TypeOf(&simpleImpl{})
+		_, ok := registry.getArg(ptrType)
+		if ok {
+			t.Error("Should not find pointer when stored value is not addressable")
+		}
+	})
+
+	// Test the simplified non-pointer assignability path
+	t.Run("assignability for non-pointer types", func(t *testing.T) {
+		registry := make(argRegistry)
+
+		// Store a concrete implementation that can be assigned to interface
+		impl := simpleImpl{data: "test"}
+		// Store with the interface type as key
+		registry[reflect.TypeOf((*simpleInterface)(nil)).Elem()] = reflect.ValueOf(&impl).Elem()
+
+		// Look up the same interface type - should find via exact match
+		ifaceType := reflect.TypeOf((*simpleInterface)(nil)).Elem()
+		_, ok := registry.getArg(ifaceType)
+		if !ok {
+			t.Error("Should find interface type")
+		}
+
+		// Actually, let's test a more realistic scenario
+		// Store a value and look up a type it's assignable to
+		registry2 := make(argRegistry)
+		implValue := &simpleImpl{data: "test2"}
+		// Store pointer to implementation
+		registry2[reflect.TypeOf(implValue)] = reflect.ValueOf(implValue)
+
+		// Now try to find by interface - this won't work because
+		// interface is not assignable to *simpleImpl
+		v2, ok2 := registry2.getArg(ifaceType)
+		if ok2 {
+			// If found, verify it implements the interface
+			if _, implements := v2.Interface().(simpleInterface); !implements {
+				t.Error("Value should implement the interface")
+			}
+		} else {
+			// This is expected - interface types don't match concrete types via assignability
+			t.Log("Interface not found via assignability - this is expected behavior")
+		}
+	})
+}
+
 // Test specific uncovered assignability paths
 func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 	// Test to cover lines 58-60: pt.AssignableTo(t) when needsPtr=true

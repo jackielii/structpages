@@ -52,21 +52,22 @@ func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 		return v, true
 	}
 
+	// Check assignability for less common cases
 	for t, v := range args {
-		if pt.AssignableTo(t) {
-			if needsPtr {
-				if v.CanAddr() {
-					return v.Addr(), true
-				}
-				// If not addressable, skip this match
-				continue
+		// If looking for pointer type and found something assignable
+		if needsPtr && pt.AssignableTo(t) {
+			// We need to return a pointer, but can only do so if addressable
+			if v.CanAddr() {
+				return v.Addr(), true
 			}
-			return v, true
+			// Skip non-addressable values when we need a pointer
+			continue
 		}
-		if st.AssignableTo(t) {
-			if needsElem {
-				return v.Elem(), true
-			}
+
+		// If looking for non-pointer type and found something assignable
+		if !needsPtr && st.AssignableTo(t) {
+			// For interface types, we typically don't need Elem()
+			// This handles concrete types being assignable to interface types
 			return v, true
 		}
 	}
