@@ -4,6 +4,8 @@ Struct Pages provides a way to define routing using struct tags and methods. It
 integrates with the [http.ServeMux], allowing you to quickly build up pages and
 components without too much boilerplate.
 
+**Status**: **Alpha** - This package is in early development and may have breaking changes in the future. Currently used in a medium-sized project, but not yet battle-tested in production.
+
 ## Features
 
 - Struct based routing
@@ -45,3 +47,10 @@ http.ListenAndServe(":8080", r)
 ```
 
 Check out the [examples](./examples) for more usages.
+
+**TODO**:
+
+- [ ] Document routing patterns and struct tags
+- [ ] Document middleware usage
+- [ ] Document HTMX integration
+- [ ] Document `UrlFor` functionality
