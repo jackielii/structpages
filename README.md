@@ -547,6 +547,33 @@ sp.MountPages(r, pages{}, "/", "My App",
 )
 ```
 
+**Important:** Dependency injection is type-based. Each type can only be registered once. If you need to inject multiple values of the same underlying type (e.g., multiple strings), create distinct types:
+
+```go
+// DON'T do this - only the last string will be available
+sp.MountPages(r, pages{}, "/", "My App", 
+    "api-key",      // Will be overwritten
+    "db-name",      // Only this will be available
+)
+
+// DO this instead - create distinct types
+type APIKey string
+type DatabaseName string
+
+sp.MountPages(r, pages{}, "/", "My App", 
+    APIKey("your-api-key"),
+    DatabaseName("mydb"),
+)
+
+// Use in your methods
+func (p userPage) Props(r *http.Request, apiKey APIKey, dbName DatabaseName) (UserProps, error) {
+    // Both values are available with type safety
+    client := NewAPIClient(string(apiKey))
+    conn := OpenDB(string(dbName))
+    // ...
+}
+```
+
 #### Using Injected Services
 
 Services are automatically injected into page methods that declare them as parameters:

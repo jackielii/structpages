@@ -180,7 +180,7 @@ func TestUrlFor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					url, err := UrlFor(r.Context(), tt.page, tt.args...)
+					url, err := URLFor(r.Context(), tt.page, tt.args...)
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return

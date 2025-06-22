@@ -4,9 +4,11 @@ package structpages
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -332,6 +334,274 @@ func TestProps(t *testing.T) {
 			}
 			if diff := cmp.Diff(tt.expectedBody, rec.Body.String()); diff != "" {
 				t.Errorf("unexpected body (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFormatMethod(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *reflect.Method
+		expected string
+	}{
+		{
+			name: "nil method",
+			setup: func() *reflect.Method {
+				return nil
+			},
+			expected: "<nil>",
+		},
+		{
+			name: "valid method with value receiver",
+			setup: func() *reflect.Method {
+				typ := reflect.TypeOf(testComponent{})
+				method, _ := typ.MethodByName("Render")
+				return &method
+			},
+			expected: "structpages.testComponent.Render",
+		},
+		{
+			name: "valid method with pointer receiver",
+			setup: func() *reflect.Method {
+				typ := reflect.TypeOf(&testPropsPage{})
+				method, _ := typ.MethodByName("Page")
+				return &method
+			},
+			expected: "structpages.testPropsPage.Page",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			method := tt.setup()
+			result := formatMethod(method)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+type errHandler struct{}
+
+func (errHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	if r.URL.Path == "/error" {
+		return fmt.Errorf("test error")
+	}
+	_, _ = w.Write([]byte("OK"))
+	return nil
+}
+
+// Define distinct types for our test strings
+type ExtendedHandlerArg string
+type ExtendedErrHandlerArg string
+
+type extendedHandler struct{}
+
+func (extendedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, extra ExtendedHandlerArg) {
+	_, _ = w.Write([]byte("extended: " + string(extra)))
+}
+
+type extendedErrHandler struct{}
+
+func (extendedErrHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, extra ExtendedErrHandlerArg) error {
+	if r.URL.Path == "/error" {
+		return fmt.Errorf("extended error: %s", extra)
+	}
+	_, _ = w.Write([]byte("extended ok: " + string(extra)))
+	return nil
+}
+
+func TestExtendedHandlers(t *testing.T) {
+	// Test the extended handler functionality separately with proper setup
+	type pages struct {
+		extendedHandler    `route:"GET /extended"`
+		extendedErrHandler `route:"GET /exterr"`
+	}
+
+	var lastError error
+	errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		lastError = err
+		t.Logf("Error occurred: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	sp := New(WithErrorHandler(errorHandler))
+	r := NewRouter(http.NewServeMux())
+	// Pass the typed arguments that the extended handlers expect
+	sp.MountPages(r, &pages{}, "/", "Test Extended",
+		ExtendedHandlerArg("extra value"),
+		ExtendedErrHandlerArg("error extra"))
+
+	// Test extended handler
+	{
+		req := httptest.NewRequest(http.MethodGet, "/extended", http.NoBody)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "extended: extra value" {
+			t.Errorf("expected body %q, got %q", "extended: extra value", rec.Body.String())
+			if lastError != nil {
+				t.Errorf("last error: %v", lastError)
+			}
+		}
+	}
+
+	// Test extended error handler success
+	{
+		req := httptest.NewRequest(http.MethodGet, "/exterr", http.NoBody)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "extended ok: error extra" {
+			t.Errorf("expected body %q, got %q", "extended ok: error extra", rec.Body.String())
+		}
+	}
+}
+
+func TestCallMethodError(t *testing.T) {
+	pc := &parseContext{}
+	pc.args = make(argRegistry)
+
+	// Use testComponent which has a Render method
+	tc := testComponent{}
+	method, _ := reflect.TypeOf(tc).MethodByName("Render")
+
+	// Create a PageNode with a different type (pointer vs value mismatch)
+	pn := &PageNode{
+		Name:  "InvalidReceiver",
+		Value: reflect.ValueOf(123), // int value, completely different type
+	}
+
+	_, err := pc.callMethod(pn, &method)
+	if err == nil {
+		t.Error("expected error for receiver type mismatch, got nil")
+	}
+}
+
+func TestWithErrorHandler(t *testing.T) {
+	customErrorCalled := false
+	customErrorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		customErrorCalled = true
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("Custom error: " + err.Error()))
+	}
+
+	sp := New(WithErrorHandler(customErrorHandler))
+	pc := &parseContext{}
+	pc.root = &PageNode{}
+
+	pn := &PageNode{
+		Name:  "ErrHandler",
+		Value: reflect.ValueOf(errHandler{}),
+	}
+
+	handler := sp.asHandler(pc, pn)
+
+	req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !customErrorCalled {
+		t.Error("custom error handler was not called")
+	}
+	if rec.Code != http.StatusTeapot {
+		t.Errorf("expected status %d, got %d", http.StatusTeapot, rec.Code)
+	}
+	expectedBody := "Custom error: test error"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
+	}
+}
+
+func TestAsHandler(t *testing.T) {
+	tests := []struct {
+		name         string
+		pageNode     *PageNode
+		setupContext func() *parseContext
+		request      *http.Request
+		expectedBody string
+		expectedCode int
+		hasHandler   bool
+	}{
+		{
+			name: "standard http.Handler",
+			pageNode: &PageNode{
+				Name:  "TestHandler",
+				Value: reflect.ValueOf(TestHandlerPage{}),
+			},
+			setupContext: func() *parseContext { return &parseContext{} },
+			request:      httptest.NewRequest(http.MethodGet, "/", http.NoBody),
+			expectedBody: "TestHttpHandler",
+			expectedCode: http.StatusOK,
+			hasHandler:   true,
+		},
+		{
+			name: "error handler success",
+			pageNode: &PageNode{
+				Name:  "ErrHandler",
+				Value: reflect.ValueOf(errHandler{}),
+			},
+			setupContext: func() *parseContext { return &parseContext{} },
+			request:      httptest.NewRequest(http.MethodGet, "/ok", http.NoBody),
+			expectedBody: "OK",
+			expectedCode: http.StatusOK,
+			hasHandler:   true,
+		},
+		{
+			name: "error handler with error",
+			pageNode: &PageNode{
+				Name:  "ErrHandler",
+				Value: reflect.ValueOf(errHandler{}),
+			},
+			setupContext: func() *parseContext { return &parseContext{} },
+			request:      httptest.NewRequest(http.MethodGet, "/error", http.NoBody),
+			expectedBody: "Internal Server Error\n",
+			expectedCode: http.StatusInternalServerError,
+			hasHandler:   true,
+		},
+		{
+			name: "no ServeHTTP method",
+			pageNode: &PageNode{
+				Name:  "NoHandler",
+				Value: reflect.ValueOf(struct{}{}),
+			},
+			setupContext: func() *parseContext { return &parseContext{} },
+			request:      httptest.NewRequest(http.MethodGet, "/", http.NoBody),
+			hasHandler:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sp := New()
+			pc := tt.setupContext()
+			handler := sp.asHandler(pc, tt.pageNode)
+
+			if tt.hasHandler && handler == nil {
+				t.Errorf("expected handler, got nil")
+				return
+			}
+			if !tt.hasHandler && handler != nil {
+				t.Errorf("expected nil handler, got %v", handler)
+				return
+			}
+
+			if tt.hasHandler {
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, tt.request)
+
+				if rec.Code != tt.expectedCode {
+					t.Errorf("expected status %d, got %d", tt.expectedCode, rec.Code)
+				}
+				if rec.Body.String() != tt.expectedBody {
+					t.Errorf("expected body %q, got %q", tt.expectedBody, rec.Body.String())
+				}
 			}
 		})
 	}

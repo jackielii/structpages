@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+func TestNewRouterWithNil(t *testing.T) {
+	router := NewRouter(nil)
+	if router == nil {
+		t.Fatal("expected router to be non-nil")
+	}
+	if router.router != http.DefaultServeMux {
+		t.Error("expected router to use DefaultServeMux when nil is passed")
+	}
+}
+
 func TestStdRouter(t *testing.T) {
 	router := NewRouter(http.NewServeMux())
 

@@ -29,27 +29,27 @@ func (pn *PageNode) FullRoute() string {
 	return path.Join(pn.Parent.FullRoute(), pn.Route)
 }
 
-func (p PageNode) String() string {
+func (pn PageNode) String() string {
 	var sb strings.Builder
 	sb.WriteString("PageItem{")
-	sb.WriteString("\n  name: " + p.Name)
-	sb.WriteString("\n  title: " + p.Title)
-	sb.WriteString("\n  route: " + p.Route)
-	sb.WriteString("\n  middlewares: " + formatMethod(p.Middlewares))
-	if p.Value.Type().AssignableTo(handlerType) {
+	sb.WriteString("\n  name: " + pn.Name)
+	sb.WriteString("\n  title: " + pn.Title)
+	sb.WriteString("\n  route: " + pn.Route)
+	sb.WriteString("\n  middlewares: " + formatMethod(pn.Middlewares))
+	if pn.Value.Type().AssignableTo(handlerType) {
 		sb.WriteString("\n  is http.Handler: true")
 	}
-	sb.WriteString("\n  config: " + formatMethod(p.Config))
-	if len(p.Components) == 0 {
+	sb.WriteString("\n  config: " + formatMethod(pn.Config))
+	if len(pn.Components) == 0 {
 		sb.WriteString("\n  components: []")
 	}
-	for name, comp := range p.Components {
+	for name, comp := range pn.Components {
 		sb.WriteString("\n  component: " + name + " -> " + formatMethod(&comp))
 	}
-	for name, props := range p.Props {
+	for name, props := range pn.Props {
 		sb.WriteString("\n  prop: " + name + " -> " + formatMethod(&props))
 	}
-	for i, child := range p.Children {
+	for i, child := range pn.Children {
 		fmt.Fprintf(&sb, "\n  child %d:", i+1)
 		childStr := strings.TrimRight(child.String(), "\n")
 		for _, line := range strings.SplitAfter(childStr, "\n") {
@@ -72,9 +72,9 @@ func walk(p *PageNode, yield func(*PageNode) bool) bool {
 	return true
 }
 
-func (p *PageNode) All() iter.Seq[*PageNode] {
+func (pn *PageNode) All() iter.Seq[*PageNode] {
 	return func(yield func(*PageNode) bool) {
-		if !walk(p, yield) {
+		if !walk(pn, yield) {
 			return
 		}
 	}

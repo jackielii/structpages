@@ -22,7 +22,7 @@ func withPcCtx(pc *parseContext) MiddlewareFunc {
 	}
 }
 
-// UrlFor returns the URL for a given page type. If args is provided, it'll replace
+// URLFor returns the URL for a given page type. If args is provided, it'll replace
 // the path segments. Supported format is similar to http.ServeMux
 //
 // If multiple page type matches are found, the first one is returned.
@@ -31,11 +31,11 @@ func withPcCtx(pc *parseContext) MiddlewareFunc {
 // Additionally, you can pass []any to page to join multiple path segments together.
 // Strings will be joined as is. Example:
 //
-//	UrlFor(ctx, []any{Page{}, "?foo={bar}"}, "bar", "baz")
+//	URLFor(ctx, []any{Page{}, "?foo={bar}"}, "bar", "baz")
 //
 // It also supports a func(*PageNode) bool as the Page argument to match a specific page.
 // It can be useful when you have multiple pages with the same type but different routes.
-func UrlFor(ctx context.Context, page any, args ...any) (string, error) {
+func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	pc := pcCtx.Value(ctx)
 	if pc == nil {
 		return "", errors.New("parse context not found in context")

@@ -21,6 +21,8 @@ func releaseBuffer(b *bytes.Buffer) {
 	bufferPool.Put(b)
 }
 
+// buffered wraps an http.ResponseWriter to buffer the response body and status code.
+// It implements the Unwrap method to support http.ResponseController.
 type buffered struct {
 	http.ResponseWriter
 	status int
@@ -33,6 +35,9 @@ func newBuffered(w http.ResponseWriter) *buffered {
 
 func (w *buffered) Write(b []byte) (int, error) { return w.buf.Write(b) }
 func (w *buffered) WriteHeader(statusCode int)  { w.status = statusCode }
+
+// Unwrap returns the underlying ResponseWriter, allowing http.ResponseController
+// to access extended functionality like Flush, Hijack, etc.
 func (w *buffered) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (w *buffered) close() error {
