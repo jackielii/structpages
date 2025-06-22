@@ -25,6 +25,7 @@ go.work.sum
 .env
 .claude/
 
+/coverage.txt
 /coverage.out
 /coverage.html
 # Example binaries
