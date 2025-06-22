@@ -428,6 +428,38 @@ templ (p productPage) Page(props productPageProps) {
 }
 ```
 
+#### Props Method Resolution Rules
+
+Structpages looks for Props methods in the following order:
+
+1. **Component-specific Props method**: `<ComponentName>Props()` - e.g., `PageProps()`, `ContentProps()`, `SidebarProps()`
+2. **Generic Props method**: `Props()` - used as a fallback if no component-specific method exists
+
+This allows you to have different props for different components:
+
+```go
+type dashboardPage struct{}
+
+// Different props for different components
+func (d dashboardPage) PageProps(r *http.Request, store *Store) (PageData, error) {
+    // Full page data including layout
+    return PageData{User: store.GetUser(r), Stats: store.GetStats()}, nil
+}
+
+func (d dashboardPage) ContentProps(r *http.Request, store *Store) (ContentData, error) {
+    // Just the content data for HTMX partial updates
+    return ContentData{Stats: store.GetStats()}, nil
+}
+
+func (d dashboardPage) Page(data PageData) templ.Component {
+    // Full page render
+}
+
+func (d dashboardPage) Content(data ContentData) templ.Component {
+    // Partial content render
+}
+```
+
 ### Component Composition
 
 Break down pages into smaller components:
