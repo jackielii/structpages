@@ -39,7 +39,9 @@ func TestHttpHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	r := NewRouter(mux)
 	sp := New()
-	sp.MountPages(r, &topPage{}, "/", "")
+	if err := sp.MountPages(r, &topPage{}, "/", ""); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	{
 		req := httptest.NewRequest(http.MethodGet, "/struct", http.NoBody)
@@ -97,7 +99,9 @@ func TestMiddlewares(t *testing.T) {
 	}
 	r := NewRouter(http.NewServeMux())
 	sp := New()
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 	{
 		req := httptest.NewRequest(http.MethodGet, "/middleware", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -151,7 +155,9 @@ func TestPageConfig(t *testing.T) {
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 	{
 		req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -171,7 +177,9 @@ func TestHTMXPageConfig(t *testing.T) {
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
 	req.Header.Set("Hx-Request", "true")
@@ -203,7 +211,9 @@ func TestCustomPageConfig(t *testing.T) {
 	type topPage struct {
 		CustomConfigPage `route:"/custom Custom config page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/custom", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -253,7 +263,9 @@ func TestMiddlewareOrder(t *testing.T) {
 	type topPage struct {
 		middlewareOrderPage `route:"/"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -297,7 +309,9 @@ func TestProps(t *testing.T) {
 	type topPage struct {
 		testPropsPage `route:"/props Test Props Page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	tests := []struct {
 		name         string
@@ -430,9 +444,11 @@ func TestExtendedHandlers(t *testing.T) {
 	sp := New(WithErrorHandler(errorHandler))
 	r := NewRouter(http.NewServeMux())
 	// Pass the typed arguments that the extended handlers expect
-	sp.MountPages(r, &pages{}, "/", "Test Extended",
+	if err := sp.MountPages(r, &pages{}, "/", "Test Extended",
 		ExtendedHandlerArg("extra value"),
-		ExtendedErrHandlerArg("error extra"))
+		ExtendedErrHandlerArg("error extra")); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test extended handler
 	{

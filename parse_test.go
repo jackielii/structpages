@@ -144,7 +144,10 @@ func TestParseSimple(t *testing.T) {
 		f1 *TestHandlerPage `route:"/ Test Page"`
 		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
 	}
-	pc := parsePageTree("/", &topPage{})
+	pc, err := parsePageTree("/", &topPage{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
 	if pc.root == nil {
 		t.Fatal("parsePageTree returned nil")
 	}
@@ -159,7 +162,10 @@ func Test_pc_UrlFor(t *testing.T) {
 		f1 *TestHandlerPage `route:"/f1 Test Page"`
 		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
 	}
-	pc := parsePageTree("/", &topPage{})
+	pc, err := parsePageTree("/", &topPage{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
 	if pc.root == nil {
 		t.Fatal("parsePageTree returned nil")
 	}
@@ -239,7 +245,9 @@ func Test_parseContext_getArg(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			args := make(argRegistry)
 			for _, arg := range tt.args {
-				args.addArg(arg)
+				if err := args.addArg(arg); err != nil {
+					t.Fatalf("Failed to add arg: %v", err)
+				}
 			}
 			got, ok := args.getArg(tt.in)
 			if !ok {

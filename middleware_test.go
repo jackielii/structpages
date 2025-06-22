@@ -275,7 +275,9 @@ func TestMiddlewareExecutionOrder(t *testing.T) {
 	type topPage struct {
 		orderTestPage `route:"/order Order Test"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/order", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -326,7 +328,9 @@ func TestMiddlewareContextModification(t *testing.T) {
 	type topPage struct {
 		contextTestPage `route:"/context Context Test"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/context", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -350,7 +354,9 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 	type topPage struct {
 		protectedPage `route:"/protected Protected Page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test without authorization header
 	{
@@ -396,7 +402,9 @@ func TestNestedPagesMiddleware(t *testing.T) {
 	type topPage struct {
 		parentPageMw `route:"/parent Parent Page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test parent page - should only have parent middleware
 	{
@@ -452,7 +460,9 @@ func TestComplexMiddlewareChain(t *testing.T) {
 	type topPage struct {
 		complexPage `route:"/complex Complex Page"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/complex", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -487,7 +497,9 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 	type topPage struct {
 		errorTestPage `route:"/error Error Test"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test normal request
 	{
@@ -528,7 +540,9 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 		getPage  methodPage `route:"GET /method Method GET"`
 		postPage methodPage `route:"POST /method Method POST"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test GET request
 	{
@@ -579,7 +593,9 @@ func TestMiddlewarePageNodeAccess(t *testing.T) {
 	type topPage struct {
 		infoPage `route:"POST /info Info Page Title"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/info", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -613,7 +629,9 @@ func TestMiddlewareIntegration(t *testing.T) {
 	type topPage struct {
 		integrationPage `route:"/integration Integration Test"`
 	}
-	sp.MountPages(r, &topPage{}, "/", "top page")
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
 
 	// Test parent page
 	{

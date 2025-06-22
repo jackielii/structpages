@@ -45,11 +45,15 @@ func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 	}
 }
 
-func (sp *StructPages) MountPages(router Router, page any, route, title string, args ...any) {
-	pc := parsePageTree(route, page, args...)
+func (sp *StructPages) MountPages(router Router, page any, route, title string, args ...any) error {
+	pc, err := parsePageTree(route, page, args...)
+	if err != nil {
+		return err
+	}
 	pc.root.Title = title
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
 	sp.registerPageItem(router, pc, pc.root, middlewares)
+	return nil
 }
 
 func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, middlewares []MiddlewareFunc) {
@@ -201,7 +205,10 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			bw := newBuffered(w)
 			defer func() { _ = bw.close() }() // ignore error, no way to recover from it. maybe log it?
 			if err := h.ServeHTTP(bw, r); err != nil {
-				sp.onError(w, r, err)
+				// Clear the buffer since we have an error
+				bw.buf.Reset()
+				// Write error directly to the buffered writer
+				sp.onError(bw, r, err)
 			}
 		})
 	}
@@ -209,9 +216,10 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	if method.Type.NumIn() > 3 { // receiver, http.ResponseWriter, *http.Request
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var wv reflect.Value // ResponseWriter, will be buffered if handler returns error
-			if method.Type.NumOut() > 1 {
-				// same logic: if it returns value, we need to buffer it
-				bw := newBuffered(w)
+			var bw *buffered
+			if method.Type.NumOut() > 0 {
+				// If the method returns any values (including just an error), we need to buffer
+				bw = newBuffered(w)
 				defer func() { _ = bw.close() }() // ignore error, no way to recover from it. maybe log it?
 				wv = reflect.ValueOf(bw)
 			} else {
@@ -219,12 +227,22 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			}
 			results, err := pc.callMethod(pn, &method, wv, reflect.ValueOf(r))
 			if err != nil {
-				sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+				if bw != nil {
+					bw.buf.Reset()
+					sp.onError(bw, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+				} else {
+					sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+				}
 				return
 			}
 			_, err = extractError(results)
 			if err != nil {
-				sp.onError(w, r, err)
+				if bw != nil {
+					bw.buf.Reset()
+					sp.onError(bw, r, err)
+				} else {
+					sp.onError(w, r, err)
+				}
 				return
 			}
 		})

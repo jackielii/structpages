@@ -11,7 +11,9 @@ var sp = structpages.New()
 
 func main() {
 	r := structpages.NewRouter(nil)
-	sp.MountPages(r, index{}, "/", "index")
+	if err := sp.MountPages(r, index{}, "/", "index"); err != nil {
+		log.Fatalf("Failed to mount pages: %v", err)
+	}
 	log.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", nil)
 }

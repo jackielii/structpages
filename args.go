@@ -1,23 +1,23 @@
 package structpages
 
 import (
-	"log"
+	"fmt"
 	"reflect"
 )
 
 type argRegistry map[reflect.Type]reflect.Value
 
-func (args argRegistry) addArg(v any) {
+func (args argRegistry) addArg(v any) error {
 	if v == nil {
-		return
+		return nil
 	}
 	typ := reflect.TypeOf(v)
 	pv := reflect.ValueOf(v)
-	// TODO: what do we do if types conflict?
 	if _, ok := args[typ]; ok {
-		log.Printf("Warning: type %s already exists in args registry, overwriting with new value", typ)
+		return fmt.Errorf("duplicate type %s in args registry", typ)
 	}
 	args[typ] = pv
+	return nil
 }
 
 // note that p.args are always pointers

@@ -17,18 +17,24 @@ type parseContext struct {
 	args argRegistry
 }
 
-func parsePageTree(route string, page any, args ...any) *parseContext {
+func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
 	pc := &parseContext{args: make(map[reflect.Type]reflect.Value)}
 	for _, v := range args {
-		pc.args.addArg(v)
+		if err := pc.args.addArg(v); err != nil {
+			return nil, fmt.Errorf("error adding argument to registry: %w", err)
+		}
 	}
-	topNode := pc.parsePageTree(route, "", page)
+	topNode, err := pc.parsePageTree(route, "", page)
+	if err != nil {
+		return nil, err
+	}
 	pc.root = topNode
-	return pc
+	return pc, nil
 }
 
-func (p *parseContext) parsePageTree(route, fieldName string, page any) *PageNode {
-	p.args.addArg(page) // add page to args registry for dependency injection
+func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNode, error) {
+	// Don't add pages to args registry - pages are route handlers, not injectable services
+	// Multiple instances of the same page type at different routes should be allowed
 
 	st := reflect.TypeOf(page) // struct type
 	pt := reflect.TypeOf(page) // pointer type
@@ -51,7 +57,10 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) *PageNod
 			typ = typ.Elem()
 		}
 		childPage := reflect.New(typ)
-		childItem := p.parsePageTree(route, field.Name, childPage.Interface())
+		childItem, err := p.parsePageTree(route, field.Name, childPage.Interface())
+		if err != nil {
+			return nil, err
+		}
 		childItem.Parent = item
 
 		item.Children = append(item.Children, childItem)
@@ -97,7 +106,7 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) *PageNod
 		}
 	}
 
-	return item
+	return item, nil
 }
 
 // callMethod calls the emthod with receiver value v and arguments args.

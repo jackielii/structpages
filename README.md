@@ -63,7 +63,9 @@ Route definitions are done using struct tags in for form of `[method] path [Titl
 ```go
 sp := structpages.New()
 r := structpages.NewRouter(http.NewServeMux())
-sp.MountPages(r, index{}, "/", "index")
+if err := sp.MountPages(r, index{}, "/", "index"); err != nil {
+    log.Fatal(err)
+}
 log.Println("Starting server on :8080")
 http.ListenAndServe(":8080", r)
 ```
@@ -540,30 +542,36 @@ store := &Store{db: db}
 sessionManager := NewSessionManager()
 
 // Services are passed as additional arguments to MountPages
-sp.MountPages(r, pages{}, "/", "My App", 
+if err := sp.MountPages(r, pages{}, "/", "My App", 
     store,           // Will be available in page & other methods
     sessionManager,  // Will be available in page & other methods
     logger,          // Any other dependencies
-)
+); err != nil {
+    log.Fatal(err)
+}
 ```
 
-**Important:** Dependency injection is type-based. Each type can only be registered once. If you need to inject multiple values of the same underlying type (e.g., multiple strings), create distinct types:
+**Important:** Dependency injection is type-based. Each type can only be registered once. Attempting to register duplicate types will result in an error. If you need to inject multiple values of the same underlying type (e.g., multiple strings), create distinct types:
 
 ```go
-// DON'T do this - only the last string will be available
-sp.MountPages(r, pages{}, "/", "My App", 
-    "api-key",      // Will be overwritten
-    "db-name",      // Only this will be available
-)
+// DON'T do this - will return an error for duplicate type
+if err := sp.MountPages(r, pages{}, "/", "My App", 
+    "api-key",      // First string
+    "db-name",      // Second string - will cause error
+); err != nil {
+    // Error: duplicate type string in args registry
+}
 
 // DO this instead - create distinct types
 type APIKey string
 type DatabaseName string
 
-sp.MountPages(r, pages{}, "/", "My App", 
+if err := sp.MountPages(r, pages{}, "/", "My App", 
     APIKey("your-api-key"),
     DatabaseName("mydb"),
-)
+); err != nil {
+    log.Fatal(err)
+}
 
 // Use in your methods
 func (p userPage) Props(r *http.Request, apiKey APIKey, dbName DatabaseName) (UserProps, error) {

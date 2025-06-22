@@ -71,7 +71,9 @@ func main() {
 		structpages.WithErrorHandler(errorHandler),
 	)
 	router := structpages.NewRouter(http.DefaultServeMux)
-	sp.MountPages(router, index{}, "/", "index")
+	if err := sp.MountPages(router, index{}, "/", "index"); err != nil {
+		log.Fatalf("Failed to mount pages: %v", err)
+	}
 	log.Println("Starting TODO app on :8080")
 	http.ListenAndServe(":8080", router)
 }

@@ -189,7 +189,9 @@ func TestUrlFor(t *testing.T) {
 				})
 			}))
 			r := NewRouter(http.NewServeMux())
-			sp.MountPages(r, &index{}, "/", "index")
+			if err := sp.MountPages(r, &index{}, "/", "index"); err != nil {
+				t.Fatalf("MountPages failed: %v", err)
+			}
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
