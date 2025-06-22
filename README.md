@@ -26,6 +26,16 @@ components without too much boilerplate.
 go get github.com/jackielii/structpages
 ```
 
+## Development Setup
+
+To set up pre-commit hooks for automatic code formatting and linting:
+
+```shell
+./scripts/setup-hooks.sh
+```
+
+This will configure git to run `goimports`, `gofmt`, and `golangci-lint` before each commit.
+
 ## Usage
 
 ```templ

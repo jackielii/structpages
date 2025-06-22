@@ -183,7 +183,7 @@ func TestUrlFor(t *testing.T) {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
-					w.Write([]byte(url))
+					_, _ = w.Write([]byte(url))
 				})
 			}))
 			r := NewRouter(http.NewServeMux())

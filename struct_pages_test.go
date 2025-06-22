@@ -234,7 +234,7 @@ func makeMiddleware(name string) MiddlewareFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("Middleware before: " + name + "\n"))
 			next.ServeHTTP(w, r)
-			w.Write([]byte("Middleware after: " + name + "\n"))
+			_, _ = w.Write([]byte("Middleware after: " + name + "\n"))
 		})
 	}
 }
