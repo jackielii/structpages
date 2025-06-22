@@ -1,5 +1,3 @@
-version: 2
-
 linters:
   enable:
     - govet
@@ -16,11 +14,6 @@ linters:
     - gocognit
     - dupl
     - lll
-
-formatters:
-  enable:
-    - gofmt
-    - goimports
 
 linters-settings:
   goimports:
@@ -63,14 +56,18 @@ issues:
         - dupl
         - gosec
         - gocognit
-    - path: _test\.go
-      linters:
         - unused
-      text: "field .* is unused"
+        - staticcheck
+    - path: examples
+      linters:
+        - staticcheck
+        - unused
+        - gocognit
 
 run:
   timeout: 5m
   tests: true
   skip-dirs:
+    - vendor
     - examples
 

@@ -62,11 +62,11 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
 		}
 		if len(res) != 1 {
-			panic(fmt.Errorf("Middlewares method on %s did not return single result", page.Name))
+			panic(fmt.Errorf("middlewares method on %s did not return single result", page.Name))
 		}
 		mws, ok := res[0].Interface().([]MiddlewareFunc)
 		if !ok {
-			panic(fmt.Errorf("Middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
+			panic(fmt.Errorf("middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
 		}
 		middlewares = append(middlewares, mws...)
 	}
@@ -86,7 +86,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	if handler == nil {
 		if len(page.Children) == 0 {
 			// when handdler is nil and no children, it means this page is not a valid endpoint
-			panic(fmt.Errorf("Page item %s does not have a valid handler or children", page.Name))
+			panic(fmt.Errorf("page item %s does not have a valid handler or children", page.Name))
 		}
 		return
 	}

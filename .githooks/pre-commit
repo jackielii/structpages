@@ -41,8 +41,15 @@ fi
 # Run staticcheck if available
 if command -v staticcheck &> /dev/null; then
     echo "Running staticcheck..."
-    staticcheck ./... 2>&1 | grep -v "module requires at least go1.24.3" || true
-    # Don't fail on staticcheck errors as it might have version issues
+    # Run staticcheck and filter out unused warnings in test files
+    staticcheck_output=$(staticcheck ./... 2>&1 | grep -v "module requires at least go1.24.3" || true)
+    # Check for critical staticcheck errors (excluding unused in test files)
+    critical_staticcheck=$(echo "$staticcheck_output" | grep -v "_test.go.*is unused (U1000)" | grep -v "^$" || true)
+    if [ ! -z "$critical_staticcheck" ]; then
+        echo "Staticcheck errors found:"
+        echo "$critical_staticcheck"
+        exit 1
+    fi
 fi
 
 # Run tests with race detection
