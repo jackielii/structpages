@@ -4,6 +4,7 @@ package structpages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -620,5 +621,63 @@ func TestAsHandler(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Test MountPages registerPageItem error path
+func TestStructPages_MountPages_registerError(t *testing.T) {
+	sp := New()
+	router := NewRouter(nil)
+
+	// Create a page that will cause registration error
+	type badPage struct {
+		Child struct{} `route:" "` // Empty route should cause error
+	}
+
+	err := sp.MountPages(router, &badPage{}, "/", "Test")
+	if err == nil {
+		t.Error("Expected error from MountPages with bad child route")
+	}
+}
+
+// Test MountPages error cases
+func TestStructPages_MountPages_parseError(t *testing.T) {
+	sp := New()
+	router := NewRouter(http.NewServeMux())
+
+	// This should cause a parse error due to duplicate args
+	err := sp.MountPages(router, struct{}{}, "/", "Test", "arg1", "arg1")
+	if err == nil {
+		t.Error("Expected error from MountPages with duplicate args")
+	}
+}
+
+// Types for getProps test
+type pageWithErrorProps struct{}
+
+func (p *pageWithErrorProps) Props(r *http.Request) (string, error) {
+	return "", errors.New("props error")
+}
+
+// Test getProps with error from props method
+func TestStructPages_getProps_methodError(t *testing.T) {
+	sp := New()
+	pc := &parseContext{args: make(argRegistry)}
+
+	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
+	pn := &PageNode{
+		Name: "test",
+		Props: map[string]reflect.Method{
+			"Props": propsMethod,
+		},
+		Value: reflect.ValueOf(&pageWithErrorProps{}),
+	}
+
+	pageMethod := reflect.Method{Name: "Page"}
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+
+	_, err := sp.getProps(pc, pn, &pageMethod, req)
+	if err == nil {
+		t.Error("Expected error from getProps")
 	}
 }

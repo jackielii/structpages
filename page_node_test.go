@@ -1,6 +1,8 @@
 package structpages
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -70,4 +72,77 @@ func Test_walk(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Test type for methods
+type testPage struct{}
+
+func (t *testPage) String() string { return "test" }
+
+// Test PageNode.String with components and props
+func TestPageNode_String_componentsAndProps(t *testing.T) {
+	// Get a real method for testing
+	method, _ := reflect.TypeOf(&testPage{}).MethodByName("String")
+
+	pn := &PageNode{
+		Name:  "test",
+		Title: "Test Page",
+		Route: "/test",
+		Value: reflect.ValueOf(&testPage{}),
+		Components: map[string]reflect.Method{
+			"Page": method,
+		},
+		Props: map[string]reflect.Method{
+			"Props": method,
+		},
+	}
+
+	str := pn.String()
+	if str == "" {
+		t.Error("Expected non-empty string")
+	}
+
+	// The string method has branches for empty/non-empty components
+	// This tests the non-empty path
+}
+
+// Test Page node String method edge cases
+func TestPageNode_String_edgeCases(t *testing.T) {
+	// Test with zero Value (which we fixed to handle properly)
+	pn := &PageNode{
+		Name:        "test",
+		Title:       "Test Page",
+		Route:       "/test",
+		Value:       reflect.Value{}, // Zero value
+		Middlewares: nil,
+		Config:      nil,
+		Components:  make(map[string]reflect.Method),
+		Props:       make(map[string]reflect.Method),
+	}
+
+	str := pn.String()
+	if str == "" {
+		t.Error("Expected non-empty string representation")
+	}
+	if strings.Contains(str, "is http.Handler: true") {
+		t.Error("Should not show http.Handler for zero Value")
+	}
+
+	// Test with valid value
+	type testPage2 struct{}
+	pn.Value = reflect.ValueOf(&testPage2{})
+
+	// Test with children
+	child := &PageNode{
+		Name:  "child",
+		Title: "Child Page",
+		Route: "/child",
+		Value: reflect.ValueOf(&testPage2{}),
+	}
+	pn.Children = []*PageNode{child}
+
+	str2 := pn.String()
+	if !strings.Contains(str2, "child") {
+		t.Error("Expected string to contain child information")
+	}
 }

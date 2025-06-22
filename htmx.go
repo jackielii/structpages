@@ -36,7 +36,8 @@ func mixedCase(s string) string {
 		return s
 	}
 	if strings.Contains(s, " ") {
-		// TODO hx-target can't contain spaces, can we panic?
+		// hx-target values cannot contain spaces according to HTMX spec
+		// Return empty string to indicate invalid target
 		return ""
 	}
 	parts := strings.Split(s, "-")

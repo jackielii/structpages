@@ -42,8 +42,12 @@ func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 
 	if v, ok := args[st]; ok {
 		if needsPtr {
-			// TODO: some values are not addressable
-			return v.Addr(), true
+			// Check if the value is addressable before calling Addr()
+			if v.CanAddr() {
+				return v.Addr(), true
+			}
+			// If not addressable, we can't convert to pointer
+			return reflect.Value{}, false
 		}
 		return v, true
 	}
@@ -51,7 +55,11 @@ func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 	for t, v := range args {
 		if pt.AssignableTo(t) {
 			if needsPtr {
-				return v.Addr(), true
+				if v.CanAddr() {
+					return v.Addr(), true
+				}
+				// If not addressable, skip this match
+				continue
 			}
 			return v, true
 		}

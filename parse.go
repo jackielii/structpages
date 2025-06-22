@@ -36,6 +36,33 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNo
 	// Don't add pages to args registry - pages are route handlers, not injectable services
 	// Multiple instances of the same page type at different routes should be allowed
 
+	if page == nil {
+		return nil, fmt.Errorf("page cannot be nil")
+	}
+
+	st, pt, err := getStructAndPointerTypes(page)
+	if err != nil {
+		return nil, err
+	}
+
+	item := &PageNode{Value: reflect.ValueOf(page), Name: cmp.Or(fieldName, st.Name())}
+	item.Method, item.Route, item.Title = parseTag(route)
+
+	// Parse child fields
+	if err := p.parseChildFields(st, item); err != nil {
+		return nil, err
+	}
+
+	// Process methods
+	if err := p.processMethods(st, pt, item); err != nil {
+		return nil, err
+	}
+
+	return item, nil
+}
+
+// getStructAndPointerTypes extracts struct and pointer types from a page
+func getStructAndPointerTypes(page any) (structType, pointerType reflect.Type, err error) {
 	st := reflect.TypeOf(page) // struct type
 	pt := reflect.TypeOf(page) // pointer type
 	if st.Kind() == reflect.Ptr {
@@ -43,9 +70,17 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNo
 	} else {
 		pt = reflect.PointerTo(st)
 	}
-	item := &PageNode{Value: reflect.ValueOf(page), Name: cmp.Or(fieldName, st.Name())}
-	item.Method, item.Route, item.Title = parseTag(route)
 
+	// Ensure we have a struct type
+	if st.Kind() != reflect.Struct {
+		return nil, nil, fmt.Errorf("page must be a struct or pointer to struct, got %v", st.Kind())
+	}
+
+	return st, pt, nil
+}
+
+// parseChildFields parses child fields with route tags
+func (p *parseContext) parseChildFields(st reflect.Type, item *PageNode) error {
 	for i := range st.NumField() {
 		field := st.Field(i)
 		route, ok := field.Tag.Lookup("route")
@@ -59,54 +94,71 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNo
 		childPage := reflect.New(typ)
 		childItem, err := p.parsePageTree(route, field.Name, childPage.Interface())
 		if err != nil {
-			return nil, err
+			return err
 		}
 		childItem.Parent = item
-
 		item.Children = append(item.Children, childItem)
 	}
+	return nil
+}
 
+// processMethods processes all methods of the page
+func (p *parseContext) processMethods(st, pt reflect.Type, item *PageNode) error {
 	for _, t := range []reflect.Type{st, pt} {
 		for i := range t.NumMethod() {
 			method := t.Method(i)
 			if isPromotedMethod(&method) {
 				continue // skip promoted methods
 			}
-			if isComponent(&method) {
-				if item.Components == nil {
-					item.Components = make(map[string]reflect.Method)
-				}
-				item.Components[method.Name] = method
-				continue
-			}
-			if strings.HasSuffix(method.Name, "Props") {
-				if item.Props == nil {
-					item.Props = make(map[string]reflect.Method)
-				}
-				item.Props[method.Name] = method
-				continue
-			}
-
-			switch method.Name {
-			case "PageConfig":
-				item.Config = &method
-			case "Middlewares":
-				item.Middlewares = &method
-			case "Init":
-				res, err := p.callMethod(item, &method)
-				if err != nil {
-					return nil, fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
-				}
-				res, err = extractError(res)
-				if err != nil {
-					return nil, fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
-				}
-				_ = res
+			if err := p.processMethod(item, &method); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
 
-	return item, nil
+// processMethod processes a single method
+func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) error {
+	if isComponent(method) {
+		if item.Components == nil {
+			item.Components = make(map[string]reflect.Method)
+		}
+		item.Components[method.Name] = *method
+		return nil
+	}
+
+	if strings.HasSuffix(method.Name, "Props") {
+		if item.Props == nil {
+			item.Props = make(map[string]reflect.Method)
+		}
+		item.Props[method.Name] = *method
+		return nil
+	}
+
+	switch method.Name {
+	case "PageConfig":
+		item.Config = method
+	case "Middlewares":
+		item.Middlewares = method
+	case "Init":
+		return p.callInitMethod(item, method)
+	}
+	return nil
+}
+
+// callInitMethod calls the Init method and handles errors
+func (p *parseContext) callInitMethod(item *PageNode, method *reflect.Method) error {
+	res, err := p.callMethod(item, method)
+	if err != nil {
+		return fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
+	}
+	res, err = extractError(res)
+	if err != nil {
+		return fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
+	}
+	_ = res
+	return nil
 }
 
 // callMethod calls the emthod with receiver value v and arguments args.
@@ -135,7 +187,13 @@ func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
 	in[0] = v // first argument is the receiver
 	lenFilled := 1
 	for i := range min(len(in)-1, len(args)) {
-		in[i+1] = args[i]
+		expectedType := method.Type.In(i + 1)
+		argValue := args[i]
+		// Check if the argument type is compatible
+		if argValue.IsValid() && !argValue.Type().AssignableTo(expectedType) {
+			return nil, fmt.Errorf("argument %d: cannot use %v as %v", i+1, argValue.Type(), expectedType)
+		}
+		in[i+1] = argValue
 		lenFilled++
 	}
 	if len(in) <= lenFilled {

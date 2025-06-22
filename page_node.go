@@ -45,7 +45,7 @@ func (pn PageNode) String() string {
 	sb.WriteString("\n  title: " + pn.Title)
 	sb.WriteString("\n  route: " + pn.Route)
 	sb.WriteString("\n  middlewares: " + formatMethod(pn.Middlewares))
-	if pn.Value.Type().AssignableTo(handlerType) {
+	if pn.Value.IsValid() && pn.Value.Type().AssignableTo(handlerType) {
 		sb.WriteString("\n  is http.Handler: true")
 	}
 	sb.WriteString("\n  config: " + formatMethod(pn.Config))

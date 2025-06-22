@@ -46,7 +46,7 @@ func Test_mixedCase(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := mixedCase(tt.s)
-			// TODO: update the condition below to compare got with tt.want.
+			// Compare the result with expected value
 			if diff := cmp.Diff(got, tt.want); diff != "" {
 				t.Errorf("mixedCase() mismatch (-got +want):\n%s", diff)
 			}

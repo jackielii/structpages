@@ -64,7 +64,9 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	return strings.Replace(path, "{$}", "", 1), nil
 }
 
-// TODO: see: go/src/net/http/pattern.go for more accurate path parsing
+// formatPathSegments formats URL pattern segments with provided arguments.
+// For more sophisticated path parsing, see Go's standard library implementation
+// at go/src/net/http/pattern.go which handles edge cases like escaped braces.
 func formatPathSegments(pattern string, args ...any) (string, error) {
 	segments, err := parseSegments(pattern)
 	if err != nil {

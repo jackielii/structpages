@@ -444,3 +444,97 @@ func TestArgRegistry_assignability(t *testing.T) {
 		t.Logf("Successfully retrieved as interface: %v", v.Type())
 	}
 }
+
+// Test to improve coverage of getArg with unaddressable value
+func TestArgRegistry_getArg_unaddressable(t *testing.T) {
+	registry := make(argRegistry)
+
+	// Add a non-addressable value (created from a literal)
+	registry[reflect.TypeOf(42)] = reflect.ValueOf(42)
+
+	// Try to get a pointer to int - should fail because value is not addressable
+	ptrType := reflect.TypeOf((*int)(nil))
+	_, ok := registry.getArg(ptrType)
+	if ok {
+		t.Error("Expected not to find pointer type for unaddressable value")
+	}
+}
+
+// Test extended types for better assignability coverage
+func TestArgRegistry_getArg_extendedAssignability(t *testing.T) {
+	registry := make(argRegistry)
+
+	// Test with channel type (uncommon but valid)
+	ch := make(chan int)
+	registry[reflect.TypeOf(ch)] = reflect.ValueOf(ch)
+
+	// Exact match should work
+	v, ok := registry.getArg(reflect.TypeOf(ch))
+	if !ok {
+		t.Error("Expected to find channel type")
+	}
+	if v.Type() != reflect.TypeOf(ch) {
+		t.Errorf("Expected channel type, got %v", v.Type())
+	}
+}
+
+// Test to cover the needsPtr case in getArg where v.Addr() is called
+func TestArgRegistry_getArg_needsPtr(t *testing.T) {
+	registry := make(argRegistry)
+
+	// Create an addressable value
+	val := testStruct{Value: "addressable"}
+	// Store the addressable value (not a pointer)
+	registry[reflect.TypeOf(val)] = reflect.ValueOf(&val).Elem()
+
+	// Now look up a pointer type - this should trigger needsPtr = true and v.Addr()
+	ptrType := reflect.TypeOf(&testStruct{})
+	v, ok := registry.getArg(ptrType)
+	if !ok {
+		t.Fatal("Expected to find value")
+	}
+	if v.Kind() != reflect.Ptr {
+		t.Errorf("Expected pointer, got %v", v.Kind())
+	}
+}
+
+// Test for covering the assignability loop in getArg
+func TestArgRegistry_getArg_assignabilityLoop(t *testing.T) {
+	registry := make(argRegistry)
+
+	// Add a type that will be checked in the assignability loop
+	type customType struct{ Data string }
+	customVal := customType{Data: "test"}
+	registry[reflect.TypeOf(customVal)] = reflect.ValueOf(customVal)
+
+	// Also add a pointer type to trigger different path
+	ptrVal := &customType{Data: "ptr"}
+	registry[reflect.TypeOf(ptrVal)] = reflect.ValueOf(ptrVal)
+
+	// Test cases that will go through the assignability loop
+	tests := []struct {
+		name       string
+		lookupType reflect.Type
+		wantFound  bool
+	}{
+		{
+			name:       "exact match in loop",
+			lookupType: reflect.TypeOf(customType{}),
+			wantFound:  true,
+		},
+		{
+			name:       "pointer match in loop",
+			lookupType: reflect.TypeOf(&customType{}),
+			wantFound:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, found := registry.getArg(tt.lookupType)
+			if found != tt.wantFound {
+				t.Errorf("getArg() found = %v, want %v", found, tt.wantFound)
+			}
+		})
+	}
+}

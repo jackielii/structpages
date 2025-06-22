@@ -1,9 +1,11 @@
 package structpages
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -194,4 +196,169 @@ func TestExtendedServeHTTPCallMethodError(t *testing.T) {
 
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || s != "" && (s[0:len(substr)] == substr || contains(s[1:], substr)))
+}
+
+// Types for testing
+type pageWithServeHTTPError struct{}
+
+func (p *pageWithServeHTTPError) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	return errors.New("test error")
+}
+
+type pageWithExtendedServeHTTP struct{}
+
+func (p *pageWithExtendedServeHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request, extra string) (string, error) {
+	_, _ = w.Write([]byte("response: " + extra))
+	return "result", nil
+}
+
+type pageWithExtendedServeHTTPError struct{}
+
+func (p *pageWithExtendedServeHTTPError) ServeHTTP(w http.ResponseWriter, r *http.Request, extra string) error {
+	return errors.New("extended error")
+}
+
+// Test asHandler with ServeHTTP returning multiple values including error
+func TestStructPages_asHandler_serveHTTPWithError(t *testing.T) {
+	sp := New()
+	pc := &parseContext{args: make(argRegistry)}
+
+	// Create a value that implements the error handler interface
+	page := &pageWithServeHTTPError{}
+	pn := &PageNode{
+		Name:  "test",
+		Value: reflect.ValueOf(page),
+	}
+
+	handler := sp.asHandler(pc, pn)
+	if handler == nil {
+		t.Fatal("Expected handler")
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Expected 500, got %d", rec.Code)
+	}
+}
+
+// Test asHandler with extended ServeHTTP that has extra parameters and returns values
+func TestStructPages_asHandler_extendedServeHTTPWithReturnValues(t *testing.T) {
+	sp := New()
+	pc := &parseContext{
+		args: make(argRegistry),
+	}
+	// Add the extra string argument
+	_ = pc.args.addArg("extra value")
+
+	pn := &PageNode{
+		Name:  "test",
+		Value: reflect.ValueOf(&pageWithExtendedServeHTTP{}),
+	}
+
+	handler := sp.asHandler(pc, pn)
+	if handler == nil {
+		t.Fatal("Expected handler")
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "response: extra value" {
+		t.Errorf("Expected 'response: extra value', got %s", rec.Body.String())
+	}
+}
+
+// Test asHandler with extended ServeHTTP that returns an error
+func TestStructPages_asHandler_extendedServeHTTPReturnsError(t *testing.T) {
+	sp := New()
+	pc := &parseContext{
+		args: make(argRegistry),
+	}
+	_ = pc.args.addArg("extra")
+
+	pn := &PageNode{
+		Name:  "test",
+		Value: reflect.ValueOf(&pageWithExtendedServeHTTPError{}),
+	}
+
+	handler := sp.asHandler(pc, pn)
+	if handler == nil {
+		t.Fatal("Expected handler")
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Expected 500, got %d", rec.Code)
+	}
+}
+
+type pageWithValueReceiver struct{}
+
+func (p pageWithValueReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_, _ = w.Write([]byte("value receiver"))
+}
+
+// Test more edge cases for asHandler
+func TestStructPages_asHandler_moreEdgeCases(t *testing.T) {
+	sp := New()
+	pc := &parseContext{args: make(argRegistry)}
+
+	// Test with non-pointer receiver ServeHTTP
+	pn := &PageNode{
+		Name:  "test",
+		Value: reflect.ValueOf(pageWithValueReceiver{}),
+	}
+
+	handler := sp.asHandler(pc, pn)
+	if handler == nil {
+		t.Fatal("Expected handler for value receiver")
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "value receiver" {
+		t.Errorf("Expected 'value receiver', got %s", rec.Body.String())
+	}
+}
+
+type pageWithExtendedNoReturn struct{}
+
+func (p *pageWithExtendedNoReturn) ServeHTTP(w http.ResponseWriter, r *http.Request, extra string) {
+	_, _ = w.Write([]byte("no return: " + extra))
+}
+
+// Test extended ServeHTTP with no return values
+func TestStructPages_asHandler_extendedServeHTTPNoReturn(t *testing.T) {
+	sp := New()
+	pc := &parseContext{
+		args: make(argRegistry),
+	}
+	_ = pc.args.addArg("extra")
+
+	pn := &PageNode{
+		Name:  "test",
+		Value: reflect.ValueOf(&pageWithExtendedNoReturn{}),
+	}
+
+	handler := sp.asHandler(pc, pn)
+	if handler == nil {
+		t.Fatal("Expected handler")
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "no return: extra" {
+		t.Errorf("Expected 'no return: extra', got %s", rec.Body.String())
+	}
 }

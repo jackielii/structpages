@@ -3,6 +3,7 @@
 package structpages
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -293,6 +294,174 @@ func Test_parseSegments(t *testing.T) {
 				}
 				if segment.param != want.param {
 					t.Errorf("parseSegments() param mismatch at index %d: got %v, want %v", i, segment.param, want.param)
+				}
+			}
+		})
+	}
+}
+
+// Test more edge cases for parseSegments
+func TestParseSegments_moreEdgeCases(t *testing.T) {
+	// Test the {$} segment handling
+	segments, err := parseSegments("/path/{$}/end")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that {$} is preserved
+	found := false
+	for _, seg := range segments {
+		if seg.name == "{$}" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected to find {$} segment")
+	}
+}
+
+// Test formatPathSegments error case
+func TestFormatPathSegments_error(t *testing.T) {
+	// Malformed pattern that will cause parseSegments to error
+	_, err := formatPathSegments("/path/{unclosed", "value")
+	if err == nil {
+		t.Error("Expected error for malformed pattern")
+	}
+}
+
+// Test URLFor with not found page
+func TestURLFor_notFound(t *testing.T) {
+	ctx := context.Background()
+
+	type myPage struct{}
+	url, err := URLFor(ctx, &myPage{})
+	if err == nil {
+		t.Error("Expected error for context without parse context")
+	}
+	if url != "" {
+		t.Errorf("Expected empty string for not found page, got %s", url)
+	}
+}
+
+// Test URLFor with path values
+func TestURLFor_withPathValues(t *testing.T) {
+	// This test needs to use the actual MountPages to set up context properly
+	// Skip this test as it requires full setup with StructPages
+	t.Skip("URLFor requires full StructPages setup with MountPages")
+}
+
+// Test formatPathSegments and parseSegments edge cases
+func TestPathSegments_edgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		route    string
+		values   []any
+		expected string
+	}{
+		{
+			name:     "empty route",
+			route:    "",
+			values:   []any{},
+			expected: "",
+		},
+		{
+			name:     "route with consecutive slashes",
+			route:    "/users//posts",
+			values:   []any{},
+			expected: "/users//posts",
+		},
+		{
+			name:     "route with trailing slash and params",
+			route:    "/users/{id}/",
+			values:   []any{"123"},
+			expected: "/users/123/",
+		},
+		{
+			name:     "complex nested params",
+			route:    "/api/{version}/users/{id}/posts/{postId}",
+			values:   []any{"v1", "123", "456"},
+			expected: "/api/v1/users/123/posts/456",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := formatPathSegments(tt.route, tt.values...)
+			if err != nil {
+				t.Errorf("formatPathSegments() error = %v", err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("formatPathSegments() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Test parseSegments with various inputs
+func TestParseSegments(t *testing.T) {
+	tests := []struct {
+		name        string
+		route       string
+		expectedLen int
+		checkFirst  bool
+		firstValue  string
+		firstParam  bool
+	}{
+		{
+			name:        "simple route",
+			route:       "/users/{id}",
+			expectedLen: 2,
+			checkFirst:  true,
+			firstValue:  "/users/",
+			firstParam:  false,
+		},
+		{
+			name:        "multiple params",
+			route:       "/users/{id}/posts/{postId}",
+			expectedLen: 4,
+		},
+		{
+			name:        "no params",
+			route:       "/users/list",
+			expectedLen: 1,
+			checkFirst:  true,
+			firstValue:  "/users/list",
+			firstParam:  false,
+		},
+		{
+			name:        "param at start",
+			route:       "{id}/users",
+			expectedLen: 2,
+			checkFirst:  true,
+			firstValue:  "id",
+			firstParam:  true,
+		},
+		{
+			name:        "empty route",
+			route:       "",
+			expectedLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseSegments(tt.route)
+			if err != nil {
+				t.Errorf("parseSegments() error = %v", err)
+				return
+			}
+			if len(result) != tt.expectedLen {
+				t.Errorf("parseSegments() returned %d segments, want %d", len(result), tt.expectedLen)
+				return
+			}
+			if tt.checkFirst && len(result) > 0 {
+				if result[0].name != tt.firstValue {
+					t.Errorf("first segment name = %v, want %v", result[0].name, tt.firstValue)
+				}
+				if result[0].param != tt.firstParam {
+					t.Errorf("first segment param = %v, want %v", result[0].param, tt.firstParam)
 				}
 			}
 		})
