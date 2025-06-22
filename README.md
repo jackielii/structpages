@@ -214,15 +214,19 @@ Structpages has built-in support for HTMX partial rendering:
 
 ### HTMX Helper Functions
 
-Use the built-in HTMX helper for simple cases:
+Enable HTMX support globally when creating your StructPages instance:
 
 ```go
-func (p myPage) PageConfig(r *http.Request) structpages.PageConfig {
-    return structpages.HTMXPageConfig(r, p.Page, p.PartialContent)
-}
+sp := structpages.New(
+    structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
+    // other options...
+)
 ```
 
-This automatically returns `PartialContent` for HTMX requests and `Page` for regular requests.
+With this configuration, HTMX requests will automatically render the appropriate component based on the HX-Target header. For example:
+- If HX-Target is "content", it will look for and call the `Content()` method on your page struct
+- If HX-Target is "sidebar", it will look for and call the `Sidebar()` method
+- If no HX-Target or the method doesn't exist, it falls back to the `Page()` method
 
 ### Custom HTMX Target Handling
 
@@ -237,12 +241,10 @@ templ (t todoPage) Page() {
 
 templ (t todoPage) TodoList() {
     // Render just the todo list
-    return todoListTemplate()
 }
 
 templ (t todoPage) TodoItem() {
     // Render a single todo item
-    return todoItemTemplate()
 }
 
 // Return the component name as a string based on HX-Target
