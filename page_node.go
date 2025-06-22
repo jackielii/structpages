@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// PageNode represents a page in the routing tree.
+// It contains metadata about the page including its route, title, and registered methods.
+// PageNodes form a tree structure with parent-child relationships representing nested routes.
 type PageNode struct {
 	Name        string
 	Title       string
@@ -22,6 +25,9 @@ type PageNode struct {
 	Children    []*PageNode
 }
 
+// FullRoute returns the complete route path for this page node,
+// including all parent routes. For example, if a parent has route "/admin"
+// and this node has route "/users", FullRoute returns "/admin/users".
 func (pn *PageNode) FullRoute() string {
 	if pn.Parent == nil {
 		return pn.Route
@@ -29,6 +35,9 @@ func (pn *PageNode) FullRoute() string {
 	return path.Join(pn.Parent.FullRoute(), pn.Route)
 }
 
+// String returns a human-readable representation of the PageNode,
+// useful for debugging. It includes all properties and recursively
+// formats child nodes with proper indentation.
 func (pn PageNode) String() string {
 	var sb strings.Builder
 	sb.WriteString("PageItem{")
@@ -72,6 +81,14 @@ func walk(p *PageNode, yield func(*PageNode) bool) bool {
 	return true
 }
 
+// All returns an iterator that walks through this PageNode and all its descendants
+// in depth-first order. This is useful for traversing the entire page tree.
+//
+// Example:
+//
+//	for node := range pageNode.All() {
+//	    fmt.Println(node.FullRoute())
+//	}
 func (pn *PageNode) All() iter.Seq[*PageNode] {
 	return func(yield func(*PageNode) bool) {
 		if !walk(pn, yield) {

@@ -5,6 +5,21 @@ import (
 	"strings"
 )
 
+// HTMXPageConfig is a page configuration function designed for HTMX integration.
+// It automatically selects the appropriate component method based on the HX-Target header.
+//
+// When an HTMX request is detected (via HX-Request header), it converts the HX-Target
+// value to a method name. For example:
+//   - HX-Target: "content" -> calls Content() method
+//   - HX-Target: "todo-list" -> calls TodoList() method
+//   - No HX-Target or non-HTMX request -> calls Page() method
+//
+// This function can be used with WithDefaultPageConfig to enable HTMX partial
+// rendering across all pages:
+//
+//	sp := structpages.New(
+//	    structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
+//	)
 func HTMXPageConfig(r *http.Request) (string, error) {
 	if isHTMX(r) {
 		hxTarget := r.Header.Get("Hx-Target")

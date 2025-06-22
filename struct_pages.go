@@ -7,14 +7,28 @@ import (
 	"slices"
 )
 
+// MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
+// It receives both the handler to wrap and the PageNode being handled, allowing middleware
+// to access page metadata like route, title, and other properties.
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 
+// StructPages is the main type for managing struct-based page routing.
+// It provides configuration options for error handling, middleware, and page rendering.
 type StructPages struct {
 	onError           func(http.ResponseWriter, *http.Request, error)
 	middlewares       []MiddlewareFunc
 	defaultPageConfig func(r *http.Request) (string, error)
 }
 
+// New creates a new StructPages instance with the provided options.
+// Options can be used to configure error handling, middleware, and default page configuration.
+//
+// Example:
+//
+//	sp := structpages.New(
+//	    structpages.WithErrorHandler(customErrorHandler),
+//	    structpages.WithMiddlewares(loggingMiddleware, authMiddleware),
+//	)
 func New(options ...func(*StructPages)) *StructPages {
 	sp := &StructPages{
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -27,24 +41,58 @@ func New(options ...func(*StructPages)) *StructPages {
 	return sp
 }
 
+// WithDefaultPageConfig sets a default page configuration function that will be used
+// when a page doesn't implement its own PageConfig method. This is useful for implementing
+// common patterns like HTMX partial rendering across all pages.
+//
+// The config function should return the name of the method to call on the page struct.
+// For example, returning "Main" will call the Main() method instead of Page().
 func WithDefaultPageConfig(configFunc func(r *http.Request) (string, error)) func(*StructPages) {
 	return func(sp *StructPages) {
 		sp.defaultPageConfig = configFunc
 	}
 }
 
+// WithErrorHandler sets a custom error handler function that will be called when
+// an error occurs during page rendering or request handling. If not set, a default
+// handler returns a generic "Internal Server Error" response.
 func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) func(*StructPages) {
 	return func(sp *StructPages) {
 		sp.onError = onError
 	}
 }
 
+// WithMiddlewares adds global middleware functions that will be applied to all routes.
+// Middleware is executed in the order provided, with the first middleware being the
+// outermost handler. These global middlewares run before any page-specific middlewares.
 func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 	return func(sp *StructPages) {
 		sp.middlewares = append(sp.middlewares, middlewares...)
 	}
 }
 
+// MountPages registers the given page struct and all its nested pages with the router.
+// The page parameter should be a struct with fields tagged with route definitions.
+//
+// Parameters:
+//   - router: The Router instance to register routes with (e.g., structpages.NewRouter(http.NewServeMux()))
+//   - page: A struct instance with route-tagged fields
+//   - route: The base route path for this page tree (e.g., "/" or "/admin")
+//   - title: The title for the root page
+//   - args: Optional dependency injection arguments available to page methods
+//
+// The args parameter supports dependency injection. Any values passed here will be
+// available to page methods (Props, Middlewares, etc.) that declare matching parameter types.
+// Each type can only be registered once - attempting to register duplicate types will return an error.
+//
+// Example:
+//
+//	type pages struct {
+//	    home    `route:"/ Home"`
+//	    about   `route:"/about About Us"`
+//	}
+//
+//	err := sp.MountPages(router, pages{}, "/", "My App", dbConn, logger)
 func (sp *StructPages) MountPages(router Router, page any, route, title string, args ...any) error {
 	pc, err := parsePageTree(route, page, args...)
 	if err != nil {

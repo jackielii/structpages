@@ -5,6 +5,9 @@ import (
 	"path"
 )
 
+// Router is an interface for registering HTTP routes.
+// It provides methods for creating route groups and registering handlers for specific HTTP methods.
+// This interface allows structpages to work with different routing implementations.
 type Router interface {
 	Route(path string, fn func(Router))
 	HandleMethod(method, path string, handler http.Handler)
@@ -15,6 +18,15 @@ type stdRouter struct {
 	router *http.ServeMux
 }
 
+// NewRouter creates a new router that wraps http.ServeMux.
+// If router is nil, it uses http.DefaultServeMux.
+// The returned router implements the Router interface and can be used with StructPages.MountPages.
+//
+// Example:
+//
+//	mux := http.NewServeMux()
+//	router := structpages.NewRouter(mux)
+//	sp.MountPages(router, pages{}, "/", "My App")
 func NewRouter(router *http.ServeMux) *stdRouter {
 	if router == nil {
 		router = http.DefaultServeMux
