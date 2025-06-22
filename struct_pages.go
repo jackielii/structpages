@@ -106,9 +106,7 @@ func (sp *StructPages) MountPages(router Router, page any, route, title string, 
 	return nil
 }
 
-func (sp *StructPages) registerPageItem(
-	router Router, pc *parseContext, page *PageNode, middlewares []MiddlewareFunc,
-) error {
+func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, mw []MiddlewareFunc) error {
 	if page.Route == "" {
 		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
@@ -124,12 +122,12 @@ func (sp *StructPages) registerPageItem(
 		if !ok {
 			return fmt.Errorf("middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name)
 		}
-		middlewares = append(middlewares, mws...)
+		mw = append(mw, mws...)
 	}
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
 		for _, child := range page.Children {
-			if err := sp.registerPageItem(router, pc, child, middlewares); err != nil {
+			if err := sp.registerPageItem(router, pc, child, mw); err != nil {
 				return err
 			}
 		}
@@ -142,7 +140,7 @@ func (sp *StructPages) registerPageItem(
 		}
 		return nil
 	}
-	for _, middleware := range slices.Backward(middlewares) {
+	for _, middleware := range slices.Backward(mw) {
 		handler = middleware(handler, page)
 	}
 	router.HandleMethod(page.Method, page.FullRoute(), handler)
@@ -337,11 +335,10 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) getProps(
-	pc *parseContext, pn *PageNode,
-	compMethod *reflect.Method, r *http.Request,
+func (sp *StructPages) getProps(pc *parseContext, pn *PageNode,
+	m *reflect.Method, r *http.Request,
 ) ([]reflect.Value, error) {
-	pageName := compMethod.Name
+	pageName := m.Name
 	var propMethod reflect.Method
 	for _, name := range []string{pageName + "Props", "Props"} {
 		if pm, ok := pn.Props[name]; ok {
