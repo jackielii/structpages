@@ -34,14 +34,13 @@ func TestHttpHandler(t *testing.T) {
 		p *TestHandlerPage `route:"POST /pointer Test pointer handler"`
 	}
 
-	// println(PrintRoutes(&topPage{}))
 	mux := http.NewServeMux()
 	r := NewRouter(mux)
 	sp := New()
 	sp.MountPages(r, &topPage{}, "/", "")
 
 	{
-		req := httptest.NewRequest(http.MethodGet, "/struct", nil)
+		req := httptest.NewRequest(http.MethodGet, "/struct", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -53,7 +52,7 @@ func TestHttpHandler(t *testing.T) {
 	}
 
 	{
-		req := httptest.NewRequest(http.MethodPost, "/pointer", nil)
+		req := httptest.NewRequest(http.MethodPost, "/pointer", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -94,12 +93,11 @@ func TestMiddlewares(t *testing.T) {
 	type topPage struct {
 		middlewarePages `route:"/middleware Test middleware handler"`
 	}
-	// println(PrintRoutes("/", &topPage{}))
 	r := NewRouter(http.NewServeMux())
 	sp := New()
 	sp.MountPages(r, &topPage{}, "/", "top page")
 	{
-		req := httptest.NewRequest(http.MethodGet, "/middleware", nil)
+		req := httptest.NewRequest(http.MethodGet, "/middleware", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -114,7 +112,7 @@ func TestMiddlewares(t *testing.T) {
 	}
 	{
 		// test child page also has the middleware applied
-		req := httptest.NewRequest(http.MethodGet, "/middleware/child", nil)
+		req := httptest.NewRequest(http.MethodGet, "/middleware/child", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -153,7 +151,7 @@ func TestPageConfig(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 	{
-		req := httptest.NewRequest(http.MethodGet, "/default", nil)
+		req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -173,7 +171,7 @@ func TestHTMXPageConfig(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/default", nil)
+	req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
 	req.Header.Set("Hx-Request", "true")
 	req.Header.Set("Hx-Target", "hx-target")
 	rec := httptest.NewRecorder()
@@ -205,7 +203,7 @@ func TestCustomPageConfig(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/custom", nil)
+	req := httptest.NewRequest(http.MethodGet, "/custom", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -255,7 +253,7 @@ func TestMiddlewareOrder(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -322,7 +320,7 @@ func TestProps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/props", nil)
+			req := httptest.NewRequest(http.MethodGet, "/props", http.NoBody)
 			if tt.hxTarget != "" {
 				req.Header.Set("Hx-Request", "true")
 				req.Header.Set("Hx-Target", tt.hxTarget)

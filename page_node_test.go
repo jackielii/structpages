@@ -29,7 +29,7 @@ func Test_walk(t *testing.T) {
 		items := make([]string, 0)
 		walk(testNode, func(p *PageNode) bool {
 			items = append(items, p.Name)
-			return true // continue walking
+			return true
 		})
 		if len(items) != 7 {
 			t.Errorf("Expected 7 items, got %d", len(items))

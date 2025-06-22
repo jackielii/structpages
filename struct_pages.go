@@ -57,7 +57,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		panic("Page item route is empty: " + page.Name)
 	}
 	if page.Middlewares != nil {
-		res, err := pc.callMethod(page, *page.Middlewares)
+		res, err := pc.callMethod(page, page.Middlewares)
 		if err != nil {
 			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
 		}
@@ -81,7 +81,6 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		})
 		// }()
 	}
-	// println("Registering page item", "name:", page.Name, page.Method, page.FullRoute(), "title:", page.Title)
 	handler := sp.buildHandler(page, pc)
 	if handler == nil {
 		if len(page.Children) == 0 {
@@ -111,7 +110,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		props, err := sp.getProps(pc, page, compMethod, r)
+		props, err := sp.getProps(pc, page, &compMethod, r)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling props component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
@@ -122,7 +121,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		comp, err := pc.callComponentMethod(page, compMethod, props...)
+		comp, err := pc.callComponentMethod(page, &compMethod, props...)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
@@ -184,20 +183,18 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 		pt = reflect.PointerTo(st)
 	}
 	method, ok := st.MethodByName("ServeHTTP")
-	if !ok || isPromotedMethod(method) {
+	if !ok || isPromotedMethod(&method) {
 		method, ok = pt.MethodByName("ServeHTTP")
-		if !ok || isPromotedMethod(method) {
+		if !ok || isPromotedMethod(&method) {
 			return nil
 		}
 	}
 
 	if v.Type().Implements(handlerType) {
-		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning handler")
 		return v.Interface().(http.Handler)
 	}
 	if v.Type().Implements(errHandlerType) {
 		h := v.Interface().(httpErrHandler)
-		// println(v.Type().String(), "implements ServeHTTP:", ok, "returning err handler")
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// because we have to handle errors, and error handler could write header
 			// potentially we want to clear the buffer writer
@@ -220,7 +217,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			} else {
 				wv = reflect.ValueOf(w)
 			}
-			results, err := pc.callMethod(pn, method, wv, reflect.ValueOf(r))
+			results, err := pc.callMethod(pn, &method, wv, reflect.ValueOf(r))
 			if err != nil {
 				sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				return
@@ -238,7 +235,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 
 func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
 	if pn.Config != nil {
-		res, err := pc.callMethod(pn, *pn.Config, reflect.ValueOf(r))
+		res, err := pc.callMethod(pn, pn.Config, reflect.ValueOf(r))
 		if err != nil {
 			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
 		}
@@ -272,7 +269,7 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod reflect.Method,
+func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod *reflect.Method,
 	r *http.Request) ([]reflect.Value, error) {
 	pageName := compMethod.Name
 	var propMethod reflect.Method
@@ -283,7 +280,7 @@ func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod refle
 		}
 	}
 	if propMethod.Func.IsValid() {
-		props, err := pc.callMethod(pn, propMethod, reflect.ValueOf(r))
+		props, err := pc.callMethod(pn, &propMethod, reflect.ValueOf(r))
 		if err != nil {
 			return nil, fmt.Errorf("error calling props method %s.%s: %w", pn.Name, propMethod.Name, err)
 		}

@@ -17,7 +17,7 @@ func HTMXPageConfig(r *http.Request) (string, error) {
 
 // MixedCase
 func mixedCase(s string) string {
-	if len(s) == 0 {
+	if s == "" {
 		return s
 	}
 	if strings.Contains(s, " ") {

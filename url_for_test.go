@@ -190,7 +190,7 @@ func TestUrlFor(t *testing.T) {
 			}))
 			r := NewRouter(http.NewServeMux())
 			sp.MountPages(r, &index{}, "/", "index")
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {

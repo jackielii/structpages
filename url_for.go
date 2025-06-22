@@ -139,7 +139,7 @@ func parseSegments(pattern string) (segments []segment, err error) {
 	}
 	rest := pattern
 	for i := 0; ; i++ {
-		if len(rest) == 0 {
+		if rest == "" {
 			break
 		}
 		start := strings.Index(rest, "{")

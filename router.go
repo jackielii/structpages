@@ -23,7 +23,6 @@ func NewRouter(router *http.ServeMux) *stdRouter {
 }
 
 func (r *stdRouter) Route(pattern string, fn func(Router)) {
-	// println("Registering route group", "pattern", path.Join(r.prefix, pattern))
 	fn(&stdRouter{
 		prefix: path.Join(r.prefix, pattern),
 		router: r.router,
@@ -35,7 +34,6 @@ func (r *stdRouter) HandleMethod(method, pattern string, handler http.Handler) {
 	if method != methodAll && method != "" {
 		pattern = method + " " + pattern
 	}
-	// println("Registering route", "method", method, "pattern", pattern)
 	r.router.Handle(pattern, handler)
 }
 

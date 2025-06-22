@@ -41,13 +41,9 @@ fi
 # Run staticcheck if available
 if command -v staticcheck &> /dev/null; then
     echo "Running staticcheck..."
-    # Run staticcheck and filter out unused warnings in test files
-    staticcheck_output=$(staticcheck ./... 2>&1 | grep -v "module requires at least go1.24.3" || true)
-    # Check for critical staticcheck errors (excluding unused in test files)
-    critical_staticcheck=$(echo "$staticcheck_output" | grep -v "_test.go.*is unused (U1000)" | grep -v "^$" || true)
-    if [ ! -z "$critical_staticcheck" ]; then
-        echo "Staticcheck errors found:"
-        echo "$critical_staticcheck"
+    staticcheck ./...
+    if [ $? -ne 0 ]; then
+        echo "staticcheck failed"
         exit 1
     fi
 fi
@@ -60,29 +56,12 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Run golangci-lint (only fail on critical issues)
+# Run golangci-lint
 echo "Running golangci-lint..."
-# Check for critical issues only (errcheck, staticcheck, gocritic, etc.)
-# Ignore cognitive complexity and unused warnings which are less critical
-output=$(golangci-lint run --timeout 5m 2>&1)
-critical_issues=$(echo "$output" | grep -E "(errcheck|staticcheck|gosec|gocritic|ineffassign|misspell|govet)" | grep -v "cognitive complexity" || true)
-
-if [ ! -z "$critical_issues" ]; then
-    echo "Critical linting issues found:"
-    echo "$critical_issues"
-    echo ""
-    echo "Please fix the critical linting issues before committing"
+golangci-lint run --timeout 5m
+if [ $? -ne 0 ]; then
+    echo "golangci-lint failed"
     exit 1
-fi
-
-# Show all issues for awareness but don't fail
-if [ ! -z "$output" ]; then
-    non_critical=$(echo "$output" | grep -E "(gocognit|unused)" || true)
-    if [ ! -z "$non_critical" ]; then
-        echo ""
-        echo "Non-critical linting issues (commit will proceed):"
-        echo "$non_critical"
-    fi
 fi
 
 echo ""

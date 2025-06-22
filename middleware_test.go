@@ -158,7 +158,7 @@ func makeOrderMiddleware(name string) MiddlewareFunc {
 }
 
 // Create a middleware that logs and modifies headers
-func makeComplexMiddleware(name string, headerKey string) MiddlewareFunc {
+func makeComplexMiddleware(name, headerKey string) MiddlewareFunc {
 	return func(next http.Handler, node *PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Add header before
@@ -277,7 +277,7 @@ func TestMiddlewareExecutionOrder(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/order", nil)
+	req := httptest.NewRequest(http.MethodGet, "/order", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -328,7 +328,7 @@ func TestMiddlewareContextModification(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/context", nil)
+	req := httptest.NewRequest(http.MethodGet, "/context", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -354,7 +354,7 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 
 	// Test without authorization header
 	{
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -371,7 +371,7 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 
 	// Test with authorization header
 	{
-		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req := httptest.NewRequest(http.MethodGet, "/protected", http.NoBody)
 		req.Header.Set("Authorization", "Bearer token")
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
@@ -400,7 +400,7 @@ func TestNestedPagesMiddleware(t *testing.T) {
 
 	// Test parent page - should only have parent middleware
 	{
-		req := httptest.NewRequest(http.MethodGet, "/parent", nil)
+		req := httptest.NewRequest(http.MethodGet, "/parent", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -420,7 +420,7 @@ func TestNestedPagesMiddleware(t *testing.T) {
 
 	// Test child page - should have both parent and child middlewares
 	{
-		req := httptest.NewRequest(http.MethodGet, "/parent/child", nil)
+		req := httptest.NewRequest(http.MethodGet, "/parent/child", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -454,7 +454,7 @@ func TestComplexMiddlewareChain(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodGet, "/complex", nil)
+	req := httptest.NewRequest(http.MethodGet, "/complex", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -491,7 +491,7 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 
 	// Test normal request
 	{
-		req := httptest.NewRequest(http.MethodGet, "/error", nil)
+		req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -505,7 +505,7 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 
 	// Test panic request
 	{
-		req := httptest.NewRequest(http.MethodGet, "/error?panic=true", nil)
+		req := httptest.NewRequest(http.MethodGet, "/error?panic=true", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -532,7 +532,7 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 
 	// Test GET request
 	{
-		req := httptest.NewRequest(http.MethodGet, "/method", nil)
+		req := httptest.NewRequest(http.MethodGet, "/method", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -552,7 +552,7 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 
 	// Test POST request
 	{
-		req := httptest.NewRequest(http.MethodPost, "/method", nil)
+		req := httptest.NewRequest(http.MethodPost, "/method", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -581,7 +581,7 @@ func TestMiddlewarePageNodeAccess(t *testing.T) {
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
-	req := httptest.NewRequest(http.MethodPost, "/info", nil)
+	req := httptest.NewRequest(http.MethodPost, "/info", http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -617,7 +617,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 
 	// Test parent page
 	{
-		req := httptest.NewRequest(http.MethodGet, "/integration", nil)
+		req := httptest.NewRequest(http.MethodGet, "/integration", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 
@@ -634,7 +634,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 
 	// Test child page inherits parent middleware
 	{
-		req := httptest.NewRequest(http.MethodGet, "/integration/child", nil)
+		req := httptest.NewRequest(http.MethodGet, "/integration/child", http.NoBody)
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 

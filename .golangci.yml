@@ -1,73 +1,76 @@
+version: "2"
+run:
+  tests: true
 linters:
   enable:
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - unused
-    - misspell
-    - gosec
-    - prealloc
-    - unconvert
+    - dupl
+    - gocognit
     - gocritic
     - gocyclo
-    - gocognit
-    - dupl
+    - gosec
     - lll
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/jackielii/structpages
-
-  govet:
-    enable:
-      - shadow
-
-  gocyclo:
-    min-complexity: 15
-
-  gocognit:
-    min-complexity: 20
-
-  dupl:
-    threshold: 100
-
-  lll:
-    line-length: 120
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-
-issues:
-  exclude-dirs:
-    - vendor
-    - examples
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - dupl
-        - gosec
-        - gocognit
-        - unused
-        - staticcheck
-    - path: examples
-      linters:
-        - staticcheck
-        - unused
-        - gocognit
-
-run:
-  timeout: 5m
-  tests: true
-
+    - misspell
+    - prealloc
+    - unconvert
+  settings:
+    dupl:
+      threshold: 100
+    gocognit:
+      min-complexity: 40
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 20
+    govet:
+      enable:
+        - shadow
+    lll:
+      line-length: 120
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - gocognit
+          - gosec
+          - staticcheck
+          - unused
+        path: _test\.go
+      - linters:
+          - gocognit
+          - staticcheck
+          - unused
+        path: examples
+    paths:
+      - vendor
+      - examples
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jackielii/structpages
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

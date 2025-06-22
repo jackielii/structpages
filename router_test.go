@@ -15,7 +15,7 @@ func TestStdRouter(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("StdRouter HandleMethod"))
 		}))
-		req := httptest.NewRequest(http.MethodGet, "/handle", nil)
+		req := httptest.NewRequest(http.MethodGet, "/handle", http.NoBody)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
@@ -41,7 +41,7 @@ func TestStdRouter(t *testing.T) {
 			}))
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/test/sub?a&b&c", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test/sub?a&b&c", http.NoBody)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
@@ -55,7 +55,7 @@ func TestStdRouter(t *testing.T) {
 	}
 
 	{
-		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 
@@ -82,7 +82,7 @@ func TestStdRouter(t *testing.T) {
 				_, _ = w.Write([]byte("StdRouter with ID: " + id))
 			}))
 		})
-		req := httptest.NewRequest(http.MethodGet, "/withid/123/end", nil)
+		req := httptest.NewRequest(http.MethodGet, "/withid/123/end", http.NoBody)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {

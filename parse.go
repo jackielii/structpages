@@ -27,7 +27,7 @@ func parsePageTree(route string, page any, args ...any) *parseContext {
 	return pc
 }
 
-func (p *parseContext) parsePageTree(route string, fieldName string, page any) *PageNode {
+func (p *parseContext) parsePageTree(route, fieldName string, page any) *PageNode {
 	p.args.addArg(page) // add page to args registry for dependency injection
 
 	st := reflect.TypeOf(page) // struct type
@@ -57,18 +57,13 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 		item.Children = append(item.Children, childItem)
 	}
 
-	// log.Printf("Parsing page item: %s, route: %s, NumMethod: %d", item.name, item.route, st.NumMethod())
 	for _, t := range []reflect.Type{st, pt} {
 		for i := range t.NumMethod() {
 			method := t.Method(i)
-			if isPromotedMethod(method) {
+			if isPromotedMethod(&method) {
 				continue // skip promoted methods
 			}
-			// log.Printf("  Method: %s, NumIn: %d, NumOut: %d", method.Name, method.Type.NumIn(), method.Type.NumOut())
-			// for j := range method.Type.NumIn() {
-			// 	log.Printf("    In[%d]: %s", j, method.Type.In(j).String())
-			// }
-			if isComponent(method) {
+			if isComponent(&method) {
 				if item.Components == nil {
 					item.Components = make(map[string]reflect.Method)
 				}
@@ -89,7 +84,7 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 			case "Middlewares":
 				item.Middlewares = &method
 			case "Init":
-				res, err := p.callMethod(item, method)
+				res, err := p.callMethod(item, &method)
 				if err != nil {
 					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
 				}
@@ -107,7 +102,8 @@ func (p *parseContext) parsePageTree(route string, fieldName string, page any) *
 
 // callMethod calls the emthod with receiver value v and arguments args.
 // it uses types from p.args to fill in missing arguments.
-func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...reflect.Value) ([]reflect.Value, error) {
+func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
+	args ...reflect.Value) ([]reflect.Value, error) {
 	v := pn.Value
 	receiver := method.Type.In(0)
 	// make sure receiver and value match, if method takes a pointer, convert value to pointer
@@ -119,7 +115,7 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 	}
 	if receiver.Kind() != v.Kind() {
 		return nil, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s",
-			formatMethod(&method), receiver.String(), v.Type().String())
+			formatMethod(method), receiver.String(), v.Type().String())
 	}
 	// we allow calling methods with fewer arguments than defined
 	// if len(args) > method.Type.NumIn()-1 {
@@ -149,7 +145,7 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 			val, ok := p.args.getArg(argType)
 			if !ok {
 				return nil, fmt.Errorf("method %s requires argument of type %s, but not found",
-					formatMethod(&method), argType.String())
+					formatMethod(method), argType.String())
 			}
 			in[i] = val
 		}
@@ -158,18 +154,18 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 	return method.Func.Call(in), nil
 }
 
-func (p *parseContext) callComponentMethod(pn *PageNode, method reflect.Method,
+func (p *parseContext) callComponentMethod(pn *PageNode, method *reflect.Method,
 	args ...reflect.Value) (component, error) {
 	results, err := p.callMethod(pn, method, args...)
 	if err != nil {
-		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(&method), err)
+		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(method), err)
 	}
 	if len(results) != 1 {
-		return nil, fmt.Errorf("method %s must return a single result, got %d", formatMethod(&method), len(results))
+		return nil, fmt.Errorf("method %s must return a single result, got %d", formatMethod(method), len(results))
 	}
 	comp, ok := results[0].Interface().(component)
 	if !ok {
-		return nil, fmt.Errorf("method %s does not return value of type component", formatMethod(&method))
+		return nil, fmt.Errorf("method %s does not return value of type component", formatMethod(method))
 	}
 	return comp, nil
 }
@@ -199,7 +195,7 @@ func pointerType(v reflect.Type) reflect.Type {
 	return reflect.PointerTo(v)
 }
 
-func parseTag(route string) (method string, path string, title string) {
+func parseTag(route string) (method, path, title string) {
 	method = methodAll
 	parts := strings.Fields(route)
 	if len(parts) == 0 {
@@ -241,7 +237,7 @@ type component interface {
 	Render(context.Context, io.Writer) error
 }
 
-func isComponent(t reflect.Method) bool {
+func isComponent(t *reflect.Method) bool {
 	typ := reflect.TypeOf((*component)(nil)).Elem()
 	if t.Type.NumOut() != 1 {
 		return false
@@ -249,7 +245,7 @@ func isComponent(t reflect.Method) bool {
 	return t.Type.Out(0).Implements(typ)
 }
 
-func isPromotedMethod(method reflect.Method) bool {
+func isPromotedMethod(method *reflect.Method) bool {
 	// Check if the method is promoted from an embedded type
 	// https://github.com/golang/go/issues/73883
 	wPC := method.Func.Pointer()
