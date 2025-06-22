@@ -1,3 +1,5 @@
+//lint:file-ignore U1000 Ignore unused code in test file
+
 package structpages
 
 import (
@@ -12,12 +14,9 @@ func TestParseTag(t *testing.T) {
 		name     string
 		route    string
 		expected struct {
-			//lint:ignore U1000 test field
 			method string
-			//lint:ignore U1000 test field
-			path string
-			//lint:ignore U1000 test field
-			title string
+			path   string
+			title  string
 		}
 	}{
 		{
@@ -156,11 +155,8 @@ func TestParseSimple(t *testing.T) {
 }
 
 func Test_pc_UrlFor(t *testing.T) {
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		f1 *TestHandlerPage `route:"/f1 Test Page"`
-		//lint:ignore U1000 test field
 		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
 	}
 	pc := parsePageTree("/", &topPage{})
@@ -189,16 +185,11 @@ func Test_pc_UrlFor(t *testing.T) {
 
 func Test_parseContext_getArg(t *testing.T) {
 	str := "test"
-	//lint:ignore U1000 test struct
 	type strct struct{}
 	tests := []struct {
-		//lint:ignore U1000 test field
 		name string
-		//lint:ignore U1000 test field
 		args []any
-		//lint:ignore U1000 test field
-		in reflect.Type
-		//lint:ignore U1000 test field
+		in   reflect.Type
 		want any
 	}{
 		{

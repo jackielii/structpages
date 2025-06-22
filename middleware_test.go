@@ -1,3 +1,5 @@
+//lint:file-ignore U1000 Ignore unused code in test file
+
 package structpages
 
 import (
@@ -16,8 +18,6 @@ var (
 )
 
 // Test page types
-//
-//lint:ignore U1000 test struct used in tests
 type orderTestPage struct{}
 
 func (orderTestPage) Page() component {
@@ -31,7 +31,6 @@ func (orderTestPage) Middlewares() []MiddlewareFunc {
 	}
 }
 
-//lint:ignore U1000 test struct used in tests
 type contextTestPage struct{}
 
 func (contextTestPage) Page() component {
@@ -44,7 +43,6 @@ func (contextTestPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "val1=%s,val2=%d", val1, val2)
 }
 
-//lint:ignore U1000 test struct used in tests
 type protectedPage struct{}
 
 func (protectedPage) Page() component {
@@ -55,7 +53,6 @@ func (protectedPage) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{authMiddleware, afterAuthMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type childPageMw struct{}
 
 func (childPageMw) Page() component {
@@ -66,9 +63,7 @@ func (childPageMw) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{childMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type parentPageMw struct {
-	//lint:ignore U1000 test field
 	childPageMw `route:"/child Child Page"`
 }
 
@@ -80,7 +75,6 @@ func (parentPageMw) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{parentMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type complexPage struct{}
 
 func (complexPage) Page() component {
@@ -95,7 +89,6 @@ func (complexPage) Middlewares() []MiddlewareFunc {
 	}
 }
 
-//lint:ignore U1000 test struct used in tests
 type errorTestPage struct{}
 
 func (errorTestPage) Page() component {
@@ -106,7 +99,6 @@ func (errorTestPage) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{panicMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type methodPage struct{}
 
 func (methodPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +109,6 @@ func (methodPage) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{methodMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type infoPage struct{}
 
 func (infoPage) Page() component {
@@ -128,9 +119,7 @@ func (infoPage) Middlewares() []MiddlewareFunc {
 	return []MiddlewareFunc{nodeInfoMiddleware}
 }
 
-//lint:ignore U1000 test struct used in tests
 type integrationPage struct {
-	//lint:ignore U1000 test field
 	middlewareChildPage `route:"/child Child"`
 }
 
@@ -283,9 +272,7 @@ func TestMiddlewareExecutionOrder(t *testing.T) {
 	)
 
 	r := NewRouter(http.NewServeMux())
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		orderTestPage `route:"/order Order Test"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -336,9 +323,7 @@ func TestMiddlewareContextModification(t *testing.T) {
 	sp := New(WithMiddlewares(contextMiddleware1, contextMiddleware2))
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		contextTestPage `route:"/context Context Test"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -362,9 +347,7 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		protectedPage `route:"/protected Protected Page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -410,9 +393,7 @@ func TestNestedPagesMiddleware(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		parentPageMw `route:"/parent Parent Page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -468,9 +449,7 @@ func TestComplexMiddlewareChain(t *testing.T) {
 	)
 
 	r := NewRouter(http.NewServeMux())
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		complexPage `route:"/complex Complex Page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -505,9 +484,7 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 	sp := New(WithMiddlewares(recoveryMiddleware))
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		errorTestPage `route:"/error Error Test"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -547,11 +524,8 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
-		getPage methodPage `route:"GET /method Method GET"`
-		//lint:ignore U1000 test field
+		getPage  methodPage `route:"GET /method Method GET"`
 		postPage methodPage `route:"POST /method Method POST"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -602,9 +576,7 @@ func TestMiddlewarePageNodeAccess(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		infoPage `route:"POST /info Info Page Title"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -638,9 +610,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
 
-	//lint:ignore U1000 test struct
 	type topPage struct {
-		//lint:ignore U1000 test field
 		integrationPage `route:"/integration Integration Test"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")

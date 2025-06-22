@@ -1,3 +1,5 @@
+//lint:file-ignore U1000 Ignore unused code in test file
+
 package structpages
 
 import (
@@ -113,23 +115,15 @@ func Test_formatPathSegments(t *testing.T) {
 	}
 }
 
-//lint:ignore U1000 test struct used in tests
 type index struct {
-	//lint:ignore U1000 test field
 	product `route:"/product Product"`
-	//lint:ignore U1000 test field
-	team `route:"/team Team"`
-	//lint:ignore U1000 test field
+	team    `route:"/team Team"`
 	contact `route:"/contact Contact"`
-	//lint:ignore U1000 test field
-	f1 contact `route:"/contact/{f1...} Contact"`
+	f1      contact `route:"/contact/{f1...} Contact"`
 }
 type (
-	//lint:ignore U1000 test struct used in tests
 	product struct{}
-	//lint:ignore U1000 test struct used in tests
-	team struct{}
-	//lint:ignore U1000 test struct used in tests
+	team    struct{}
 	contact struct{}
 )
 
