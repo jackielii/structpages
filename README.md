@@ -264,7 +264,7 @@ func (t todoPage) PageConfig(r *http.Request) (string, error) {
 }
 ```
 
-## UrlFor Functionality
+## URLFor Functionality
 
 Generate type-safe URLs for your pages:
 
