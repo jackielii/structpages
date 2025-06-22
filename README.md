@@ -38,6 +38,12 @@ templ (index) Page() {
 ...
 ```
 
+Route definitions are done using struct tags in for form of `[method] path [Title]`. Valid patterns:
+
+- `/path` - For all methods that match `/path` without a title
+- `POST /path` - For POST requests matching `/path`
+- `/path Awesome Product` - For ALL requests matching `/path` with a title "Awesome Product"
+
 ```go
 sp := structpages.New()
 r := structpages.NewRouter(http.NewServeMux())
