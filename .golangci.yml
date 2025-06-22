@@ -50,6 +50,9 @@ linters-settings:
       - wrapperFunc
 
 issues:
+  exclude-dirs:
+    - vendor
+    - examples
   exclude-rules:
     - path: _test\.go
       linters:
@@ -67,7 +70,4 @@ issues:
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-    - examples
 

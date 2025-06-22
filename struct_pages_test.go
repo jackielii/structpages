@@ -10,7 +10,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+//lint:ignore U1000 test struct used in tests
 type testComponent struct {
+	//lint:ignore U1000 test field
 	content string
 }
 
@@ -19,6 +21,7 @@ func (t testComponent) Render(ctx context.Context, w io.Writer) error {
 	return err
 }
 
+//lint:ignore U1000 test struct used in tests
 type TestHandlerPage struct{}
 
 func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -27,8 +30,11 @@ func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestHttpHandler(t *testing.T) {
+	//lint:ignore U1000 test struct
 	type topPage struct {
-		s TestHandlerPage  `route:"/struct Test struct handler"`
+		//lint:ignore U1000 test field
+		s TestHandlerPage `route:"/struct Test struct handler"`
+		//lint:ignore U1000 test field
 		p *TestHandlerPage `route:"POST /pointer Test pointer handler"`
 	}
 
@@ -63,10 +69,13 @@ func TestHttpHandler(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type middlewarePages struct {
+	//lint:ignore U1000 test field
 	middlewareChildPage `route:"/child Child"`
 }
 
+//lint:ignore U1000 test struct used in tests
 type middlewareChildPage struct{}
 
 func (middlewareChildPage) Page() component {
@@ -89,7 +98,9 @@ func (middlewarePages) Page() component {
 }
 
 func TestMiddlewares(t *testing.T) {
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		middlewarePages `route:"/middleware Test middleware handler"`
 	}
 	// println(PrintRoutes("/", &topPage{}))
@@ -127,6 +138,7 @@ func TestMiddlewares(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type DefaultConfigPage struct{}
 
 func (DefaultConfigPage) Page() component {
@@ -146,7 +158,9 @@ func (DefaultConfigPage) HxTarget() component {
 func TestPageConfig(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		DefaultConfigPage `route:"/default Default config page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -166,7 +180,9 @@ func TestPageConfig(t *testing.T) {
 func TestHTMXPageConfig(t *testing.T) {
 	sp := New(WithDefaultPageConfig(HTMXPageConfig))
 	r := NewRouter(http.NewServeMux())
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		DefaultConfigPage `route:"/default Default config page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -185,6 +201,7 @@ func TestHTMXPageConfig(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type CustomConfigPage struct{}
 
 func (CustomConfigPage) Custom() component {
@@ -198,7 +215,9 @@ func (CustomConfigPage) PageConfig(r *http.Request) (string, error) {
 func TestCustomPageConfig(t *testing.T) {
 	sp := New()
 	r := NewRouter(http.NewServeMux())
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		CustomConfigPage `route:"/custom Custom config page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -215,6 +234,7 @@ func TestCustomPageConfig(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type middlewareOrderPage struct{}
 
 func (middlewareOrderPage) Page() component {
@@ -248,7 +268,9 @@ func TestMiddlewareOrder(t *testing.T) {
 		),
 	)
 	r := NewRouter(http.NewServeMux())
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		middlewareOrderPage `route:"/"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
@@ -280,6 +302,7 @@ Middleware after: global mw 1
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type testPropsPage struct{}
 
 func (testPropsPage) Page(s string) component             { return testComponent{content: s} }
@@ -292,14 +315,19 @@ func (testPropsPage) ContentProps(r *http.Request) string { return "Content Prop
 func TestProps(t *testing.T) {
 	sp := New(WithDefaultPageConfig(HTMXPageConfig))
 	r := NewRouter(http.NewServeMux())
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		testPropsPage `route:"/props Test Props Page"`
 	}
 	sp.MountPages(r, &topPage{}, "/", "top page")
 
 	tests := []struct {
-		name         string
-		hxTarget     string
+		//lint:ignore U1000 test field
+		name string
+		//lint:ignore U1000 test field
+		hxTarget string
+		//lint:ignore U1000 test field
 		expectedBody string
 	}{
 		{

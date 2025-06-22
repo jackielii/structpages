@@ -12,18 +12,24 @@ func TestParseTag(t *testing.T) {
 		name     string
 		route    string
 		expected struct {
+			//lint:ignore U1000 test field
 			method string
-			path   string
-			title  string
+			//lint:ignore U1000 test field
+			path string
+			//lint:ignore U1000 test field
+			title string
 		}
 	}{
 		{
 			name:  "Empty route",
 			route: "",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: methodAll,
 				path:   "/",
@@ -34,9 +40,12 @@ func TestParseTag(t *testing.T) {
 			name:  "Only path",
 			route: "/example",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: methodAll,
 				path:   "/example",
@@ -47,9 +56,12 @@ func TestParseTag(t *testing.T) {
 			name:  "invalid method and path",
 			route: "INVALID /example",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: methodAll,
 				path:   "INVALID",
@@ -60,9 +72,12 @@ func TestParseTag(t *testing.T) {
 			name:  "Method and path",
 			route: "POST /example",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: "POST",
 				path:   "/example",
@@ -73,9 +88,12 @@ func TestParseTag(t *testing.T) {
 			name:  "Method, path, and title",
 			route: "PUT /example Update Example",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: "PUT",
 				path:   "/example",
@@ -86,9 +104,12 @@ func TestParseTag(t *testing.T) {
 			name:  "Invalid method",
 			route: "INVALID /example Invalid Method",
 			expected: struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: methodAll,
 				path:   "INVALID",
@@ -101,9 +122,12 @@ func TestParseTag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			method, path, title := parseTag(tt.route)
 			actual := struct {
+				//lint:ignore U1000 test field
 				method string
-				path   string
-				title  string
+				//lint:ignore U1000 test field
+				path string
+				//lint:ignore U1000 test field
+				title string
 			}{
 				method: method,
 				path:   path,
@@ -132,8 +156,11 @@ func TestParseSimple(t *testing.T) {
 }
 
 func Test_pc_UrlFor(t *testing.T) {
+	//lint:ignore U1000 test struct
 	type topPage struct {
+		//lint:ignore U1000 test field
 		f1 *TestHandlerPage `route:"/f1 Test Page"`
+		//lint:ignore U1000 test field
 		f2 *TestHandlerPage `route:"/f2 Test Page 2"`
 	}
 	pc := parsePageTree("/", &topPage{})
@@ -162,11 +189,16 @@ func Test_pc_UrlFor(t *testing.T) {
 
 func Test_parseContext_getArg(t *testing.T) {
 	str := "test"
+	//lint:ignore U1000 test struct
 	type strct struct{}
 	tests := []struct {
+		//lint:ignore U1000 test field
 		name string
+		//lint:ignore U1000 test field
 		args []any
-		in   reflect.Type
+		//lint:ignore U1000 test field
+		in reflect.Type
+		//lint:ignore U1000 test field
 		want any
 	}{
 		{

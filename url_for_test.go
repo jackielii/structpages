@@ -113,15 +113,23 @@ func Test_formatPathSegments(t *testing.T) {
 	}
 }
 
+//lint:ignore U1000 test struct used in tests
 type index struct {
+	//lint:ignore U1000 test field
 	product `route:"/product Product"`
-	team    `route:"/team Team"`
+	//lint:ignore U1000 test field
+	team `route:"/team Team"`
+	//lint:ignore U1000 test field
 	contact `route:"/contact Contact"`
-	f1      contact `route:"/contact/{f1...} Contact"`
+	//lint:ignore U1000 test field
+	f1 contact `route:"/contact/{f1...} Contact"`
 }
 type (
+	//lint:ignore U1000 test struct used in tests
 	product struct{}
-	team    struct{}
+	//lint:ignore U1000 test struct used in tests
+	team struct{}
+	//lint:ignore U1000 test struct used in tests
 	contact struct{}
 )
 
