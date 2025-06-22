@@ -95,11 +95,11 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNo
 			case "Init":
 				res, err := p.callMethod(item, &method)
 				if err != nil {
-					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
+					return nil, fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
 				}
 				res, err = extractError(res)
 				if err != nil {
-					panic(fmt.Sprintf("Error calling Init method on %s: %v", item.Name, err))
+					return nil, fmt.Errorf("error calling Init method on %s: %w", item.Name, err)
 				}
 				_ = res
 			}

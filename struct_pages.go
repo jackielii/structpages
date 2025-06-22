@@ -52,25 +52,28 @@ func (sp *StructPages) MountPages(router Router, page any, route, title string, 
 	}
 	pc.root.Title = title
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
-	sp.registerPageItem(router, pc, pc.root, middlewares)
+	if err := sp.registerPageItem(router, pc, pc.root, middlewares); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, middlewares []MiddlewareFunc) {
+func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode,
+	middlewares []MiddlewareFunc) error {
 	if page.Route == "" {
-		panic("Page item route is empty: " + page.Name)
+		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
 	if page.Middlewares != nil {
 		res, err := pc.callMethod(page, page.Middlewares)
 		if err != nil {
-			panic(fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err))
+			return fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err)
 		}
 		if len(res) != 1 {
-			panic(fmt.Errorf("middlewares method on %s did not return single result", page.Name))
+			return fmt.Errorf("middlewares method on %s did not return single result", page.Name)
 		}
 		mws, ok := res[0].Interface().([]MiddlewareFunc)
 		if !ok {
-			panic(fmt.Errorf("middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name))
+			return fmt.Errorf("middlewares method on %s did not return []func(http.Handler, *PageNode) http.Handler", page.Name)
 		}
 		middlewares = append(middlewares, mws...)
 	}
@@ -78,25 +81,33 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		// nested pages has to be registered first to avoid conflicts with the parent route
 		// defer func() {
 		// println("Registering route group", "name", page.Name, "route", page.FullRoute())
+		var routeErr error
 		router.Route(page.Route, func(router Router) {
 			for _, child := range page.Children {
-				sp.registerPageItem(router, pc, child, middlewares)
+				if err := sp.registerPageItem(router, pc, child, middlewares); err != nil {
+					routeErr = err
+					return
+				}
 			}
 		})
+		if routeErr != nil {
+			return routeErr
+		}
 		// }()
 	}
 	handler := sp.buildHandler(page, pc)
 	if handler == nil {
 		if len(page.Children) == 0 {
 			// when handdler is nil and no children, it means this page is not a valid endpoint
-			panic(fmt.Errorf("page item %s does not have a valid handler or children", page.Name))
+			return fmt.Errorf("page item %s does not have a valid handler or children", page.Name)
 		}
-		return
+		return nil
 	}
 	for _, middleware := range slices.Backward(middlewares) {
 		handler = middleware(handler, page)
 	}
 	router.HandleMethod(page.Method, page.Route, handler)
+	return nil
 }
 
 func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
