@@ -3,7 +3,9 @@
 package structpages
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -417,5 +419,268 @@ func TestParseContext_callMethod_error(t *testing.T) {
 	_, err := pc.callMethod(pn, &method, reflect.ValueOf(123)) // passing int instead of string
 	if err == nil {
 		t.Error("Expected error from callMethod with wrong argument type")
+	}
+}
+
+// Test types for Init method
+type pageWithInit struct{}
+
+func (p *pageWithInit) Init() error {
+	return nil
+}
+
+type pageWithInitError struct{}
+
+func (p *pageWithInitError) Init() error {
+	return fmt.Errorf("init failed")
+}
+
+type pageWithInitPanic struct{}
+
+func (p *pageWithInitPanic) Init() {
+	panic("init panic")
+}
+
+// Test callInitMethod
+func TestParseContext_callInitMethod(t *testing.T) {
+	t.Run("successful init", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithInit{}),
+		}
+		method, _ := reflect.TypeOf(&pageWithInit{}).MethodByName("Init")
+
+		err := pc.callInitMethod(pn, &method)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("init returns error", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithInitError{}),
+		}
+		method, _ := reflect.TypeOf(&pageWithInitError{}).MethodByName("Init")
+
+		err := pc.callInitMethod(pn, &method)
+		if err == nil {
+			t.Error("Expected error from Init method")
+		}
+		if !strings.Contains(err.Error(), "init failed") {
+			t.Errorf("Expected error to contain 'init failed', got: %v", err)
+		}
+	})
+
+	t.Run("callMethod fails", func(t *testing.T) {
+		// Create a type with Init method that requires missing arg
+		type pageWithInitNeedsArg struct{}
+		type initNeeder interface{ NeedThis() }
+
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithInitNeedsArg{}),
+		}
+
+		// Create a method that requires an unavailable argument
+		method := reflect.Method{
+			Name: "Init",
+			Type: reflect.TypeOf(func(*pageWithInitNeedsArg, initNeeder) error { return nil }),
+			Func: reflect.ValueOf(func(p *pageWithInitNeedsArg, n initNeeder) error {
+				return nil
+			}),
+		}
+
+		err := pc.callInitMethod(pn, &method)
+		if err == nil {
+			t.Error("Expected error when callMethod fails due to missing argument")
+		}
+		if !strings.Contains(err.Error(), "requires argument of type") {
+			t.Errorf("Expected error about missing argument, got: %v", err)
+		}
+	})
+}
+
+// Test for parseChildFields error path
+type pageWithBadChild struct {
+	BadField struct{} `route:"/bad Bad"`
+}
+
+type pageWithNestedError struct {
+	Child *pageWithNilChild `route:"/child Child"`
+}
+
+type pageWithNilChild struct{}
+
+func TestParseChildFields_error(t *testing.T) {
+	// This test will actually be covered by TestParsePageTree_childError below
+	// since parseChildFields is called during parsePageTree
+}
+
+// Test for processMethods error path
+type pageWithBadInit struct{}
+
+func (p *pageWithBadInit) Init(wrongParam int) error {
+	return nil
+}
+
+func TestProcessMethods_error(t *testing.T) {
+	t.Run("processMethod error", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		st := reflect.TypeOf(pageWithBadInit{})
+		pt := reflect.TypeOf(&pageWithBadInit{})
+		item := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithBadInit{}),
+		}
+
+		err := pc.processMethods(st, pt, item)
+		if err == nil {
+			t.Error("Expected error when Init method has wrong signature")
+		}
+	})
+}
+
+// Test callMethod edge cases
+type pageWithPointerReceiver struct{}
+
+func (p *pageWithPointerReceiver) PointerMethod() {}
+
+type pageWithValueReceiverTest struct{}
+
+func (p pageWithValueReceiverTest) ValueMethod() {}
+
+type pageWithPageNodeArg struct{}
+
+func (p *pageWithPageNodeArg) MethodWithPageNode(pn *PageNode) {}
+
+type pageWithPageNodeValueArg struct{}
+
+//nolint:gocritic // Testing value receiver for PageNode
+func (p *pageWithPageNodeValueArg) MethodWithPageNodeValue(pn PageNode) {}
+
+func TestCallMethod_receiverConversions(t *testing.T) {
+	t.Run("pointer receiver with value", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		// Create an addressable value
+		val := pageWithPointerReceiver{}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&val).Elem(), // addressable value
+		}
+		method, _ := reflect.TypeOf(&pageWithPointerReceiver{}).MethodByName("PointerMethod")
+
+		// Should convert value to pointer
+		_, err := pc.callMethod(pn, &method)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("unaddressable value returns error", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(pageWithPointerReceiver{}), // unaddressable value
+		}
+		method, _ := reflect.TypeOf(&pageWithPointerReceiver{}).MethodByName("PointerMethod")
+
+		// This should now return an error instead of panicking
+		_, err := pc.callMethod(pn, &method)
+		if err == nil {
+			t.Error("Expected error for unaddressable value")
+		}
+		if !strings.Contains(err.Error(), "not addressable") {
+			t.Errorf("Expected error about not addressable, got: %v", err)
+		}
+	})
+
+	t.Run("PageNode argument", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithPageNodeArg{}),
+		}
+		method, _ := reflect.TypeOf(&pageWithPageNodeArg{}).MethodByName("MethodWithPageNode")
+
+		// Should inject the PageNode
+		_, err := pc.callMethod(pn, &method)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("PageNode value argument", func(t *testing.T) {
+		pc := &parseContext{args: make(argRegistry)}
+		pn := &PageNode{
+			Name:  "test",
+			Value: reflect.ValueOf(&pageWithPageNodeValueArg{}),
+		}
+		method, _ := reflect.TypeOf(&pageWithPageNodeValueArg{}).MethodByName("MethodWithPageNodeValue")
+
+		// Should inject the PageNode value
+		_, err := pc.callMethod(pn, &method)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+}
+
+// Test urlFor error case
+func TestUrlFor_notFound(t *testing.T) {
+	type unknownPage struct{}
+	type knownPage struct{}
+
+	pc, err := parsePageTree("/", &knownPage{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	// Try to find URL for a type that doesn't exist in the tree
+	_, err = pc.urlFor(&unknownPage{})
+	if err == nil {
+		t.Error("Expected error when page not found")
+	}
+	if !strings.Contains(err.Error(), "no page node found") {
+		t.Errorf("Expected error to contain 'no page node found', got: %v", err)
+	}
+}
+
+// Test parsePageTree with child errors
+func TestParsePageTree_childError(t *testing.T) {
+	type invalidChild struct {
+		StringField string `route:"/string String"`
+	}
+
+	type parentWithInvalidChild struct {
+		Child invalidChild `route:"/child Child"`
+	}
+
+	// This should fail because string fields can't be pages
+	_, err := parsePageTree("/", &parentWithInvalidChild{})
+	if err == nil {
+		t.Error("Expected error when child has invalid field")
+	}
+}
+
+// Test processMethods with method processing error
+type pageWithInitThatNeedsArg struct{}
+
+func (p *pageWithInitThatNeedsArg) Init(s string) error {
+	return nil
+}
+
+func TestProcessMethod_initWithMissingArg(t *testing.T) {
+	// Don't provide the string argument that Init needs
+	_, err := parsePageTree("/", &pageWithInitThatNeedsArg{})
+	if err == nil {
+		t.Error("Expected error when Init method requires unavailable argument")
+		return
+	}
+	if !strings.Contains(err.Error(), "requires argument of type string") {
+		t.Errorf("Expected error about missing string argument, got: %v", err)
 	}
 }

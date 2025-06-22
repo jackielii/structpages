@@ -169,6 +169,10 @@ func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
 	receiver := method.Type.In(0)
 	// make sure receiver and value match, if method takes a pointer, convert value to pointer
 	if receiver.Kind() == reflect.Ptr && v.Kind() != reflect.Ptr {
+		if !v.CanAddr() {
+			return nil, fmt.Errorf("method %s requires pointer receiver but value of type %s is not addressable",
+				formatMethod(method), v.Type())
+		}
 		v = v.Addr()
 	}
 	if receiver.Kind() != reflect.Ptr && v.Kind() == reflect.Ptr {
