@@ -54,3 +54,4 @@ Check out the [examples](./examples) for more usages.
 - [ ] Document middleware usage
 - [ ] Document HTMX integration
 - [ ] Document `UrlFor` functionality
+- [ ] Document more templ patterns
