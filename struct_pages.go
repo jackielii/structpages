@@ -139,7 +139,7 @@ func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comp compo
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 type httpErrHandler interface {
@@ -202,7 +202,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			// because we have to handle errors, and error handler could write header
 			// potentially we want to clear the buffer writer
 			bw := newBuffered(w)
-			defer bw.close() // ignore error, no way to recover from it. maybe log it?
+			defer func() { _ = bw.close() }() // ignore error, no way to recover from it. maybe log it?
 			if err := h.ServeHTTP(bw, r); err != nil {
 				sp.onError(w, r, err)
 			}
@@ -215,7 +215,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			if method.Type.NumOut() > 1 {
 				// same logic: if it returns value, we need to buffer it
 				bw := newBuffered(w)
-				defer bw.close() // ignore error, no way to recover from it. maybe log it?
+				defer func() { _ = bw.close() }() // ignore error, no way to recover from it. maybe log it?
 				wv = reflect.ValueOf(bw)
 			} else {
 				wv = reflect.ValueOf(w)
@@ -272,7 +272,8 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod reflect.Method, r *http.Request) ([]reflect.Value, error) {
+func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod reflect.Method,
+	r *http.Request) ([]reflect.Value, error) {
 	pageName := compMethod.Name
 	var propMethod reflect.Method
 	for _, name := range []string{pageName + "Props", "Props"} {

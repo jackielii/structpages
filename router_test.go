@@ -13,7 +13,7 @@ func TestStdRouter(t *testing.T) {
 		// Test HandleMethod
 		router.HandleMethod(http.MethodGet, "/handle", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("StdRouter HandleMethod"))
+			_, _ = w.Write([]byte("StdRouter HandleMethod"))
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/handle", nil)
 		rec := httptest.NewRecorder()
@@ -33,11 +33,11 @@ func TestStdRouter(t *testing.T) {
 		router.Route("/test", func(r Router) {
 			r.HandleMethod(http.MethodGet, "/sub", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("StdRouter Subroute"))
+				_, _ = w.Write([]byte("StdRouter Subroute"))
 			}))
 			r.HandleMethod(http.MethodGet, "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("StdRouter root route"))
+				_, _ = w.Write([]byte("StdRouter root route"))
 			}))
 		})
 
@@ -74,12 +74,12 @@ func TestStdRouter(t *testing.T) {
 			r.HandleMethod(http.MethodGet, "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				id := r.PathValue("id")
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("StdRouter with ID: " + id))
+				_, _ = w.Write([]byte("StdRouter with ID: " + id))
 			}))
 			r.HandleMethod(http.MethodGet, "/end", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				id := r.PathValue("id")
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("StdRouter with ID: " + id))
+				_, _ = w.Write([]byte("StdRouter with ID: " + id))
 			}))
 		})
 		req := httptest.NewRequest(http.MethodGet, "/withid/123/end", nil)

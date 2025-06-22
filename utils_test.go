@@ -10,10 +10,10 @@ func Test_newBuffered(t *testing.T) {
 	r := http.NewServeMux()
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		bw := newBuffered(w)
-		bw.Write([]byte("Hello, World!"))
+		_, _ = bw.Write([]byte("Hello, World!"))
 		// write header after writing to the buffer
 		w.Header().Add("X-test", "test")
-		bw.close()
+		_ = bw.close()
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

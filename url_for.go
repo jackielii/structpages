@@ -91,31 +91,32 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
 			}
 		}
-	} else if len(args) == len(indicies) {
-		for i, idx := range indicies {
-			segments[idx].value = fmt.Sprint(args[i])
-		}
-	} else if len(args)/2 >= len(indicies) {
-		m := make(map[string]any)
-		for i := 0; i < len(args); i += 2 {
-			key, ok := args[i].(string)
-			if !ok {
-				return pattern, fmt.Errorf("pattern %s: arg pairs should have string as key: %v", pattern, args[i])
+	} else {
+		switch {
+		case len(args) == len(indicies):
+			for i, idx := range indicies {
+				segments[idx].value = fmt.Sprint(args[i])
 			}
-			m[key] = args[i+1]
-		}
-		for _, idx := range indicies {
-			name := segments[idx].name
-			if value, ok := m[name]; ok {
-				segments[idx].value = fmt.Sprint(value)
-			} else {
-				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+		case len(args)/2 >= len(indicies):
+			m := make(map[string]any)
+			for i := 0; i < len(args); i += 2 {
+				key, ok := args[i].(string)
+				if !ok {
+					return pattern, fmt.Errorf("pattern %s: arg pairs should have string as key: %v", pattern, args[i])
+				}
+				m[key] = args[i+1]
 			}
+			for _, idx := range indicies {
+				name := segments[idx].name
+				if value, ok := m[name]; ok {
+					segments[idx].value = fmt.Sprint(value)
+				} else {
+					return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+				}
+			}
+		default:
+			return pattern, fmt.Errorf("pattern %s: not enough arguments provided, args: %v", pattern, args)
 		}
-	} else if len(args) < len(indicies) {
-		return pattern, fmt.Errorf("pattern %s: not enough arguments provided, args: %v", pattern, args)
-	} else if len(args) > len(segments) {
-		// return pattern, fmt.Errorf("pattern %s: too many arguments provided for segment: %s", pattern, segments)
 	}
 
 	s := ""

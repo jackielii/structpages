@@ -23,7 +23,7 @@ type TestHandlerPage struct{}
 
 func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("TestHttpHandler"))
+	_, _ = w.Write([]byte("TestHttpHandler"))
 }
 
 func TestHttpHandler(t *testing.T) {
@@ -232,7 +232,7 @@ func (middlewareOrderPage) Middlewares() []MiddlewareFunc {
 func makeMiddleware(name string) MiddlewareFunc {
 	return func(next http.Handler, node *PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Middleware before: " + name + "\n"))
+			_, _ = w.Write([]byte("Middleware before: " + name + "\n"))
 			next.ServeHTTP(w, r)
 			w.Write([]byte("Middleware after: " + name + "\n"))
 		})

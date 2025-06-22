@@ -118,11 +118,13 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 		v = v.Elem()
 	}
 	if receiver.Kind() != v.Kind() {
-		return nil, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s", formatMethod(&method), receiver.String(), v.Type().String())
+		return nil, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s",
+			formatMethod(&method), receiver.String(), v.Type().String())
 	}
 	// we allow calling methods with fewer arguments than defined
 	// if len(args) > method.Type.NumIn()-1 {
-	// 	panic(fmt.Sprintf("Method %s expects at most %d arguments, but got %d", formatMethod(&method), method.Type.NumIn()-1, len(args)))
+	// 	panic(fmt.Sprintf("Method %s expects at most %d arguments, but got %d",
+	// 		formatMethod(&method), method.Type.NumIn()-1, len(args)))
 	// }
 	in := make([]reflect.Value, method.Type.NumIn())
 	in[0] = v // first argument is the receiver
@@ -138,14 +140,16 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 	// convention: if a method has more arguments than provided, we try to fill them with initArgs
 	for i := lenFilled; i < len(in); i++ {
 		argType := method.Type.In(i)
-		if argType == pnv.Type() {
+		switch {
+		case argType == pnv.Type():
 			in[i] = pnv // if the argument is of type *PageNode, use the current node
-		} else if argType == pnv.Type().Elem() {
+		case argType == pnv.Type().Elem():
 			in[i] = pnv.Elem()
-		} else {
+		default:
 			val, ok := p.args.getArg(argType)
 			if !ok {
-				return nil, fmt.Errorf("method %s requires argument of type %s, but not found", formatMethod(&method), argType.String())
+				return nil, fmt.Errorf("method %s requires argument of type %s, but not found",
+					formatMethod(&method), argType.String())
 			}
 			in[i] = val
 		}
@@ -154,7 +158,8 @@ func (p *parseContext) callMethod(pn *PageNode, method reflect.Method, args ...r
 	return method.Func.Call(in), nil
 }
 
-func (p *parseContext) callComponentMethod(pn *PageNode, method reflect.Method, args ...reflect.Value) (component, error) {
+func (p *parseContext) callComponentMethod(pn *PageNode, method reflect.Method,
+	args ...reflect.Value) (component, error) {
 	results, err := p.callMethod(pn, method, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(&method), err)

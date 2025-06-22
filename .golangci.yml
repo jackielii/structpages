@@ -1,11 +1,10 @@
+version: 2
+
 linters:
   enable:
-    - gofmt
-    - goimports
     - govet
     - errcheck
     - staticcheck
-    - gosimple
     - ineffassign
     - unused
     - misspell
@@ -17,6 +16,11 @@ linters:
     - gocognit
     - dupl
     - lll
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
 
 linters-settings:
   goimports:
@@ -59,14 +63,14 @@ issues:
         - dupl
         - gosec
         - gocognit
-
-    - path: examples/
+    - path: _test\.go
       linters:
-        - errcheck
-        - gosec
-        - dupl
+        - unused
+      text: "field .* is unused"
 
 run:
   timeout: 5m
   tests: true
+  skip-dirs:
+    - examples
 

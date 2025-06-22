@@ -42,9 +42,7 @@ func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 
 	if v, ok := args[st]; ok {
 		if needsPtr {
-			if !v.CanAddr() {
-				// TODO: some values are not addressable
-			}
+			// TODO: some values are not addressable
 			return v.Addr(), true
 		}
 		return v, true
