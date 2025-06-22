@@ -127,21 +127,11 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	}
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
-		// defer func() {
-		// println("Registering route group", "name", page.Name, "route", page.FullRoute())
-		var routeErr error
-		router.Route(page.Route, func(router Router) {
-			for _, child := range page.Children {
-				if err := sp.registerPageItem(router, pc, child, middlewares); err != nil {
-					routeErr = err
-					return
-				}
+		for _, child := range page.Children {
+			if err := sp.registerPageItem(router, pc, child, middlewares); err != nil {
+				return err
 			}
-		})
-		if routeErr != nil {
-			return routeErr
 		}
-		// }()
 	}
 	handler := sp.buildHandler(page, pc)
 	if handler == nil {
@@ -154,7 +144,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	for _, middleware := range slices.Backward(middlewares) {
 		handler = middleware(handler, page)
 	}
-	router.HandleMethod(page.Method, page.Route, handler)
+	router.HandleMethod(page.Method, page.FullRoute(), handler)
 	return nil
 }
 

@@ -39,17 +39,15 @@ func TestStdRouter(t *testing.T) {
 	}
 
 	{
-		// Test Route method
-		router.Route("/test", func(r Router) {
-			r.HandleMethod(http.MethodGet, "/sub", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte("StdRouter Subroute"))
-			}))
-			r.HandleMethod(http.MethodGet, "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte("StdRouter root route"))
-			}))
-		})
+		// Test nested routes without Route method
+		router.HandleMethod(http.MethodGet, "/test/sub", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("StdRouter Subroute"))
+		}))
+		router.HandleMethod(http.MethodGet, "/test", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("StdRouter root route"))
+		}))
 
 		req := httptest.NewRequest(http.MethodGet, "/test/sub?a&b&c", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -74,24 +72,23 @@ func TestStdRouter(t *testing.T) {
 		}
 
 		if rec.Body.String() != "StdRouter root route" {
-			t.Errorf("expected body %q, got %q", "Subrouter root route", rec.Body.String())
+			t.Errorf("expected body %q, got %q", "StdRouter root route", rec.Body.String())
 		}
 	}
 
 	{
 		// test route with path value
-		router.Route("/withid/{id}", func(r Router) {
-			r.HandleMethod(http.MethodGet, "/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		router.HandleMethod(http.MethodGet, "/withid/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id := r.PathValue("id")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("StdRouter with ID: " + id))
+		}))
+		router.HandleMethod(http.MethodGet, "/withid/{id}/end",
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				id := r.PathValue("id")
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("StdRouter with ID: " + id))
 			}))
-			r.HandleMethod(http.MethodGet, "/end", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				id := r.PathValue("id")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte("StdRouter with ID: " + id))
-			}))
-		})
 		req := httptest.NewRequest(http.MethodGet, "/withid/123/end", http.NoBody)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
