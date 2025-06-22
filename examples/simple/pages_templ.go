@@ -4,12 +4,13 @@ package main
 
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
-import "github.com/a-h/templ"
-import templruntime "github.com/a-h/templ/runtime"
+import (
+	"context"
 
-import "context"
-
-import "github.com/jackielii/structpages"
+	"github.com/a-h/templ"
+	templruntime "github.com/a-h/templ/runtime"
+	"github.com/jackielii/structpages"
+)
 
 type index struct {
 	product `route:"/product Product"`

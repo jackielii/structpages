@@ -24,3 +24,8 @@ go.work.sum
 # env file
 .env
 .claude/
+
+# Example binaries
+examples/simple/simple
+examples/htmx/htmx
+examples/todo/todo

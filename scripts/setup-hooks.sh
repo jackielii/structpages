@@ -23,5 +23,11 @@ if ! command -v golangci-lint &> /dev/null; then
     go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 fi
 
+# Check for staticcheck
+if ! command -v staticcheck &> /dev/null; then
+    echo "Installing staticcheck..."
+    go install honnef.co/go/tools/cmd/staticcheck@latest
+fi
+
 echo "Setup complete! Pre-commit hooks will run automatically before each commit."
 echo "To bypass hooks temporarily, use: git commit --no-verify"

@@ -1,17 +1,17 @@
 #!/bin/sh
-# Pre-commit hook to run goimports, gofmt, and golangci-lint
+# Pre-commit hook to run goimports, gofmt, go vet, staticcheck, and golangci-lint
 
-# Run goimports
+# Run goimports on all Go files
 echo "Running goimports..."
-goimports -w *.go
+find . -name "*.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs goimports -w
 if [ $? -ne 0 ]; then
     echo "goimports failed"
     exit 1
 fi
 
-# Run gofmt
+# Run gofmt on all Go files
 echo "Running gofmt..."
-gofmt -w -s *.go
+find . -name "*.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -w -s
 if [ $? -ne 0 ]; then
     echo "gofmt failed"
     exit 1
@@ -20,12 +20,45 @@ fi
 # Stage any formatting changes
 git add -u
 
+# Check if there are any unformatted files (CI check)
+echo "Checking for unformatted files..."
+unformatted=$(gofmt -l .)
+if [ ! -z "$unformatted" ]; then
+    echo "Error: Found unformatted files:"
+    echo "$unformatted"
+    echo "Please run 'gofmt -w' on these files"
+    exit 1
+fi
+
+# Run go vet
+echo "Running go vet..."
+go vet ./...
+if [ $? -ne 0 ]; then
+    echo "go vet failed"
+    exit 1
+fi
+
+# Run staticcheck if available
+if command -v staticcheck &> /dev/null; then
+    echo "Running staticcheck..."
+    staticcheck ./... 2>&1 | grep -v "module requires at least go1.24.3" || true
+    # Don't fail on staticcheck errors as it might have version issues
+fi
+
+# Run tests with race detection
+echo "Running tests..."
+go test ./... -race
+if [ $? -ne 0 ]; then
+    echo "Tests failed"
+    exit 1
+fi
+
 # Run golangci-lint (only fail on critical issues)
 echo "Running golangci-lint..."
 # Check for critical issues only (errcheck, staticcheck, gocritic, etc.)
 # Ignore cognitive complexity and unused warnings which are less critical
 output=$(golangci-lint run --timeout 5m 2>&1)
-critical_issues=$(echo "$output" | grep -E "(errcheck|staticcheck|gosec|gocritic|ineffassign|misspell)" | grep -v "cognitive complexity" || true)
+critical_issues=$(echo "$output" | grep -E "(errcheck|staticcheck|gosec|gocritic|ineffassign|misspell|govet)" | grep -v "cognitive complexity" || true)
 
 if [ ! -z "$critical_issues" ]; then
     echo "Critical linting issues found:"
@@ -37,8 +70,13 @@ fi
 
 # Show all issues for awareness but don't fail
 if [ ! -z "$output" ]; then
-    echo "Non-critical linting issues (commit will proceed):"
-    echo "$output" | grep -E "(gocognit|unused)" || true
+    non_critical=$(echo "$output" | grep -E "(gocognit|unused)" || true)
+    if [ ! -z "$non_critical" ]; then
+        echo ""
+        echo "Non-critical linting issues (commit will proceed):"
+        echo "$non_critical"
+    fi
 fi
 
+echo ""
 echo "Pre-commit checks passed!"
