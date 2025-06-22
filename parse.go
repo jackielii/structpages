@@ -164,7 +164,8 @@ func (p *parseContext) callInitMethod(item *PageNode, method *reflect.Method) er
 // callMethod calls the emthod with receiver value v and arguments args.
 // it uses types from p.args to fill in missing arguments.
 func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
-	args ...reflect.Value) ([]reflect.Value, error) {
+	args ...reflect.Value,
+) ([]reflect.Value, error) {
 	v := pn.Value
 	receiver := method.Type.In(0)
 	// make sure receiver and value match, if method takes a pointer, convert value to pointer
@@ -226,7 +227,8 @@ func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
 }
 
 func (p *parseContext) callComponentMethod(pn *PageNode, method *reflect.Method,
-	args ...reflect.Value) (component, error) {
+	args ...reflect.Value,
+) (component, error) {
 	results, err := p.callMethod(pn, method, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(method), err)

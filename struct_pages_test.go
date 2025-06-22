@@ -409,8 +409,10 @@ func (errHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 }
 
 // Define distinct types for our test strings
-type ExtendedHandlerArg string
-type ExtendedErrHandlerArg string
+type (
+	ExtendedHandlerArg    string
+	ExtendedErrHandlerArg string
+)
 
 type extendedHandler struct{}
 

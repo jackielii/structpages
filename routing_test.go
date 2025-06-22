@@ -345,7 +345,6 @@ func (extendedNoReturnHandler) ServeHTTP(w http.ResponseWriter, r *http.Request,
 
 // Test asHandler edge cases
 func TestAsHandler_ExtendedHandlerErrors(t *testing.T) {
-
 	capturedErrors := []error{}
 	errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
 		capturedErrors = append(capturedErrors, err)
@@ -428,7 +427,6 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 
 // Test component method that fails when called
 func TestBuildHandler_ComponentMethodError(t *testing.T) {
-
 	capturedErrors := []error{}
 	errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
 		capturedErrors = append(capturedErrors, err)

@@ -106,8 +106,9 @@ func (sp *StructPages) MountPages(router Router, page any, route, title string, 
 	return nil
 }
 
-func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode,
-	middlewares []MiddlewareFunc) error {
+func (sp *StructPages) registerPageItem(
+	router Router, pc *parseContext, page *PageNode, middlewares []MiddlewareFunc,
+) error {
 	if page.Route == "" {
 		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
@@ -336,8 +337,10 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) getProps(pc *parseContext, pn *PageNode, compMethod *reflect.Method,
-	r *http.Request) ([]reflect.Value, error) {
+func (sp *StructPages) getProps(
+	pc *parseContext, pn *PageNode,
+	compMethod *reflect.Method, r *http.Request,
+) ([]reflect.Value, error) {
 	pageName := compMethod.Name
 	var propMethod reflect.Method
 	for _, name := range []string{pageName + "Props", "Props"} {
