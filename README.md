@@ -36,7 +36,7 @@ To set up pre-commit hooks for automatic code formatting and linting:
 
 This will configure git to run `goimports`, `gofmt`, and `golangci-lint` before each commit.
 
-## Usage
+## Basic Usage
 
 ```templ
 type index struct {
@@ -58,7 +58,7 @@ Route definitions are done using struct tags in for form of `[method] path [Titl
 
 - `/path` - For all methods that match `/path` without a title
 - `POST /path` - For POST requests matching `/path`
-- `/path Awesome Product` - For ALL requests matching `/path` with a title "Awesome Product"
+- `GET /path Awesome Product` - For GET requests matching `/path` with a title "Awesome Product"
 
 ```go
 sp := structpages.New()
@@ -80,9 +80,9 @@ Routes are defined using struct tags with the `route:` prefix. Each struct field
 
 ```go
 type pages struct {
-    home    `route:"/ Home"`           // GET / with title "Home"
-    about   `route:"/about About Us"`  // GET /about with title "About Us"
-    contact `route:"/contact"`         // GET /contact without title
+    home    `route:"/ Home"`           // ALL / with title "Home"
+    about   `route:"/about About Us"`  // ALL /about with title "About Us"
+    contact `route:"/contact"`         // ALL /contact without title
 }
 ```
 
@@ -118,10 +118,18 @@ type pages struct {
     blogPost    `route:"/blog/{year}/{month}/{slug}"`
 }
 
-// Access parameters in your handler:
-func (p userProfile) Page(r *http.Request) templ.Component {
-    userID := r.PathValue("id")
-    // ...
+// Access parameters in your Props method:
+func (p userProfile) Props(r *http.Request) (UserProfileProps, error) {
+    userID := r.PathValue("id") // "123" if URL is /users/123
+    // Load user data based on userID
+    return UserProfileProps{UserID: userID}, nil
+}
+
+templ (p userProfile) Page(props UserProfileProps) {
+    @layout() {
+        <h1>User Profile for { props.UserID }</h1>
+        // Render user details
+    }
 }
 ```
 
@@ -165,7 +173,7 @@ Implement the `Middlewares()` method to add middleware to specific pages:
 type protectedPage struct{}
 
 func (p protectedPage) Middlewares() []func(http.Handler) http.Handler {
-    return []func(http.Handler) http.Handler{
+    return []structpages.MiddlewareFunc{
         requireAuth,
         checkPermissions,
     }
@@ -180,7 +188,7 @@ Example middleware implementation:
 
 ```go
 // Authentication middleware that checks for a valid session
-func requireAuth(next http.Handler) http.Handler {
+func requireAuth(next http.Handler, pn *structpages.PageNode) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         session := r.Context().Value("session")
         if session == nil {
@@ -192,7 +200,7 @@ func requireAuth(next http.Handler) http.Handler {
 }
 
 // Logging middleware that tracks page access
-func loggingMiddleware(next http.Handler) http.Handler {
+func loggingMiddleware(next http.Handler, pn *structpages.PageNode) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
         next.ServeHTTP(w, r)
