@@ -121,7 +121,7 @@ type pages struct {
 // Access parameters in your Props method:
 func (p userProfile) Props(r *http.Request) (UserProfileProps, error) {
     userID := r.PathValue("id") // "123" if URL is /users/123
-    // Load user data based on userID
+    // Pass the userID via the props to the Page renderer
     return UserProfileProps{UserID: userID}, nil
 }
 
@@ -165,12 +165,14 @@ r := structpages.NewRouter(http.NewServeMux(),
 )
 ```
 
-### Per-Page Middleware
+### Page Middlewares
 
-Implement the `Middlewares()` method to add middleware to specific pages:
+Implement the `Middlewares()` method to add middleware to specific page, which will also be applied to its descendants:
 
 ```go
-type protectedPage struct{}
+type protectedPage struct{
+    // children pages will be protected
+}
 
 func (p protectedPage) Middlewares() []func(http.Handler) http.Handler {
     return []structpages.MiddlewareFunc{
@@ -179,8 +181,7 @@ func (p protectedPage) Middlewares() []func(http.Handler) http.Handler {
     }
 }
 
-func (p protectedPage) Page() templ.Component {
-    return myProtectedContent()
+templ (p protectedPage) Page() {
 }
 ```
 
@@ -459,43 +460,12 @@ func (d dashboardPage) ContentProps(r *http.Request, store *Store) (ContentData,
     return ContentData{Stats: store.GetStats()}, nil
 }
 
-func (d dashboardPage) Page(data PageData) templ.Component {
+templ (d dashboardPage) Page(data PageData) {
     // Full page render
 }
 
-func (d dashboardPage) Content(data ContentData) templ.Component {
+templ (d dashboardPage) Content(data ContentData) {
     // Partial content render
-}
-```
-
-### Component Composition
-
-Break down pages into smaller components:
-
-```templ
-templ (p dashboardPage) Page() {
-    @layout() {
-        @header()
-        @sidebar()
-        <main>
-            @statsWidget()
-            @recentActivity()
-        </main>
-    }
-}
-
-templ statsWidget() {
-    <div class="widget">
-        <h2>Statistics</h2>
-        // ...
-    </div>
-}
-
-templ recentActivity() {
-    <div class="widget">
-        <h2>Recent Activity</h2>
-        // ...
-    </div>
 }
 ```
 
@@ -525,7 +495,10 @@ func (f formPage) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
     }
     
     // Render form
-    return structpages.Render(w, r, f.Page())
+    return customError{
+        Code:    http.StatusMethodNotAllowed,
+        Message: "Method not allowed",
+    }
 }
 ```
 
@@ -547,7 +520,7 @@ func (a apiEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 ### Initialization
 
-Use the `Init` method for setup:
+Use the `Init` method for setup (You shouldn't use `Init` for dependency injection, see below):
 
 ```go
 type databasePage struct {
