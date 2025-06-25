@@ -11,7 +11,10 @@ import (
 	"github.com/jackielii/ctxkey"
 )
 
-var pcCtx = ctxkey.New[*parseContext]("structpages.parseContext", nil)
+var (
+	pcCtx        = ctxkey.New[*parseContext]("structpages.parseContext", nil)
+	urlParamsCtx = ctxkey.New[map[string]string]("structpages.urlParams", nil)
+)
 
 func withPcCtx(pc *parseContext) MiddlewareFunc {
 	return func(next http.Handler, node *PageNode) http.Handler {
@@ -20,6 +23,37 @@ func withPcCtx(pc *parseContext) MiddlewareFunc {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// extractURLParams extracts URL parameters from the request pattern and stores them in context
+func extractURLParams(next http.Handler, node *PageNode) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		params := make(map[string]string)
+
+		// Extract path values from the request
+		pattern := r.Pattern
+		if pattern != "" {
+			// Parse the pattern to find parameter names
+			segments, _ := parseSegments(pattern)
+			for _, seg := range segments {
+				if seg.param {
+					// Get the actual value from the request
+					value := r.PathValue(seg.name)
+					if value != "" {
+						params[seg.name] = value
+					}
+				}
+			}
+		}
+
+		// Store params in context if any were found
+		if len(params) > 0 {
+			ctx := urlParamsCtx.WithValue(r.Context(), params)
+			r = r.WithContext(ctx)
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // URLFor returns the URL for a given page type. If args is provided, it'll replace
@@ -57,17 +91,20 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 			pattern += p
 		}
 	}
-	path, err := formatPathSegments(pattern, args...)
+	path, err := formatPathSegments(ctx, pattern, args...)
 	if err != nil {
 		return "", fmt.Errorf("urlfor: %w", err)
 	}
 	return strings.Replace(path, "{$}", "", 1), nil
 }
 
-// formatPathSegments formats URL pattern segments with provided arguments.
+// formatPathSegments formats URL pattern segments with provided arguments,
+// using pre-extracted parameters from context if available.
 // For more sophisticated path parsing, see Go's standard library implementation
 // at go/src/net/http/pattern.go which handles edge cases like escaped braces.
-func formatPathSegments(pattern string, args ...any) (string, error) {
+//
+//nolint:gocognit,gocyclo // This function handles multiple cases for flexible argument passing
+func formatPathSegments(ctx context.Context, pattern string, args ...any) (string, error) {
 	segments, err := parseSegments(pattern)
 	if err != nil {
 		return pattern, fmt.Errorf("pattern %s: %w", pattern, err)
@@ -81,22 +118,70 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 	if len(args) == 0 && len(indicies) == 0 {
 		return pattern, nil // no args and no params, return the pattern as is
 	}
+
+	// Try to use pre-extracted parameters from context if no args provided
 	if len(args) == 0 && len(indicies) > 0 {
+		if ctx != nil {
+			if params := urlParamsCtx.Value(ctx); params != nil {
+				// Pre-fill segments with context parameters
+				for _, idx := range indicies {
+					name := segments[idx].name
+					if value, ok := params[name]; ok {
+						segments[idx].value = value
+					}
+				}
+				// Check if all required params are filled
+				allFilled := true
+				for _, idx := range indicies {
+					if segments[idx].value == "" {
+						allFilled = false
+						break
+					}
+				}
+				if allFilled {
+					s := ""
+					for _, segment := range segments {
+						s += cmp.Or(segment.value, segment.name)
+					}
+					return s, nil
+				}
+			}
+		}
 		return pattern, fmt.Errorf("pattern %s: no arguments provided", pattern)
 	}
+
+	// Pre-fill segments with context parameters if available
+	if ctx != nil {
+		if params := urlParamsCtx.Value(ctx); params != nil {
+			for _, idx := range indicies {
+				name := segments[idx].name
+				if value, ok := params[name]; ok {
+					segments[idx].value = value
+				}
+			}
+		}
+	}
+
 	if arg, ok := args[0].(map[string]any); ok {
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := arg[name]; ok {
 				segments[idx].value = fmt.Sprint(value)
-			} else {
-				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+			}
+			// If value not in args map, it should keep the pre-filled value from context
+		}
+		// Check if all params are filled
+		for _, idx := range indicies {
+			if segments[idx].value == "" {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v",
+					pattern, segments[idx].name, args)
 			}
 		}
 	} else {
 		switch {
 		case len(args) == len(indicies):
 			for i, idx := range indicies {
+				// Always override with provided args when count matches exactly
 				segments[idx].value = fmt.Sprint(args[i])
 			}
 		case len(args)/2 >= len(indicies):
@@ -112,12 +197,30 @@ func formatPathSegments(pattern string, args ...any) (string, error) {
 				name := segments[idx].name
 				if value, ok := m[name]; ok {
 					segments[idx].value = fmt.Sprint(value)
-				} else {
+				} else if segments[idx].value == "" {
+					// Only error if no value from context either
 					return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
 				}
 			}
 		default:
-			return pattern, fmt.Errorf("pattern %s: not enough arguments provided, args: %v", pattern, args)
+			// Check if we have enough args considering pre-filled values
+			unfilled := 0
+			for _, idx := range indicies {
+				if segments[idx].value == "" {
+					unfilled++
+				}
+			}
+			if len(args) < unfilled {
+				return pattern, fmt.Errorf("pattern %s: not enough arguments provided, args: %v", pattern, args)
+			}
+			// Fill remaining unfilled params
+			argIdx := 0
+			for _, idx := range indicies {
+				if segments[idx].value == "" && argIdx < len(args) {
+					segments[idx].value = fmt.Sprint(args[argIdx])
+					argIdx++
+				}
+			}
 		}
 	}
 

@@ -361,6 +361,51 @@ func join(page any, pattern string) string {
 </a>
 ```
 
+### Automatic URL Parameter Extraction
+
+When calling `URLFor` within a handler, URL parameters from the current request are automatically available and will be used to fill matching parameters in the generated URL. This is particularly useful when generating URLs for related pages that share the same parameters.
+
+```go
+// Route definitions
+type pages struct {
+    viewProduct `route:"GET /product/{id} View Product"`
+    editProduct `route:"GET /product/{id}/edit Edit Product"`
+}
+
+// In the view handler
+func (v viewProduct) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    // Generate edit URL - the {id} parameter is automatically extracted from current request
+    editURL, _ := structpages.URLFor(r.Context(), editProduct{})
+    // If current URL is /product/123, editURL will be "/product/123/edit"
+    
+    // You can still override extracted parameters if needed
+    differentURL, _ := structpages.URLFor(r.Context(), editProduct{}, "456")
+    // differentURL will be "/product/456/edit"
+}
+```
+
+This feature works with multiple parameters as well:
+
+```go
+type pages struct {
+    viewPost `route:"GET /blog/{year}/{month}/{slug} View Post"`
+    editPost `route:"GET /blog/{year}/{month}/{slug}/edit Edit Post"`
+}
+
+// In a template
+templ (v viewPost) Page() {
+    // All parameters (year, month, slug) are automatically available
+    <a href={ urlFor(ctx, editPost{}) }>Edit this post</a>
+    
+    // Override just one parameter while keeping others
+    <a href={ urlFor(ctx, viewPost{}, map[string]any{"slug": "different-post"}) }>
+        View different post in same month
+    </a>
+}
+```
+
+This automatic extraction eliminates the need to manually pass parameters that are already present in the current request context, making URL generation more convenient and less error-prone.
+
 ## Templ Patterns
 
 ### Basic Page Pattern

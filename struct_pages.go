@@ -99,7 +99,7 @@ func (sp *StructPages) MountPages(router Router, page any, route, title string, 
 		return err
 	}
 	pc.root.Title = title
-	middlewares := append([]MiddlewareFunc{withPcCtx(pc)}, sp.middlewares...)
+	middlewares := append([]MiddlewareFunc{withPcCtx(pc), extractURLParams}, sp.middlewares...)
 	if err := sp.registerPageItem(router, pc, pc.root, middlewares); err != nil {
 		return err
 	}
