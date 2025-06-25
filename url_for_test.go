@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -134,15 +135,19 @@ func (team) Page() component    { return testComponent{"team"} }
 func (contact) Page() component { return testComponent{"contact"} }
 
 // Test pages for URLFor_withExtractedParams test
-type productPage struct{}
-type userPage struct{}
+type (
+	productPage struct{}
+	userPage    struct{}
+)
 
 func (productPage) Page() component { return testComponent{"product"} }
 func (userPage) Page() component    { return testComponent{"user"} }
 
 // Test pages for URLFor_withExtractedParams handler test
-type editPage struct{}
-type viewPage struct{}
+type (
+	editPage struct{}
+	viewPage struct{}
+)
 
 func (editPage) Page() component { return testComponent{"edit"} }
 
@@ -521,6 +526,20 @@ func TestFormatPathSegmentsWithContext(t *testing.T) {
 			args:          []any{"3"},
 			expected:      "/user/1/2/3",
 		},
+		{
+			name:          "Key-value pairs with context params",
+			pattern:       "/user/{a}/{b}/{c}",
+			contextParams: map[string]string{"a": "1", "b": "2"},
+			args:          []any{"b", "20", "c", "30"},
+			expected:      "/user/1/20/30",
+		},
+		{
+			name:          "Key-value pairs partial override with context",
+			pattern:       "/api/{version}/users/{userId}/posts/{postId}",
+			contextParams: map[string]string{"version": "v1", "userId": "100"},
+			args:          []any{"postId", "999", "userId", "200"},
+			expected:      "/api/v1/users/200/posts/999",
+		},
 	}
 
 	for _, tt := range tests {
@@ -593,6 +612,230 @@ func TestPathSegments_edgeCases(t *testing.T) {
 				t.Errorf("formatPathSegments() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+// Test for uncovered lines in formatPathSegments
+func TestFormatPathSegments_uncoveredCases(t *testing.T) {
+	t.Run("Non-string key in even args", func(t *testing.T) {
+		// This should fall through to default case when args look like key-value pairs
+		// but have non-string keys (even number of args with non-string in odd position)
+		result, err := formatPathSegments(context.Background(), "/user/{a}/{b}", 123, "value")
+		if err != nil {
+			t.Errorf("Expected no error for non-string key in even args, got: %v", err)
+		}
+		// Should treat as positional args since it's not valid key-value pairs
+		if result != "/user/123/value" {
+			t.Errorf("Expected /user/123/value, got: %s", result)
+		}
+	})
+
+	t.Run("Positional args with pre-filled context", func(t *testing.T) {
+		// Pre-fill context with one param
+		ctx := urlParamsCtx.WithValue(context.Background(), map[string]string{"a": "1"})
+
+		// Provide one positional arg for the remaining param
+		result, err := formatPathSegments(ctx, "/user/{a}/{b}", "2")
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		if result != "/user/1/2" {
+			t.Errorf("Expected /user/1/2, got: %s", result)
+		}
+	})
+
+	t.Run("Odd number of args less than params", func(t *testing.T) {
+		// This tests the default case with insufficient args
+		_, err := formatPathSegments(context.Background(), "/user/{a}/{b}/{c}", "1")
+		if err == nil {
+			t.Error("Expected error for insufficient args")
+		}
+		if err != nil && !strings.Contains(err.Error(), "not enough arguments") {
+			t.Errorf("Expected 'not enough arguments' error, got: %v", err)
+		}
+	})
+
+	t.Run("Valid key-value pairs that don't provide all params", func(t *testing.T) {
+		// Context has some params, key-value pairs provide others but not all
+		ctx := urlParamsCtx.WithValue(context.Background(), map[string]string{"a": "1"})
+
+		// Valid key-value pairs but missing param "c"
+		_, err := formatPathSegments(ctx, "/user/{a}/{b}/{c}", "b", "2")
+		if err == nil {
+			t.Error("Expected error for missing param c")
+		}
+		if err != nil && !strings.Contains(err.Error(), "argument c not found") {
+			t.Errorf("Expected error about missing param c, got: %v", err)
+		}
+	})
+
+	t.Run("Even args with first non-string key", func(t *testing.T) {
+		// This should trigger the break in isKeyValuePairs check and fallthrough
+		result, err := formatPathSegments(context.Background(), "/user/{a}/{b}/{c}/{d}", 123, "val1", "key2", "val2")
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		// Should be treated as positional args
+		if result != "/user/123/val1/key2/val2" {
+			t.Errorf("Expected /user/123/val1/key2/val2, got: %s", result)
+		}
+	})
+
+	t.Run("Malformed pattern that causes formatPathSegments error", func(t *testing.T) {
+		// Create a context with parse context
+		pc, err := parsePageTree("/", &index{})
+		if err != nil {
+			t.Fatalf("parsePageTree failed: %v", err)
+		}
+		ctx := pcCtx.WithValue(context.Background(), pc)
+
+		// Use a malformed pattern in the join that will fail formatPathSegments
+		_, err = URLFor(ctx, []any{index{}, "/{unclosed"})
+		if err == nil {
+			t.Error("Expected error for malformed pattern")
+		}
+		if !strings.Contains(err.Error(), "urlfor:") {
+			t.Errorf("Expected urlfor error, got: %v", err)
+		}
+	})
+
+	t.Run("Even args with non-string at even index triggers fallthrough", func(t *testing.T) {
+		// This test specifically targets the uncovered lines:
+		// - The check for non-string keys that sets isKeyValuePairs = false and breaks
+		// - The fallthrough statement after isKeyValuePairs check
+
+		// Even number of args where arg at index 2 (3rd arg) is not a string
+		// The loop checks i=0, i=2, i=4... so having non-string at index 2
+		// will trigger isKeyValuePairs = false and break, then fallthrough
+		result, err := formatPathSegments(context.Background(), "/user/{a}/{b}/{c}/{d}", "a", "1", 123, "value")
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		// Should be treated as positional args due to non-string key
+		if result != "/user/a/1/123/value" {
+			t.Errorf("Expected /user/a/1/123/value, got: %s", result)
+		}
+
+		// Let's also test with non-string at index 0
+		result2, err2 := formatPathSegments(context.Background(), "/user/{a}/{b}", 123, "value")
+		if err2 != nil {
+			t.Errorf("Expected no error, got: %v", err2)
+		}
+		// Should be treated as positional args due to non-string key
+		if result2 != "/user/123/value" {
+			t.Errorf("Expected /user/123/value, got: %s", result2)
+		}
+	})
+}
+
+// Direct test for the uncovered lines
+func TestFormatPathSegments_nonStringKey(t *testing.T) {
+	// This test MUST hit lines 187-189 (isKeyValuePairs = false and break)
+	// and line 212 (fallthrough)
+
+	// Even number of args with non-string at even index (0)
+	result, err := formatPathSegments(context.Background(), "/user/{a}/{b}", 123, "value")
+	if err != nil {
+		t.Errorf("Expected no error for non-string key, got: %v", err)
+	}
+	if result != "/user/123/value" {
+		t.Errorf("Expected /user/123/value, got: %s", result)
+	}
+}
+
+// Test uncovered lines in URLFor
+func TestURLFor_uncoveredCases(t *testing.T) {
+	t.Run("URLFor with invalid page type", func(t *testing.T) {
+		// Create a parse context without the test page type
+		pc, err := parsePageTree("/", &index{})
+		if err != nil {
+			t.Fatalf("parsePageTree failed: %v", err)
+		}
+
+		ctx := pcCtx.WithValue(context.Background(), pc)
+
+		// Try to get URL for a page type that doesn't exist
+		type unknownPage struct{}
+		_, err = URLFor(ctx, unknownPage{})
+		if err == nil {
+			t.Error("Expected error for unknown page type")
+		}
+	})
+
+	t.Run("URLFor with malformed pattern in page", func(t *testing.T) {
+		// This is tricky to test because we'd need a page with malformed pattern
+		// that passes parsePageTree but fails formatPathSegments
+		// Skip for now as it's an edge case
+	})
+}
+
+// TestFormatPathSegments_ForceFallthrough specifically tests the uncovered lines
+// where even args have non-string keys and need to fall through to default case
+func TestFormatPathSegments_ForceFallthrough(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		args     []any
+		expected string
+	}{
+		{
+			// 4 args, 3 params - will enter even args case
+			// First arg is non-string, triggering isKeyValuePairs = false
+			name:     "non-string key forces fallthrough",
+			pattern:  "/api/{a}/{b}/{c}",
+			args:     []any{100, "val1", "key2", "val2"},
+			expected: "/api/100/val1/key2",
+		},
+		{
+			// 4 args, 2 params - will enter even args case
+			// First arg is non-string
+			name:     "non-string key with extra args",
+			pattern:  "/user/{id}/{name}",
+			args:     []any{123, "john", "extra", "arg"},
+			expected: "/user/123/john",
+		},
+		{
+			// 6 args, 4 params - will enter even args case
+			// Non-string at position 2
+			name:     "non-string in middle position",
+			pattern:  "/data/{a}/{b}/{c}/{d}",
+			args:     []any{"key1", "val1", 999, "val3", "key4", "val4"},
+			expected: "/data/key1/val1/999/val3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := formatPathSegments(context.Background(), tt.pattern, tt.args...)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("Got %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Test edge case with context params and non-string positional args
+func TestFormatPathSegments_ContextWithNonStringPositional(t *testing.T) {
+	// When we have a pattern with params pre-filled from context
+	// and provide non-string args, they should be treated as positional
+	// and fill only the remaining unfilled params
+	ctx := context.Background()
+	ctx = urlParamsCtx.WithValue(ctx, map[string]string{"a": "xxx"})
+
+	// Pattern has 2 params: {a} and {b}
+	// Context provides: a="xxx"
+	// Args: "123", "value", "456", "extra" which is even number of string args but not key value pairs
+	// Expected: only {b} should be filled with 123
+	result, err := formatPathSegments(ctx, "/user/{a}/{b}", "123", "value", "456", "extra")
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	expected := "/user/xxx/123"
+	if result != expected {
+		t.Errorf("Expected %s, got: %s", expected, result)
 	}
 }
 

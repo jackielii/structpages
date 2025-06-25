@@ -180,24 +180,47 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				// Always override with provided args when count matches exactly
 				segments[idx].value = fmt.Sprint(args[i])
 			}
-		case len(args)/2 >= len(indicies):
-			m := make(map[string]any)
+		case len(args)%2 == 0 && len(args) >= 2:
+			// Check if all even-indexed args are strings AND at least one matches a parameter name
+			isPairs := true
+			matchKey := false
+			paramNames := make(map[string]bool)
+			for _, idx := range indicies {
+				paramNames[segments[idx].name] = true
+			}
+
 			for i := 0; i < len(args); i += 2 {
 				key, ok := args[i].(string)
 				if !ok {
-					return pattern, fmt.Errorf("pattern %s: arg pairs should have string as key: %v", pattern, args[i])
+					isPairs = false
+					break
 				}
-				m[key] = args[i+1]
-			}
-			for _, idx := range indicies {
-				name := segments[idx].name
-				if value, ok := m[name]; ok {
-					segments[idx].value = fmt.Sprint(value)
-				} else if segments[idx].value == "" {
-					// Only error if no value from context either
-					return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+				if paramNames[key] {
+					matchKey = true
 				}
 			}
+
+			// Only treat as key-value pairs if all even args are strings AND at least one matches
+			if isPairs && matchKey {
+				// If args are provided as key-value pairs, fill segments accordingly
+				m := make(map[string]any)
+				for i := 0; i < len(args); i += 2 {
+					key := args[i].(string)
+					m[key] = args[i+1]
+				}
+				for _, idx := range indicies {
+					name := segments[idx].name
+					if value, ok := m[name]; ok {
+						segments[idx].value = fmt.Sprint(value)
+					} else if segments[idx].value == "" {
+						// Only error if no value from context either
+						return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+					}
+				}
+				break
+			}
+			// If not valid key-value pairs, fall through to default
+			fallthrough
 		default:
 			// Check if we have enough args considering pre-filled values
 			unfilled := 0
