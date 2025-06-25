@@ -121,43 +121,39 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 
 	// Try to use pre-extracted parameters from context if no args provided
 	if len(args) == 0 && len(indicies) > 0 {
-		if ctx != nil {
-			if params := urlParamsCtx.Value(ctx); params != nil {
-				// Pre-fill segments with context parameters
-				for _, idx := range indicies {
-					name := segments[idx].name
-					if value, ok := params[name]; ok {
-						segments[idx].value = value
-					}
+		if params := urlParamsCtx.Value(ctx); params != nil {
+			// Pre-fill segments with context parameters
+			for _, idx := range indicies {
+				name := segments[idx].name
+				if value, ok := params[name]; ok {
+					segments[idx].value = value
 				}
-				// Check if all required params are filled
-				allFilled := true
-				for _, idx := range indicies {
-					if segments[idx].value == "" {
-						allFilled = false
-						break
-					}
+			}
+			// Check if all required params are filled
+			allFilled := true
+			for _, idx := range indicies {
+				if segments[idx].value == "" {
+					allFilled = false
+					break
 				}
-				if allFilled {
-					s := ""
-					for _, segment := range segments {
-						s += cmp.Or(segment.value, segment.name)
-					}
-					return s, nil
+			}
+			if allFilled {
+				s := ""
+				for _, segment := range segments {
+					s += cmp.Or(segment.value, segment.name)
 				}
+				return s, nil
 			}
 		}
 		return pattern, fmt.Errorf("pattern %s: no arguments provided", pattern)
 	}
 
 	// Pre-fill segments with context parameters if available
-	if ctx != nil {
-		if params := urlParamsCtx.Value(ctx); params != nil {
-			for _, idx := range indicies {
-				name := segments[idx].name
-				if value, ok := params[name]; ok {
-					segments[idx].value = value
-				}
+	if params := urlParamsCtx.Value(ctx); params != nil {
+		for _, idx := range indicies {
+			name := segments[idx].name
+			if value, ok := params[name]; ok {
+				segments[idx].value = value
 			}
 		}
 	}
