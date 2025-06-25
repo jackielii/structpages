@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"bytes"
+	"cmp"
 	"net/http"
 	"sync"
 )
@@ -35,6 +36,7 @@ func newBuffered(w http.ResponseWriter) *buffered {
 
 func (w *buffered) Write(b []byte) (int, error) { return w.buf.Write(b) }
 func (w *buffered) WriteHeader(statusCode int)  { w.status = statusCode }
+func (w *buffered) Status() int                 { return cmp.Or(w.status, http.StatusOK) }
 
 // Unwrap returns the underlying ResponseWriter, allowing http.ResponseController
 // to access extended functionality like Flush, Hijack, etc.
