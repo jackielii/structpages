@@ -205,6 +205,12 @@ func TestUrlFor(t *testing.T) {
 			args:     []any{"f1", "extra/path", "p", "0"},
 			expected: "/contact/extra/path?p=0",
 		},
+		{
+			name:     "wildcard with slashes in filename",
+			page:     []any{func(p *PageNode) bool { return p.Name == "f1" }},
+			args:     []any{"f1", "path/to/deep/file.txt"},
+			expected: "/contact/path/to/deep/file.txt",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -371,6 +377,51 @@ func TestURLFor_notFound(t *testing.T) {
 	if url != "" {
 		t.Errorf("Expected empty string for not found page, got %s", url)
 	}
+}
+
+// Test page for wildcard routes
+type fileServer struct{}
+
+func (fileServer) Page() component { return testComponent{"files"} }
+
+// Test URLFor with wildcard routes
+func TestURLFor_withWildcardRoutes(t *testing.T) {
+	t.Run("URLFor with wildcard containing slashes", func(t *testing.T) {
+		// Set up pages with wildcard route
+		type testPages struct {
+			files fileServer `route:"/files/{path...} File Server"`
+		}
+
+		// Parse the page tree
+		pc, err := parsePageTree("/", &testPages{})
+		if err != nil {
+			t.Fatalf("parsePageTree failed: %v", err)
+		}
+
+		// Set up context
+		ctx := context.Background()
+		ctx = pcCtx.WithValue(ctx, pc)
+
+		// Test generating URL with path containing slashes
+		url, err := URLFor(ctx, fileServer{}, "docs/api/v1/reference.md")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		expected := "/files/docs/api/v1/reference.md"
+		if url != expected {
+			t.Errorf("URLFor() = %q, want %q", url, expected)
+		}
+
+		// Test with multiple args (should only use first for wildcard)
+		url2, err := URLFor(ctx, fileServer{}, "images/logo.png", "extra", "args")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		expected2 := "/files/images/logo.png"
+		if url2 != expected2 {
+			t.Errorf("URLFor() = %q, want %q", url2, expected2)
+		}
+	})
 }
 
 // Test URLFor with extracted URL parameters from context
@@ -836,6 +887,67 @@ func TestFormatPathSegments_ContextWithNonStringPositional(t *testing.T) {
 	expected := "/user/xxx/123"
 	if result != expected {
 		t.Errorf("Expected %s, got: %s", expected, result)
+	}
+}
+
+// Test wildcard patterns with slashes
+func TestFormatPathSegments_WildcardWithSlashes(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		args     []any
+		expected string
+	}{
+		{
+			name:     "wildcard with single slash",
+			pattern:  "/file/{filename...}",
+			args:     []any{"path/to/file.txt"},
+			expected: "/file/path/to/file.txt",
+		},
+		{
+			name:     "wildcard with multiple slashes",
+			pattern:  "/static/{path...}",
+			args:     []any{"css/themes/dark/main.css"},
+			expected: "/static/css/themes/dark/main.css",
+		},
+		{
+			name:     "wildcard with leading slash",
+			pattern:  "/assets/{resource...}",
+			args:     []any{"/images/logo.png"},
+			expected: "/assets//images/logo.png",
+		},
+		{
+			name:     "multiple params with wildcard",
+			pattern:  "/user/{id}/files/{path...}",
+			args:     []any{"123", "documents/2024/report.pdf"},
+			expected: "/user/123/files/documents/2024/report.pdf",
+		},
+		{
+			name:     "wildcard with context params",
+			pattern:  "/project/{projectId}/files/{filepath...}",
+			args:     []any{"docs/api/v1/reference.md"},
+			expected: "/project/{projectId}/files/docs/api/v1/reference.md",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			// Add context params for the test that needs it
+			if tt.name == "wildcard with context params" {
+				ctx = urlParamsCtx.WithValue(ctx, map[string]string{"projectId": "myproject"})
+				tt.expected = "/project/myproject/files/docs/api/v1/reference.md"
+			}
+
+			result, err := formatPathSegments(ctx, tt.pattern, tt.args...)
+			if err != nil {
+				t.Errorf("formatPathSegments() error = %v", err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("formatPathSegments() = %v, want %v", result, tt.expected)
+			}
+		})
 	}
 }
 
