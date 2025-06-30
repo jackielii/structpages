@@ -51,20 +51,7 @@ func (w *buffered) Status() int { return cmp.Or(w.status, http.StatusOK) }
 // Flush immediately writes any buffered content to the underlying ResponseWriter.
 // This enables streaming scenarios like Server-Sent Events (SSE).
 func (w *buffered) Flush() {
-	if !w.headerSent {
-		w.ResponseWriter.WriteHeader(w.status)
-		w.headerSent = true
-	}
-
-	if w.buf.Len() > 0 {
-		_, _ = w.ResponseWriter.Write(w.buf.Bytes())
-		w.buf.Reset()
-	}
-
-	// Try to flush underlying writer if it supports it
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
+	_ = w.FlushError()
 }
 
 // FlushError immediately writes any buffered content and returns any error.
