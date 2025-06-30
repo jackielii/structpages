@@ -33,9 +33,6 @@ func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
 }
 
 func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNode, error) {
-	// Don't add pages to args registry - pages are route handlers, not injectable services
-	// Multiple instances of the same page type at different routes should be allowed
-
 	if page == nil {
 		return nil, fmt.Errorf("page cannot be nil")
 	}
@@ -205,7 +202,9 @@ func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
 		return method.Func.Call(in), nil
 	}
 	pnv := reflect.ValueOf(pn)
-	// convention: if a method has more arguments than provided, we try to fill them with initArgs
+	// if we still have arguments to fill, we'll provide the following:
+	// - if the argument is of type *PageNode or PageNode, use the current node
+	// TODO: explore the use case where a struct page is required
 	for i := lenFilled; i < len(in); i++ {
 		argType := method.Type.In(i)
 		switch {
