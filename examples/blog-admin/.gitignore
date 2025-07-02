@@ -1,0 +1,17 @@
+# Binary
+blog-admin
+
+# Logs
+*.log
+
+# Database
+*.db
+
+# Session/cookie files
+cookies.txt
+
+# Generated templ files
+*_templ.go
+
+# OS files
+.DS_Store

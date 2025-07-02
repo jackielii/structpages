@@ -1,0 +1,211 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/go-playground/form/v4"
+)
+
+// API endpoints demonstrating direct HTTP handler pattern
+
+// Publish post API
+type apiPostPublishPage struct{}
+
+func (p apiPostPublishPage) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store, auth *AuthService) error {
+	postID, _ := strconv.Atoi(r.PathValue("id"))
+
+	post, err := store.GetPostByID(postID)
+	if err != nil {
+		return err
+	}
+
+	// Check permission
+	user := auth.GetUser(r)
+	if user.Role != "admin" && post.AuthorID != user.ID {
+		return fmt.Errorf("forbidden")
+	}
+
+	// Update status
+	post.Status = "published"
+	now := time.Now()
+	post.PublishedAt = &now
+
+	if err := store.UpdatePost(post); err != nil {
+		return err
+	}
+
+	// Return updated row for HTMX
+	w.Header().Set("Content-Type", "text/html")
+	return render(w, r, postTableRow(post))
+}
+
+// Unpublish post API
+type apiPostUnpublishPage struct{}
+
+func (u apiPostUnpublishPage) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store, auth *AuthService) error {
+	postID, _ := strconv.Atoi(r.PathValue("id"))
+
+	post, err := store.GetPostByID(postID)
+	if err != nil {
+		return err
+	}
+
+	// Check permission
+	user := auth.GetUser(r)
+	if user.Role != "admin" && post.AuthorID != user.ID {
+		return fmt.Errorf("forbidden")
+	}
+
+	// Update status
+	post.Status = "draft"
+	post.PublishedAt = nil
+
+	if err := store.UpdatePost(post); err != nil {
+		return err
+	}
+
+	// Return updated row for HTMX
+	w.Header().Set("Content-Type", "text/html")
+	return render(w, r, postTableRow(post))
+}
+
+// Auto-save API
+type apiPostAutosavePage struct{}
+
+func (a apiPostAutosavePage) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store, auth *AuthService, decoder *form.Decoder) error {
+	postID, _ := strconv.Atoi(r.PathValue("id"))
+
+	post, err := store.GetPostByID(postID)
+	if err != nil {
+		return err
+	}
+
+	// Check permission
+	user := auth.GetUser(r)
+	if user.Role != "admin" && post.AuthorID != user.ID {
+		return fmt.Errorf("forbidden")
+	}
+
+	// Parse form data
+	var f postForm
+	if err := r.ParseForm(); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&f, r.PostForm); err != nil {
+		return err
+	}
+
+	// Update only content fields (not status)
+	post.Title = f.Title
+	post.Content = f.Content
+	post.Excerpt = f.Excerpt
+
+	if err := store.UpdatePost(post); err != nil {
+		return err
+	}
+
+	// Return JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"saved_at": time.Now().Format("3:04 PM"),
+	})
+	return nil
+}
+
+// Media upload API
+type apiMediaUploadPage struct{}
+
+func (m apiMediaUploadPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// This demonstrates the standard http.Handler interface (no error return)
+	// In a real app, you'd handle file uploads here
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="media-item">
+		<img src="/static/placeholder.jpg" alt="Uploaded image">
+		<span>uploaded-file.jpg</span>
+	</div>`)
+}
+
+// Template for post table row (used by publish/unpublish APIs)
+templ postTableRow(post *Post) {
+	<tr>
+		<td>
+			<a href={ urlFor(ctx, postPage{}, post.Slug) } target="_blank">
+				{ post.Title }
+			</a>
+		</td>
+		<td>{ post.Author.Username }</td>
+		<td>
+			<span class={ "status", "status-" + post.Status }>
+				{ post.Status }
+			</span>
+		</td>
+		<td>
+			if post.PublishedAt != nil {
+				{ post.PublishedAt.Format("Jan 2, 2006") }
+			} else {
+				<span class="text-muted">Not published</span>
+			}
+		</td>
+		<td>{ fmt.Sprint(post.ViewCount) }</td>
+		<td class="actions">
+			<a href={ urlFor(ctx, adminPostEditPage{}, post.ID) }>Edit</a>
+			if post.Status == "draft" {
+				<button
+					hx-post={ urlFor(ctx, apiPostPublishPage{}, post.ID) }
+					hx-swap="outerHTML"
+					hx-target="closest tr"
+				>
+					Publish
+				</button>
+			} else {
+				<button
+					hx-post={ urlFor(ctx, apiPostUnpublishPage{}, post.ID) }
+					hx-swap="outerHTML"
+					hx-target="closest tr"
+				>
+					Unpublish
+				</button>
+			}
+			<button
+				class="danger"
+				hx-post={ urlFor(ctx, adminPostDeletePage{}, post.ID) }
+				hx-confirm="Are you sure you want to delete this post?"
+				hx-target="closest tr"
+				hx-swap="outerHTML"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+// Advanced HTMX PageConfig example
+func (s searchPage) PageConfig(r *http.Request) (string, error) {
+	// Custom PageConfig for different HTMX targets
+	hxTarget := r.Header.Get("HX-Target")
+
+	switch hxTarget {
+	case "search-results":
+		// Return just the results component
+		return "Results", nil
+	case "search-suggestions":
+		// Could return a suggestions component
+		return "Suggestions", nil
+	default:
+		// Default to full page
+		return "Page", nil
+	}
+}
+
+// Example of Init method
+func (m mediaLibraryPage) Init() {
+	// This would be called during route parsing
+	// Could be used to set up file storage, etc.
+	fmt.Println("Initializing media library page")
+}
