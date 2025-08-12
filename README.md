@@ -451,12 +451,16 @@ type productPageProps struct {
 }
 
 // Props method returns typed props and can receive injected dependencies
-func (p productPage) Props(r *http.Request, store *Store) (productPageProps, error) {
+// You can also include http.ResponseWriter to set headers, cookies, etc.
+func (p productPage) Props(r *http.Request, w http.ResponseWriter, store *Store) (productPageProps, error) {
     productID := r.PathValue("id")
     product, err := store.LoadProduct(productID)
     if err != nil {
         return productPageProps{}, err
     }
+    
+    // You can manipulate the response if needed
+    w.Header().Set("X-Product-ID", productID)
     
     related, _ := store.LoadRelatedProducts(productID)
     
@@ -489,19 +493,24 @@ Structpages looks for Props methods in the following order:
 1. **Component-specific Props method**: `<ComponentName>Props()` - e.g., `PageProps()`, `ContentProps()`, `SidebarProps()`
 2. **Generic Props method**: `Props()` - used as a fallback if no component-specific method exists
 
+**ResponseWriter Support**: Props methods can include `http.ResponseWriter` as a parameter to manipulate the response directly (e.g., setting cookies, custom headers). This must be the second parameter after `*http.Request`.
+
 This allows you to have different props for different components:
 
 ```go
 type dashboardPage struct{}
 
 // Different props for different components
-func (d dashboardPage) PageProps(r *http.Request, store *Store) (PageData, error) {
+func (d dashboardPage) PageProps(r *http.Request, w http.ResponseWriter, store *Store) (PageData, error) {
     // Full page data including layout
+    // Can set cookies or headers as needed
+    http.SetCookie(w, &http.Cookie{Name: "dashboard_visited", Value: "true"})
     return PageData{User: store.GetUser(r), Stats: store.GetStats()}, nil
 }
 
 func (d dashboardPage) ContentProps(r *http.Request, store *Store) (ContentData, error) {
     // Just the content data for HTMX partial updates
+    // Note: ResponseWriter is optional - only include if needed
     return ContentData{Stats: store.GetStats()}, nil
 }
 
