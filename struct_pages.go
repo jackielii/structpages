@@ -162,7 +162,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		props, err := sp.getProps(pc, page, &compMethod, r)
+		props, err := sp.getProps(pc, page, &compMethod, r, w)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling props component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
@@ -336,7 +336,7 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 }
 
 func (sp *StructPages) getProps(pc *parseContext, pn *PageNode,
-	m *reflect.Method, r *http.Request,
+	m *reflect.Method, r *http.Request, w http.ResponseWriter,
 ) ([]reflect.Value, error) {
 	pageName := m.Name
 	var propMethod reflect.Method
@@ -347,7 +347,7 @@ func (sp *StructPages) getProps(pc *parseContext, pn *PageNode,
 		}
 	}
 	if propMethod.Func.IsValid() {
-		props, err := pc.callMethod(pn, &propMethod, reflect.ValueOf(r))
+		props, err := pc.callMethod(pn, &propMethod, reflect.ValueOf(r), reflect.ValueOf(w))
 		if err != nil {
 			return nil, fmt.Errorf("error calling props method %s.%s: %w", pn.Name, propMethod.Name, err)
 		}

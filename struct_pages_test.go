@@ -678,7 +678,7 @@ func TestStructPages_getProps_methodError(t *testing.T) {
 	pageMethod := reflect.Method{Name: "Page"}
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 
-	_, err := sp.getProps(pc, pn, &pageMethod, req)
+	_, err := sp.getProps(pc, pn, &pageMethod, req, nil)
 	if err == nil {
 		t.Error("Expected error from getProps")
 	}
