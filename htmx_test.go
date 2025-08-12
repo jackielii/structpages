@@ -83,7 +83,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request with no HX-Target should not retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
 				return "Page", nil
@@ -94,7 +94,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request targeting body should not retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 				"HX-Target":  "body",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
@@ -106,7 +106,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request with partial component should not retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 				"HX-Target":  "content",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
@@ -118,7 +118,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request with target but page config returns Page should retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 				"HX-Target":  "content",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
@@ -131,7 +131,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request with target but page config returns page (lowercase) should retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 				"HX-Target":  "sidebar",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
@@ -144,7 +144,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 		{
 			name: "HTMX request with page config error should not retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
+				"HX-Request": "true",
 				"HX-Target":  "content",
 			},
 			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
@@ -169,7 +169,7 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 			handler := middleware(nextHandler, tt.pageNode)
 
 			// Create request with headers
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest("GET", "/test", http.NoBody)
 			for key, value := range tt.headers {
 				req.Header.Set(key, value)
 			}
@@ -213,50 +213,49 @@ func (p testPageForRetarget) Content() templ.Component {
 }
 
 func TestHTMXPageRetargetMiddleware_Integration(t *testing.T) {
-
 	tests := []struct {
-		name             string
-		headers          map[string]string
-		useHTMXConfig    bool
-		wantBody         string
-		wantRetarget     string
+		name          string
+		headers       map[string]string
+		useHTMXConfig bool
+		wantBody      string
+		wantRetarget  string
 	}{
 		{
-			name: "Regular request should render full page",
-			headers: map[string]string{},
+			name:          "Regular request should render full page",
+			headers:       map[string]string{},
 			useHTMXConfig: true,
-			wantBody: "<html><body>Full Page</body></html>",
-			wantRetarget: "",
+			wantBody:      "<html><body>Full Page</body></html>",
+			wantRetarget:  "",
 		},
 		{
 			name: "HTMX request with content target should render partial",
 			headers: map[string]string{
-				"Hx-Request": "true",
-				"HX-Target": "content",
+				"HX-Request": "true",
+				"HX-Target":  "content",
 			},
 			useHTMXConfig: true,
-			wantBody: "<div>Partial Content</div>",
-			wantRetarget: "",
+			wantBody:      "<div>Partial Content</div>",
+			wantRetarget:  "",
 		},
 		{
 			name: "HTMX request with unknown target should render full page and retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
-				"HX-Target": "sidebar",
+				"HX-Request": "true",
+				"HX-Target":  "sidebar",
 			},
 			useHTMXConfig: true,
-			wantBody: "<html><body>Full Page</body></html>",
-			wantRetarget: "body",
+			wantBody:      "<html><body>Full Page</body></html>",
+			wantRetarget:  "body",
 		},
 		{
 			name: "HTMX request targeting body should render full page without retarget",
 			headers: map[string]string{
-				"Hx-Request": "true",
-				"HX-Target": "body",
+				"HX-Request": "true",
+				"HX-Target":  "body",
 			},
 			useHTMXConfig: true,
-			wantBody: "<html><body>Full Page</body></html>",
-			wantRetarget: "",
+			wantBody:      "<html><body>Full Page</body></html>",
+			wantRetarget:  "",
 		},
 	}
 
@@ -276,7 +275,7 @@ func TestHTMXPageRetargetMiddleware_Integration(t *testing.T) {
 			// Create router
 			mux := http.NewServeMux()
 			router := NewRouter(mux)
-			
+
 			// Mount the test page
 			testPage := testPageForRetarget{}
 			err := sp.MountPages(router, testPage, "/test", "Test Page")
@@ -285,7 +284,7 @@ func TestHTMXPageRetargetMiddleware_Integration(t *testing.T) {
 			}
 
 			// Create request
-			req := httptest.NewRequest("GET", "/test", nil)
+			req := httptest.NewRequest("GET", "/test", http.NoBody)
 			for key, value := range tt.headers {
 				req.Header.Set(key, value)
 			}
