@@ -17,7 +17,7 @@ type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 type StructPages struct {
 	onError           func(http.ResponseWriter, *http.Request, error)
 	middlewares       []MiddlewareFunc
-	defaultPageConfig func(r *http.Request) (string, error)
+	defaultPageConfig func(r *http.Request, pn *PageNode) (string, error)
 }
 
 // New creates a new StructPages instance with the provided options.
@@ -47,7 +47,7 @@ func New(options ...func(*StructPages)) *StructPages {
 //
 // The config function should return the name of the method to call on the page struct.
 // For example, returning "Main" will call the Main() method instead of Page().
-func WithDefaultPageConfig(configFunc func(r *http.Request) (string, error)) func(*StructPages) {
+func WithDefaultPageConfig(configFunc func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages) {
 	return func(sp *StructPages) {
 		sp.defaultPageConfig = configFunc
 	}
@@ -318,7 +318,7 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 		}
 	}
 	if sp.defaultPageConfig != nil {
-		name, err := sp.defaultPageConfig(r)
+		name, err := sp.defaultPageConfig(r, pn)
 		if err != nil {
 			return reflect.Method{}, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
 		}

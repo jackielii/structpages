@@ -199,7 +199,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 		requestPath   string
 		wantError     string
 		setupPage     func(*PageNode)
-		defaultConfig func(*http.Request) (string, error)
+		defaultConfig func(*http.Request, *PageNode) (string, error)
 	}{
 		{
 			name:        "PageConfig method error",
@@ -235,7 +235,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			route:       "/default-error",
 			requestPath: "/default-error",
 			wantError:   "error calling default page config for emptyRoutePage: default config error",
-			defaultConfig: func(*http.Request) (string, error) {
+			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "", errors.New("default config error")
 			},
 		},
@@ -245,7 +245,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			route:       "/default-unknown",
 			requestPath: "/default-unknown",
 			wantError:   "default PageConfig for mockPage returned unknown component name: UnknownComponent",
-			defaultConfig: func(*http.Request) (string, error) {
+			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "UnknownComponent", nil
 			},
 		},

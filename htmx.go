@@ -20,7 +20,7 @@ import (
 //	sp := structpages.New(
 //	    structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
 //	)
-func HTMXPageConfig(r *http.Request) (string, error) {
+func HTMXPageConfig(r *http.Request, pn *PageNode) (string, error) {
 	if isHTMX(r) {
 		hxTarget := r.Header.Get("Hx-Target")
 		if hxTarget != "" {
