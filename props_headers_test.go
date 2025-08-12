@@ -1,15 +1,11 @@
 package structpages
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/a-h/templ"
 )
 
 // Test page that sets headers in Props method
@@ -27,11 +23,8 @@ func (p pageWithHeaders) Props(r *http.Request, w http.ResponseWriter) (map[stri
 	}, nil
 }
 
-func (p pageWithHeaders) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("<html><body>Page with headers</body></html>"))
-		return err
-	})
+func (p pageWithHeaders) Page() component {
+	return testComponent{content: "<html><body>Page with headers</body></html>"}
 }
 
 // Test page that sets cache headers based on content
@@ -52,11 +45,8 @@ func (p cacheablePage) Props(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (p cacheablePage) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := fmt.Fprintf(w, "<html><body>Cacheable content (max-age: %d)</body></html>", p.maxAge)
-		return err
-	})
+func (p cacheablePage) Page() component {
+	return testComponent{content: fmt.Sprintf("<html><body>Cacheable content (max-age: %d)</body></html>", p.maxAge)}
 }
 
 // Test page that sets CORS headers
@@ -70,11 +60,8 @@ func (p corsHeadersPage) Props(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (p corsHeadersPage) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("<html><body>CORS enabled page</body></html>"))
-		return err
-	})
+func (p corsHeadersPage) Page() component {
+	return testComponent{content: "<html><body>CORS enabled page</body></html>"}
 }
 
 // Test page with conditional headers
@@ -116,15 +103,12 @@ func (p *conditionalPage) Props(r *http.Request, w http.ResponseWriter) error {
 	return nil
 }
 
-func (p *conditionalPage) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		if p.skipRender {
-			// Don't write anything for 304 responses
-			return nil
-		}
-		_, err := w.Write([]byte("<html><body>Conditional content</body></html>"))
-		return err
-	})
+func (p *conditionalPage) Page() component {
+	if p.skipRender {
+		// Don't write anything for 304 responses
+		return testComponent{content: ""}
+	}
+	return testComponent{content: "<html><body>Conditional content</body></html>"}
 }
 
 // Helper function
@@ -334,11 +318,8 @@ func (p flexiblePropsPage) Props(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (p flexiblePropsPage) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("Flexible args"))
-		return err
-	})
+func (p flexiblePropsPage) Page() component {
+	return testComponent{content: "Flexible args"}
 }
 
 // Test page that returns error after setting headers
@@ -351,11 +332,8 @@ func (p errorAfterHeadersPage) Props(w http.ResponseWriter, r *http.Request) err
 	return fmt.Errorf("props error after setting header")
 }
 
-func (p errorAfterHeadersPage) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("Should not render"))
-		return err
-	})
+func (p errorAfterHeadersPage) Page() component {
+	return testComponent{content: "Should not render"}
 }
 
 // Test error handling when Props returns an error but already wrote headers
