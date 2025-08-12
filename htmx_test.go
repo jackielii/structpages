@@ -1,14 +1,11 @@
 package structpages
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/a-h/templ"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -198,18 +195,12 @@ func TestHTMXPageRetargetMiddleware(t *testing.T) {
 // testPageForRetarget is a test page with both Page and Content methods
 type testPageForRetarget struct{}
 
-func (p testPageForRetarget) Page() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("<html><body>Full Page</body></html>"))
-		return err
-	})
+func (p testPageForRetarget) Page() component {
+	return testComponent{content: "<html><body>Full Page</body></html>"}
 }
 
-func (p testPageForRetarget) Content() templ.Component {
-	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-		_, err := w.Write([]byte("<div>Partial Content</div>"))
-		return err
-	})
+func (p testPageForRetarget) Content() component {
+	return testComponent{content: "<div>Partial Content</div>"}
 }
 
 func TestHTMXPageRetargetMiddleware_Integration(t *testing.T) {
