@@ -158,17 +158,39 @@ func (p *parseContext) callInitMethod(item *PageNode, method *reflect.Method) er
 	return nil
 }
 
-// callMethod calls the emthod with receiver value v and arguments args.
-// it uses types from p.args to fill in missing arguments.
-func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
-	args ...reflect.Value,
+// callMethod calls the method with receiver value v and arguments args.
+// It uses type matching to fill method parameters from both provided args and p.args registry.
+func (p *parseContext) callMethod(
+	pn *PageNode, method *reflect.Method, args ...reflect.Value,
 ) ([]reflect.Value, error) {
-	v := pn.Value
+	// Prepare receiver
+	v, err := p.prepareReceiver(pn.Value, method)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build available arguments map
+	availableArgs := p.buildAvailableArgs(pn, args)
+
+	// Prepare method arguments
+	in := make([]reflect.Value, method.Type.NumIn())
+	in[0] = v // first argument is the receiver
+
+	// Fill remaining arguments
+	if err := p.fillMethodArgs(in, method, availableArgs); err != nil {
+		return nil, err
+	}
+
+	return method.Func.Call(in), nil
+}
+
+// prepareReceiver ensures the receiver matches the method's expectations
+func (p *parseContext) prepareReceiver(v reflect.Value, method *reflect.Method) (reflect.Value, error) {
 	receiver := method.Type.In(0)
-	// make sure receiver and value match, if method takes a pointer, convert value to pointer
+
 	if receiver.Kind() == reflect.Ptr && v.Kind() != reflect.Ptr {
 		if !v.CanAddr() {
-			return nil, fmt.Errorf("method %s requires pointer receiver but value of type %s is not addressable",
+			return reflect.Value{}, fmt.Errorf("method %s requires pointer receiver but value of type %s is not addressable",
 				formatMethod(method), v.Type())
 		}
 		v = v.Addr()
@@ -177,52 +199,90 @@ func (p *parseContext) callMethod(pn *PageNode, method *reflect.Method,
 		v = v.Elem()
 	}
 	if receiver.Kind() != v.Kind() {
-		return nil, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s",
+		return reflect.Value{}, fmt.Errorf("method %s receiver type mismatch: expected %s, got %s",
 			formatMethod(method), receiver.String(), v.Type().String())
 	}
-	// we allow calling methods with fewer arguments than defined
-	// if len(args) > method.Type.NumIn()-1 {
-	// 	panic(fmt.Sprintf("Method %s expects at most %d arguments, but got %d",
-	// 		formatMethod(&method), method.Type.NumIn()-1, len(args)))
-	// }
-	in := make([]reflect.Value, method.Type.NumIn())
-	in[0] = v // first argument is the receiver
-	lenFilled := 1
-	for i := range min(len(in)-1, len(args)) {
-		expectedType := method.Type.In(i + 1)
-		argValue := args[i]
-		// Check if the argument type is compatible
-		if argValue.IsValid() && !argValue.Type().AssignableTo(expectedType) {
-			return nil, fmt.Errorf("argument %d: cannot use %v as %v", i+1, argValue.Type(), expectedType)
+	return v, nil
+}
+
+// buildAvailableArgs creates a map of available arguments by type
+func (p *parseContext) buildAvailableArgs(pn *PageNode, args []reflect.Value) map[reflect.Type][]reflect.Value {
+	availableArgs := make(map[reflect.Type][]reflect.Value)
+
+	// Add provided args to available pool
+	for _, arg := range args {
+		if arg.IsValid() {
+			argType := arg.Type()
+			availableArgs[argType] = append(availableArgs[argType], arg)
 		}
-		in[i+1] = argValue
-		lenFilled++
 	}
-	if len(in) <= lenFilled {
-		return method.Func.Call(in), nil
-	}
+
+	// Add PageNode as available argument
 	pnv := reflect.ValueOf(pn)
-	// if we still have arguments to fill, we'll provide the following:
-	// - if the argument is of type *PageNode or PageNode, use the current node
-	// TODO: explore the use case where a struct page is required
-	for i := lenFilled; i < len(in); i++ {
+	availableArgs[pnv.Type()] = append(availableArgs[pnv.Type()], pnv)
+	availableArgs[pnv.Type().Elem()] = append(availableArgs[pnv.Type().Elem()], pnv.Elem())
+
+	return availableArgs
+}
+
+// fillMethodArgs fills the method arguments using type matching
+func (p *parseContext) fillMethodArgs(
+	in []reflect.Value,
+	method *reflect.Method,
+	availableArgs map[reflect.Type][]reflect.Value,
+) error {
+	usedArgs := make(map[reflect.Value]bool)
+
+	for i := 1; i < method.Type.NumIn(); i++ {
 		argType := method.Type.In(i)
-		switch {
-		case argType == pnv.Type():
-			in[i] = pnv // if the argument is of type *PageNode, use the current node
-		case argType == pnv.Type().Elem():
-			in[i] = pnv.Elem()
-		default:
-			val, ok := p.args.getArg(argType)
-			if !ok {
-				return nil, fmt.Errorf("method %s requires argument of type %s, but not found",
-					formatMethod(method), argType.String())
-			}
-			in[i] = val
+
+		// Try to find a matching argument
+		arg, found := p.findMatchingArg(argType, availableArgs, usedArgs)
+		if found {
+			in[i] = arg
+			continue
 		}
-		lenFilled++
+
+		// If not found in available args, try the registry
+		val, ok := p.args.getArg(argType)
+		if !ok {
+			return fmt.Errorf("method %s requires argument of type %s, but not found",
+				formatMethod(method), argType.String())
+		}
+		in[i] = val
 	}
-	return method.Func.Call(in), nil
+	return nil
+}
+
+// findMatchingArg tries to find a matching argument from available args
+func (p *parseContext) findMatchingArg(
+	argType reflect.Type,
+	availableArgs map[reflect.Type][]reflect.Value,
+	usedArgs map[reflect.Value]bool,
+) (reflect.Value, bool) {
+	// First try exact type match
+	if candidates, ok := availableArgs[argType]; ok {
+		for _, candidate := range candidates {
+			if !usedArgs[candidate] {
+				usedArgs[candidate] = true
+				return candidate, true
+			}
+		}
+	}
+
+	// Try assignable types
+	for availType, candidates := range availableArgs {
+		if availType.AssignableTo(argType) {
+			for _, candidate := range candidates {
+				if !usedArgs[candidate] {
+					usedArgs[candidate] = true
+					return candidate, true
+				}
+			}
+		}
+	}
+
+	return reflect.Value{}, false
 }
 
 func (p *parseContext) callComponentMethod(pn *PageNode, method *reflect.Method,
