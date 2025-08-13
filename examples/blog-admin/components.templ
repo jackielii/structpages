@@ -1,0 +1,272 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/jackielii/structpages"
+)
+
+// URL generation helpers
+func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
+	url, err := structpages.URLFor(ctx, page, args...)
+	return templ.URL(url), err
+}
+
+func join(page any, pattern string) string {
+	// Simplified join for query parameters
+	return fmt.Sprintf("%T%s", page, pattern)
+}
+
+// Layout components
+templ layout(title string, user *User) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+			<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+			<link rel="stylesheet" href="/static/styles.css"/>
+		</head>
+		<body>
+			@navbar(user)
+			<main>
+				{ children... }
+			</main>
+			@footer()
+		</body>
+	</html>
+}
+
+templ adminLayout(title string, user *User) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } - Admin</title>
+			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+			<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+			<link rel="stylesheet" href="/static/admin.css"/>
+		</head>
+		<body class="admin">
+			@adminNavbar(user)
+			<div class="admin-container">
+				@adminSidebar()
+				<main class="admin-main">
+					{ children... }
+				</main>
+			</div>
+		</body>
+	</html>
+}
+
+// Navigation components
+templ navbar(user *User) {
+	<nav class="navbar">
+		<div class="container">
+			<a href={ urlFor(ctx, homePage{}) } class="logo">Structpages Blog</a>
+			<div class="nav-links">
+				<a href={ urlFor(ctx, homePage{}) }>Home</a>
+				<a href={ urlFor(ctx, categoryPage{}, "technology") }>Technology</a>
+				<a href={ urlFor(ctx, categoryPage{}, "design") }>Design</a>
+				<a href={ urlFor(ctx, searchPage{}) }>Search</a>
+				if user != nil {
+					if user.Role == "admin" || user.Role == "author" {
+						<a href={ urlFor(ctx, dashboard{}) }>Admin</a>
+					}
+					<form method="POST" action={ urlFor(ctx, logoutPage{}) } class="inline">
+						<button type="submit">Logout</button>
+					</form>
+				} else {
+					<a href={ urlFor(ctx, loginPage{}) }>Login</a>
+				}
+			</div>
+		</div>
+	</nav>
+}
+
+templ adminNavbar(user *User) {
+	<nav class="admin-navbar">
+		<div class="container">
+			<a href={ urlFor(ctx, dashboard{}) } class="logo">Admin Panel</a>
+			<div class="nav-right">
+				<span>Welcome, { user.Username }</span>
+				<a href={ urlFor(ctx, homePage{}) }>View Site</a>
+				<form method="POST" action={ urlFor(ctx, logoutPage{}) } class="inline">
+					<button type="submit">Logout</button>
+				</form>
+			</div>
+		</div>
+	</nav>
+}
+
+templ adminSidebar() {
+	<aside class="admin-sidebar">
+		<ul>
+			<li><a href={ urlFor(ctx, dashboard{}) } hx-boost="true">Dashboard</a></li>
+			<li><a href={ urlFor(ctx, adminPostListPage{}) } hx-boost="true">Posts</a></li>
+			<li><a href={ urlFor(ctx, adminUserListPage{}) } hx-boost="true">Users</a></li>
+			<li><a href={ urlFor(ctx, mediaLibraryPage{}) } hx-boost="true">Media</a></li>
+			<li><a href={ urlFor(ctx, adminSettingsPage{}) } hx-boost="true">Settings</a></li>
+		</ul>
+	</aside>
+}
+
+templ footer() {
+	<footer class="footer">
+		<div class="container">
+			<p>&copy; 2024 Structpages Blog. Built with <a href="https://github.com/jackielii/structpages">structpages</a></p>
+		</div>
+	</footer>
+}
+
+// UI Components
+templ card(title string) {
+	<div class="card">
+		if title != "" {
+			<div class="card-header">
+				<h3>{ title }</h3>
+			</div>
+		}
+		<div class="card-body">
+			{ children... }
+		</div>
+	</div>
+}
+
+templ alert(variant string, message string) {
+	<div class={ "alert", "alert-" + variant } role="alert">
+		{ message }
+	</div>
+}
+
+templ formField(label, name, inputType string, value string, errors []string) {
+	<div class="form-field">
+		<label for={ name }>{ label }</label>
+		<input
+			type={ inputType }
+			id={ name }
+			name={ name }
+			value={ value }
+			class={ templ.KV("error", len(errors) > 0) }
+		/>
+		for _, err := range errors {
+			<span class="error-text">{ err }</span>
+		}
+	</div>
+}
+
+templ textareaField(label, name string, value string, rows int, errors []string) {
+	<div class="form-field">
+		<label for={ name }>{ label }</label>
+		<textarea
+			id={ name }
+			name={ name }
+			rows={ fmt.Sprint(rows) }
+			class={ templ.KV("error", len(errors) > 0) }
+		>{ value }</textarea>
+		for _, err := range errors {
+			<span class="error-text">{ err }</span>
+		}
+	</div>
+}
+
+templ selectField(label, name string, value string, options map[string]string, errors []string) {
+	<div class="form-field">
+		<label for={ name }>{ label }</label>
+		<select
+			id={ name }
+			name={ name }
+			class={ templ.KV("error", len(errors) > 0) }
+		>
+			for val, text := range options {
+				<option value={ val } selected?={ val == value }>{ text }</option>
+			}
+		</select>
+		for _, err := range errors {
+			<span class="error-text">{ err }</span>
+		}
+	</div>
+}
+
+templ pagination(currentPage, totalPages int, baseURL templ.SafeURL) {
+	if totalPages > 1 {
+		<nav class="pagination">
+			if currentPage > 1 {
+				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d", baseURL, currentPage-1)) } class="prev">Previous</a>
+			}
+			for i := 1; i <= totalPages; i++ {
+				if i == currentPage {
+					<span class="current">{ fmt.Sprint(i) }</span>
+				} else {
+					<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d", baseURL, i)) }>{ fmt.Sprint(i) }</a>
+				}
+			}
+			if currentPage < totalPages {
+				<a href={ templ.SafeURL(fmt.Sprintf("%s?page=%d", baseURL, currentPage+1)) } class="next">Next</a>
+			}
+		</nav>
+	}
+}
+
+templ statsCard(title, value, change string) {
+	<div class="stats-card">
+		<h4>{ title }</h4>
+		<div class="value">{ value }</div>
+		if change != "" {
+			<div class="change">{ change }</div>
+		}
+	</div>
+}
+
+templ dataTable(headers []string) {
+	<table class="data-table">
+		<thead>
+			<tr>
+				for _, header := range headers {
+					<th>{ header }</th>
+				}
+			</tr>
+		</thead>
+		<tbody>
+			{ children... }
+		</tbody>
+	</table>
+}
+
+templ confirmModal(id, title, message, action string) {
+	<div id={ id } class="modal" x-data="{ open: false }" x-show="open" @confirm-modal.window="open = true">
+		<div class="modal-backdrop" @click="open = false"></div>
+		<div class="modal-content">
+			<h3>{ title }</h3>
+			<p>{ message }</p>
+			<div class="modal-actions">
+				<button @click="open = false">Cancel</button>
+				<button
+					class="danger"
+					hx-post={ action }
+					hx-confirm={ message }
+					@click="open = false"
+				>
+					Confirm
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// Loading states
+templ loading() {
+	<div class="loading">
+		<div class="spinner"></div>
+		Loading...
+	</div>
+}
+
+templ htmxIndicator() {
+	<div class="htmx-indicator" id="htmx-indicator">
+		<div class="spinner-small"></div>
+	</div>
+}
