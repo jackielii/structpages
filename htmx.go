@@ -42,10 +42,22 @@ func HTMXPageConfig(r *http.Request, pn *PageNode) (string, error) {
 // HTMXPageRetargetMiddleware is a middleware that automatically retargets HTMX responses
 // to the body element when a partial component target would result in a full page render.
 //
-// This middleware works in conjunction with a page config function to determine when
-// retargeting is necessary. When an HTMX request targets a specific element (via HX-Target),
-// but the page config returns "Page" (indicating a full page render), this middleware
-// adds the HX-Retarget header to redirect the response to the body element.
+// IMPORTANT: This middleware implements a heuristic based on common HTMX usage patterns.
+// It is designed for a specific use case where:
+//  1. You're using HTMXPageConfig (or similar) as the default page config
+//  2. Your pages have partial component methods (Content, Sidebar, etc.)
+//  3. You want automatic retargeting when a requested partial doesn't exist
+//
+// The heuristic works as follows:
+//   - If an HTMX request targets a specific element (via HX-Target)
+//   - AND the page doesn't have a custom PageConfig method (pn.Config == nil)
+//   - AND the provided pageConfig returns "Page" (full page render)
+//   - THEN it adds HX-Retarget: body to ensure the full page replaces the body
+//
+// This middleware will NOT retarget if:
+//   - The page has its own PageConfig method (respecting custom behavior)
+//   - The target is already "body"
+//   - The pageConfig returns a partial component name
 //
 // This is useful for scenarios where:
 //   - A partial update is requested but the server needs to render the full page
@@ -66,6 +78,12 @@ func HTMXPageRetargetMiddleware(pageConfig func(r *http.Request, pn *PageNode) (
 			if isHTMX(r) {
 				hxTarget := r.Header.Get(htmxRequestHxTarget)
 				if hxTarget != "" {
+					// Skip retargeting if the page has its own PageConfig method
+					// This respects custom page-specific behavior
+					if pn.Config != nil {
+						next.ServeHTTP(w, r)
+						return
+					}
 					page, err := pageConfig(r, pn)
 					if err == nil && hxTarget != "body" && strings.EqualFold(page, "Page") {
 						w.Header().Set(htmxResponseHxRetarget, "body")
