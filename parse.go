@@ -321,7 +321,7 @@ func (p *parseContext) urlFor(v any) (string, error) {
 }
 
 func pointerType(v reflect.Type) reflect.Type {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		return v
 	}
 	return reflect.PointerTo(v)
