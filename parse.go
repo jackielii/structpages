@@ -62,7 +62,7 @@ func (p *parseContext) parsePageTree(route, fieldName string, page any) (*PageNo
 func getStructAndPointerTypes(page any) (structType, pointerType reflect.Type, err error) {
 	st := reflect.TypeOf(page) // struct type
 	pt := reflect.TypeOf(page) // pointer type
-	if st.Kind() == reflect.Ptr {
+	if st.Kind() == reflect.Pointer {
 		st = st.Elem()
 	} else {
 		pt = reflect.PointerTo(st)
