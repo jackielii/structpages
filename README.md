@@ -106,7 +106,7 @@ The route tag supports several formats:
    - Matches only PUT requests
    - Sets page title to "Update Page"
 
-Supported HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`
+Supported HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`. A special `ALL` method can be used to match all methods.
 
 ### Path Parameters
 
@@ -174,7 +174,7 @@ type protectedPage struct{
     // children pages will be protected
 }
 
-func (p protectedPage) Middlewares() []func(http.Handler) http.Handler {
+func (p protectedPage) Middlewares() []structpages.MiddlewareFunc {
     return []structpages.MiddlewareFunc{
         requireAuth,
         checkPermissions,
@@ -182,6 +182,7 @@ func (p protectedPage) Middlewares() []func(http.Handler) http.Handler {
 }
 
 templ (p protectedPage) Page() {
+    ...
 }
 ```
 
