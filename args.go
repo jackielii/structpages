@@ -24,11 +24,11 @@ func (args argRegistry) addArg(v any) error {
 func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
 	st := pt
 	needsElem, needsPtr := false, false
-	if pt.Kind() != reflect.Ptr {
+	if pt.Kind() != reflect.Pointer {
 		needsElem = true
 		pt = reflect.PointerTo(pt)
 	}
-	if st.Kind() == reflect.Ptr {
+	if st.Kind() == reflect.Pointer {
 		needsPtr = true
 		st = st.Elem()
 	}

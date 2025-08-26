@@ -493,7 +493,7 @@ func TestArgRegistry_getArg_needsPtr(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected to find value")
 	}
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		t.Errorf("Expected pointer, got %v", v.Kind())
 	}
 }
@@ -728,7 +728,7 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		v, ok := registry.getArg(ptrType)
 		if !ok {
 			t.Error("Expected to find pointer via assignability")
-		} else if v.Kind() != reflect.Ptr {
+		} else if v.Kind() != reflect.Pointer {
 			t.Errorf("Expected pointer, got %v", v.Kind())
 		}
 	})
@@ -786,7 +786,7 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		v, ok := registry2.getArg(ifaceType)
 		if ok {
 			t.Logf("Found: %v", v.Type())
-			if v.Kind() == reflect.Ptr {
+			if v.Kind() == reflect.Pointer {
 				t.Error("Expected non-pointer value")
 			}
 		} else {
