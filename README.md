@@ -336,8 +336,8 @@ Use the `join` helper to add query parameters:
 
 ```go
 // Helper function
-func join(page any, pattern string) string {
-    // Implementation that combines page with query pattern
+func join(page any, pattern string) []any {
+    return []any{page, pattern}
 }
 ```
 
