@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -732,5 +733,214 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 	_, err := sp.execProps(pc, pn, req, nil)
 	if err == nil {
 		t.Error("Expected error from execProps")
+	}
+}
+
+// Test page for RenderComponent functionality
+type renderComponentPage struct{}
+
+func (renderComponentPage) Page() component {
+	return testComponent{content: "Default Page"}
+}
+
+func (renderComponentPage) PartialView(data string) component {
+	return testComponent{content: "Partial: " + data}
+}
+
+func (renderComponentPage) CustomView(arg1 string, arg2 int) component {
+	return testComponent{content: fmt.Sprintf("Custom: %s-%d", arg1, arg2)}
+}
+
+func (renderComponentPage) AltView(data string) component {
+	return testComponent{content: "Alt: " + data}
+}
+
+func (renderComponentPage) Props(r *http.Request) (string, error) {
+	view := r.URL.Query().Get("view")
+	switch view {
+	case "partial":
+		// Use RenderComponent with custom args
+		return "ignored", RenderComponent("PartialView", "custom partial data")
+	case "custom":
+		// Use RenderComponent with multiple args
+		return "ignored", RenderComponent("CustomView", "test", 42)
+	case "alt":
+		// Use RenderComponent without args - should use Props return value
+		return "props data", RenderComponent("AltView")
+	default:
+		// Normal flow
+		return "default data", nil
+	}
+}
+
+// Test RenderComponent functionality
+func TestRenderComponent(t *testing.T) {
+	sp := New()
+	r := NewRouter(http.NewServeMux())
+	type pages struct {
+		renderComponentPage `route:"/render Test Render Component"`
+	}
+	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		query        string
+		expectedBody string
+	}{
+		{
+			name:         "default rendering",
+			query:        "",
+			expectedBody: "Default Page",
+		},
+		{
+			name:         "render partial with custom args",
+			query:        "?view=partial",
+			expectedBody: "Partial: custom partial data",
+		},
+		{
+			name:         "render custom with multiple args",
+			query:        "?view=custom",
+			expectedBody: "Custom: test-42",
+		},
+		{
+			name:         "render alt using Props return value",
+			query:        "?view=alt",
+			expectedBody: "Alt: props data",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/render"+tt.query, http.NoBody)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if rec.Body.String() != tt.expectedBody {
+				t.Errorf("expected body %q, got %q", tt.expectedBody, rec.Body.String())
+			}
+		})
+	}
+}
+
+// Test RenderComponent with non-existent component
+type renderComponentErrorPage struct{}
+
+func (renderComponentErrorPage) Page() component {
+	return testComponent{content: "Page"}
+}
+
+func (renderComponentErrorPage) Props(r *http.Request) error {
+	return RenderComponent("NonExistent")
+}
+
+func TestRenderComponent_NonExistentComponent(t *testing.T) {
+	sp := New()
+	r := NewRouter(http.NewServeMux())
+
+	var capturedError error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedError = err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	type pages struct {
+		renderComponentErrorPage `route:"/error Test Error"`
+	}
+	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
+	}
+
+	if capturedError == nil {
+		t.Error("expected error to be captured")
+	} else if !strings.Contains(capturedError.Error(), "NonExistent") {
+		t.Errorf("expected error to mention NonExistent, got: %v", capturedError)
+	}
+}
+
+// Test RenderComponent overrides PageConfig
+type renderComponentWithConfigPage struct{}
+
+func (renderComponentWithConfigPage) Page() component {
+	return testComponent{content: "Page"}
+}
+
+func (renderComponentWithConfigPage) Alt() component {
+	return testComponent{content: "Alt from PageConfig"}
+}
+
+func (renderComponentWithConfigPage) Override() component {
+	return testComponent{content: "Override from RenderComponent"}
+}
+
+func (renderComponentWithConfigPage) PageConfig(r *http.Request) string {
+	// This would normally return "Alt"
+	return "Alt"
+}
+
+func (renderComponentWithConfigPage) Props(r *http.Request) error {
+	if r.URL.Query().Get("override") == "true" {
+		// RenderComponent should override PageConfig
+		return RenderComponent("Override")
+	}
+	return nil
+}
+
+func TestRenderComponent_OverridesPageConfig(t *testing.T) {
+	sp := New()
+	r := NewRouter(http.NewServeMux())
+
+	type pages struct {
+		renderComponentWithConfigPage `route:"/config Test Config Override"`
+	}
+	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		query        string
+		expectedBody string
+		description  string
+	}{
+		{
+			name:         "PageConfig determines component",
+			query:        "",
+			expectedBody: "Alt from PageConfig",
+			description:  "Without override, PageConfig should select Alt component",
+		},
+		{
+			name:         "RenderComponent overrides PageConfig",
+			query:        "?override=true",
+			expectedBody: "Override from RenderComponent",
+			description:  "RenderComponent should override PageConfig's selection",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/config"+tt.query, http.NoBody)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+			if rec.Body.String() != tt.expectedBody {
+				t.Errorf("%s: expected body %q, got %q", tt.description, tt.expectedBody, rec.Body.String())
+			}
+		})
 	}
 }
