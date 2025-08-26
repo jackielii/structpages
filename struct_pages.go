@@ -13,6 +13,35 @@ import (
 // implementing conditional rendering or redirects within page logic.
 var ErrSkipPageRender = errors.New("skip page render")
 
+// errRenderComponent is an internal error type that specifies which component
+// to render and optionally provides replacement arguments for that component.
+type errRenderComponent struct {
+	component string
+	args      []any
+}
+
+func (e *errRenderComponent) Error() string {
+	return fmt.Sprintf("render component: %s", e.component)
+}
+
+// RenderComponent creates an error that instructs the framework to render
+// a specific component method instead of the default one determined by PageConfig.
+// If args are provided, they completely replace the Props return values for the component.
+// If no args are provided, the Props return values are used with the specified component.
+//
+// Example:
+//
+//	func (p MyPage) Props(r *http.Request) (string, error) {
+//	    if r.URL.Query().Get("partial") == "true" {
+//	        // PartialView will receive only these args
+//	        return "", RenderComponent("PartialView", "custom data")
+//	    }
+//	    return "default data", nil
+//	}
+func RenderComponent(component string, args ...any) error {
+	return &errRenderComponent{component: component, args: args}
+}
+
 // MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
 // It receives both the handler to wrap and the PageNode being handled, allowing middleware
 // to access page metadata like route, title, and other properties.
@@ -164,6 +193,33 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		props, err := sp.execProps(pc, page, r, w)
 		if err != nil {
+			// Check if it's a render component error
+			var renderErr *errRenderComponent
+			if errors.As(err, &renderErr) {
+				// If args are provided, use them as props; otherwise use original props
+				if len(renderErr.args) > 0 {
+					// Convert args to reflect.Values
+					props = make([]reflect.Value, len(renderErr.args))
+					for i, arg := range renderErr.args {
+						props[i] = reflect.ValueOf(arg)
+					}
+				}
+				// Look up the component specified by RenderComponent
+				compMethod, ok := page.Components[renderErr.component]
+				if !ok {
+					sp.onError(w, r, fmt.Errorf("component %s not found in %s", renderErr.component, page.Name))
+					return
+				}
+				// Execute the component with the props
+				comp, compErr := pc.callComponentMethod(page, &compMethod, props...)
+				if compErr != nil {
+					sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, compErr))
+					return
+				}
+				sp.render(w, r, comp)
+				return
+			}
+
 			if errors.Is(err, ErrSkipPageRender) {
 				return
 			}
@@ -171,6 +227,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
+		// Normal flow: use PageConfig to determine component
 		compMethod, err := sp.findComponent(pc, page, r)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
