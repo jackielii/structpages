@@ -85,7 +85,7 @@ func (p *parseContext) parseChildFields(st reflect.Type, item *PageNode) error {
 			continue
 		}
 		typ := field.Type
-		if typ.Kind() == reflect.Ptr {
+		if typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
 		}
 		childPage := reflect.New(typ)
@@ -188,14 +188,14 @@ func (p *parseContext) callMethod(
 func (p *parseContext) prepareReceiver(v reflect.Value, method *reflect.Method) (reflect.Value, error) {
 	receiver := method.Type.In(0)
 
-	if receiver.Kind() == reflect.Ptr && v.Kind() != reflect.Ptr {
+	if receiver.Kind() == reflect.Pointer && v.Kind() != reflect.Pointer {
 		if !v.CanAddr() {
 			return reflect.Value{}, fmt.Errorf("method %s requires pointer receiver but value of type %s is not addressable",
 				formatMethod(method), v.Type())
 		}
 		v = v.Addr()
 	}
-	if receiver.Kind() != reflect.Ptr && v.Kind() == reflect.Ptr {
+	if receiver.Kind() != reflect.Pointer && v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if receiver.Kind() != v.Kind() {

@@ -162,18 +162,18 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		compMethod, err := sp.findComponent(pc, page, r)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
-			return
-		}
-
-		props, err := sp.getProps(pc, page, &compMethod, r, w)
+		props, err := sp.execProps(pc, page, r, w)
 		if err != nil {
 			if errors.Is(err, ErrSkipPageRender) {
 				return
 			}
-			sp.onError(w, r, fmt.Errorf("error calling props component %s.%s: %w", page.Name, compMethod.Name, err))
+			sp.onError(w, r, fmt.Errorf("error finding props for %s: %w", page.Name, err))
+			return
+		}
+
+		compMethod, err := sp.findComponent(pc, page, r)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
 			return
 		}
 
@@ -229,7 +229,7 @@ func formatMethod(method *reflect.Method) string {
 		return "<nil>"
 	}
 	receiver := method.Type.In(0)
-	if receiver.Kind() == reflect.Ptr {
+	if receiver.Kind() == reflect.Pointer {
 		receiver = receiver.Elem()
 	}
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
@@ -238,7 +238,7 @@ func formatMethod(method *reflect.Method) string {
 func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	v := pn.Value
 	st, pt := v.Type(), v.Type()
-	if st.Kind() == reflect.Ptr {
+	if st.Kind() == reflect.Pointer {
 		st = st.Elem()
 	} else {
 		pt = reflect.PointerTo(st)
@@ -344,17 +344,42 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) getProps(pc *parseContext, pn *PageNode,
-	m *reflect.Method, r *http.Request, w http.ResponseWriter,
+func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
+	r *http.Request, w http.ResponseWriter,
 ) ([]reflect.Value, error) {
-	pageName := m.Name
+	// First check if PageConfig returns a component name to determine which Props method to use
+	var propsMethodName string
+	if pn.Config != nil {
+		res, err := pc.callMethod(pn, pn.Config, reflect.ValueOf(r))
+		if err != nil {
+			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+		}
+		res, err = extractError(res)
+		if err != nil {
+			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+		}
+		if len(res) >= 1 && res[0].Type().Kind() == reflect.String {
+			propsMethodName = res[0].String() + "Props"
+		}
+	} else if sp.defaultPageConfig != nil {
+		name, err := sp.defaultPageConfig(r, pn)
+		if err != nil {
+			return nil, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
+		}
+		propsMethodName = name + "Props"
+	} else {
+		propsMethodName = "PageProps"
+	}
+
+	// Try to find the specific props method, fall back to generic Props
 	var propMethod reflect.Method
-	for _, name := range []string{pageName + "Props", "Props"} {
+	for _, name := range []string{propsMethodName, "Props"} {
 		if pm, ok := pn.Props[name]; ok {
 			propMethod = pm
 			break
 		}
 	}
+
 	if propMethod.Func.IsValid() {
 		props, err := pc.callMethod(pn, &propMethod, reflect.ValueOf(r), reflect.ValueOf(w))
 		if err != nil {

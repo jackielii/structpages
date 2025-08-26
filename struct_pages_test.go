@@ -713,8 +713,8 @@ func (p *pageWithErrorProps) Props(r *http.Request) (string, error) {
 	return "", errors.New("props error")
 }
 
-// Test getProps with error from props method
-func TestStructPages_getProps_methodError(t *testing.T) {
+// Test execProps with error from props method
+func TestStructPages_execProps_methodError(t *testing.T) {
 	sp := New()
 	pc := &parseContext{args: make(argRegistry)}
 
@@ -727,11 +727,10 @@ func TestStructPages_getProps_methodError(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithErrorProps{}),
 	}
 
-	pageMethod := reflect.Method{Name: "Page"}
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 
-	_, err := sp.getProps(pc, pn, &pageMethod, req, nil)
+	_, err := sp.execProps(pc, pn, req, nil)
 	if err == nil {
-		t.Error("Expected error from getProps")
+		t.Error("Expected error from execProps")
 	}
 }
