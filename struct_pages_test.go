@@ -228,6 +228,58 @@ func TestCustomPageConfig(t *testing.T) {
 	}
 }
 
+type skipRenderPage struct{}
+
+func (skipRenderPage) Page() component {
+	return testComponent{content: "Should not render"}
+}
+
+func (skipRenderPage) Props(r *http.Request, w http.ResponseWriter) error {
+	if r.URL.Query().Get("skip") == "true" {
+		// Write a custom response before returning ErrSkipPageRender
+		w.WriteHeader(http.StatusNoContent)
+		return ErrSkipPageRender
+	}
+	return nil
+}
+
+func TestErrSkipPageRender(t *testing.T) {
+	sp := New()
+	r := NewRouter(http.NewServeMux())
+	type topPage struct {
+		skipRenderPage `route:"/skip Test skip render"`
+	}
+	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	// Test normal rendering (no skip)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/skip", http.NoBody)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "Should not render" {
+			t.Errorf("expected body %q, got %q", "Should not render", rec.Body.String())
+		}
+	}
+
+	// Test skip rendering
+	{
+		req := httptest.NewRequest(http.MethodGet, "/skip?skip=true", http.NoBody)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("expected status %d, got %d", http.StatusNoContent, rec.Code)
+		}
+		if rec.Body.String() != "" {
+			t.Errorf("expected empty body, got %q", rec.Body.String())
+		}
+	}
+}
+
 type middlewareOrderPage struct{}
 
 func (middlewareOrderPage) Page() component {

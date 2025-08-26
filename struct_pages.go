@@ -1,11 +1,17 @@
 package structpages
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
 	"slices"
 )
+
+// ErrSkipPageRender is a sentinel error that can be returned from a Props method
+// to indicate that the page rendering should be skipped. This is useful for
+// implementing conditional rendering or redirects within page logic.
+var ErrSkipPageRender = errors.New("skip page render")
 
 // MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
 // It receives both the handler to wrap and the PageNode being handled, allowing middleware
@@ -164,6 +170,9 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 
 		props, err := sp.getProps(pc, page, &compMethod, r, w)
 		if err != nil {
+			if errors.Is(err, ErrSkipPageRender) {
+				return
+			}
 			sp.onError(w, r, fmt.Errorf("error calling props component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
 		}
