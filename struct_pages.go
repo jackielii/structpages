@@ -145,6 +145,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	if page.Route == "" {
 		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
+
 	if page.Middlewares != nil {
 		res, err := pc.callMethod(page, page.Middlewares)
 		if err != nil {
@@ -169,10 +170,6 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	}
 	handler := sp.buildHandler(page, pc)
 	if handler == nil {
-		if len(page.Children) == 0 {
-			// when handdler is nil and no children, it means this page is not a valid endpoint
-			return fmt.Errorf("page item %s does not have a valid handler or children", page.Name)
-		}
 		return nil
 	}
 	for _, middleware := range slices.Backward(mw) {
@@ -446,3 +443,48 @@ func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
 	}
 	return nil, nil
 }
+
+// // compareRouteSpecificity compares two PageNodes by route specificity.
+// // Returns -1 if a is more specific than b, 1 if b is more specific than a, 0 if equal.
+// // More specific routes should be registered first to avoid conflicts.
+// //
+// // Specificity rules (in order of priority):
+// // 1. Routes with fewer wildcards are more specific
+// // 2. Routes with more path segments are more specific
+// // 3. Routes with literal segments are more specific than wildcard segments
+// // 4. Lexicographic comparison as tie-breaker for consistent ordering
+// func compareRouteSpecificity(a, b *PageNode) int {
+// 	routeA := a.FullRoute()
+// 	routeB := b.FullRoute()
+//
+// 	// Count wildcards (fewer wildcards = more specific)
+// 	wildcardsA := strings.Count(routeA, "{")
+// 	wildcardsB := strings.Count(routeB, "{")
+// 	if wildcardsA != wildcardsB {
+// 		return wildcardsA - wildcardsB // fewer wildcards first
+// 	}
+//
+// 	// Count path segments (more segments = more specific)
+// 	segmentsA := len(strings.Split(strings.Trim(routeA, "/"), "/"))
+// 	segmentsB := len(strings.Split(strings.Trim(routeB, "/"), "/"))
+// 	if segmentsA != segmentsB {
+// 		return segmentsB - segmentsA // more segments first
+// 	}
+//
+// 	// Special handling for root path with {$} - should be least specific
+// 	if strings.Contains(routeA, "{$}") && !strings.Contains(routeB, "{$}") {
+// 		return 1 // a is less specific
+// 	}
+// 	if strings.Contains(routeB, "{$}") && !strings.Contains(routeA, "{$}") {
+// 		return -1 // b is less specific
+// 	}
+//
+// 	// Lexicographic comparison for consistency
+// 	if routeA < routeB {
+// 		return -1
+// 	}
+// 	if routeA > routeB {
+// 		return 1
+// 	}
+// 	return 0
+// }

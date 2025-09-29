@@ -140,16 +140,16 @@ func TestRegisterPageItem_ErrorScenarios(t *testing.T) {
 				"[]func(http.Handler, *PageNode) http.Handler",
 		},
 		{
-			name:    "no handler and no children",
+			name:    "no handler and no children - should be skipped",
 			page:    &noHandlerPage{},
 			route:   "/no-handler",
-			wantErr: "page item noHandlerPage does not have a valid handler or children",
+			wantErr: "", // No longer an error - pages with no handler and no children are just skipped
 		},
 		{
-			name:    "child registration error",
+			name:    "child with no handler and no children - should be skipped",
 			page:    &childErrorPage{},
 			route:   "/parent",
-			wantErr: "page item child does not have a valid handler or children",
+			wantErr: "", // No longer an error - child pages with no handler and no children are just skipped
 		},
 	}
 

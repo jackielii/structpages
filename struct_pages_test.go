@@ -679,19 +679,36 @@ func TestAsHandler(t *testing.T) {
 	}
 }
 
+// Test page types for registerError test
+type badChildPageForRegisterError struct{}
+
+func (badChildPageForRegisterError) Page() component {
+	return testComponent{content: "test"}
+}
+
+type badPageForRegisterError struct {
+	Child badChildPageForRegisterError `route:""` // Actually empty route should cause error
+}
+
 // Test MountPages registerPageItem error path
 func TestStructPages_MountPages_registerError(t *testing.T) {
 	sp := New()
 	router := NewRouter(nil)
 
-	// Create a page that will cause registration error
-	type badPage struct {
-		Child struct{} `route:" "` // Empty route should cause error
+	// Create a page with manually constructed PageNode that has empty route
+	// This simulates what would happen if parsing produced a page with empty route
+	pc := &parseContext{}
+	pageNode := &PageNode{
+		Name:  "testPage",
+		Route: "", // This will trigger the "page item route is empty" error
 	}
 
-	err := sp.MountPages(router, &badPage{}, "/", "Test")
+	err := sp.registerPageItem(router, pc, pageNode, nil)
 	if err == nil {
-		t.Error("Expected error from MountPages with bad child route")
+		t.Error("Expected error from registerPageItem with empty route")
+	}
+	if err != nil && err.Error() != "page item route is empty: testPage" {
+		t.Errorf("Expected specific error message, got: %v", err)
 	}
 }
 
