@@ -53,6 +53,7 @@ type StructPages struct {
 	onError           func(http.ResponseWriter, *http.Request, error)
 	middlewares       []MiddlewareFunc
 	defaultPageConfig func(r *http.Request, pn *PageNode) (string, error)
+	warnEmptyRoute    func(*PageNode)
 }
 
 // New creates a new StructPages instance with the provided options.
@@ -103,6 +104,34 @@ func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) f
 func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 	return func(sp *StructPages) {
 		sp.middlewares = append(sp.middlewares, middlewares...)
+	}
+}
+
+// WithWarnEmptyRoute sets a custom warning function for pages that have neither
+// a handler method nor children. These pages are automatically skipped during
+// route registration. If warnFunc is nil, a default warning message is printed
+// to stdout. Set warnFunc to a no-op function to suppress warnings entirely.
+//
+// Example usage:
+//
+//	// Use default warning (prints to stdout)
+//	sp := structpages.New(structpages.WithWarnEmptyRoute(nil))
+//
+//	// Custom warning function
+//	sp := structpages.New(structpages.WithWarnEmptyRoute(func(pn *PageNode) {
+//		log.Printf("Skipping empty page: %s", pn.Name)
+//	}))
+//
+//	// Suppress warnings entirely
+//	sp := structpages.New(structpages.WithWarnEmptyRoute(func(*PageNode) {}))
+func WithWarnEmptyRoute(warnFunc func(*PageNode)) func(*StructPages) {
+	if warnFunc == nil {
+		warnFunc = func(pn *PageNode) {
+			fmt.Printf("⚠️  Warning: page route has no children and no handler, skipping route registration: %s\n", pn.Name)
+		}
+	}
+	return func(sp *StructPages) {
+		sp.warnEmptyRoute = warnFunc
 	}
 }
 
@@ -169,7 +198,12 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 		}
 	}
 	handler := sp.buildHandler(page, pc)
-	if handler == nil {
+	if handler == nil && len(page.Children) == 0 {
+		if sp.warnEmptyRoute != nil {
+			sp.warnEmptyRoute(page)
+		}
+		return nil
+	} else if handler == nil {
 		return nil
 	}
 	for _, middleware := range slices.Backward(mw) {
@@ -443,48 +477,3 @@ func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
 	}
 	return nil, nil
 }
-
-// // compareRouteSpecificity compares two PageNodes by route specificity.
-// // Returns -1 if a is more specific than b, 1 if b is more specific than a, 0 if equal.
-// // More specific routes should be registered first to avoid conflicts.
-// //
-// // Specificity rules (in order of priority):
-// // 1. Routes with fewer wildcards are more specific
-// // 2. Routes with more path segments are more specific
-// // 3. Routes with literal segments are more specific than wildcard segments
-// // 4. Lexicographic comparison as tie-breaker for consistent ordering
-// func compareRouteSpecificity(a, b *PageNode) int {
-// 	routeA := a.FullRoute()
-// 	routeB := b.FullRoute()
-//
-// 	// Count wildcards (fewer wildcards = more specific)
-// 	wildcardsA := strings.Count(routeA, "{")
-// 	wildcardsB := strings.Count(routeB, "{")
-// 	if wildcardsA != wildcardsB {
-// 		return wildcardsA - wildcardsB // fewer wildcards first
-// 	}
-//
-// 	// Count path segments (more segments = more specific)
-// 	segmentsA := len(strings.Split(strings.Trim(routeA, "/"), "/"))
-// 	segmentsB := len(strings.Split(strings.Trim(routeB, "/"), "/"))
-// 	if segmentsA != segmentsB {
-// 		return segmentsB - segmentsA // more segments first
-// 	}
-//
-// 	// Special handling for root path with {$} - should be least specific
-// 	if strings.Contains(routeA, "{$}") && !strings.Contains(routeB, "{$}") {
-// 		return 1 // a is less specific
-// 	}
-// 	if strings.Contains(routeB, "{$}") && !strings.Contains(routeA, "{$}") {
-// 		return -1 // b is less specific
-// 	}
-//
-// 	// Lexicographic comparison for consistency
-// 	if routeA < routeB {
-// 		return -1
-// 	}
-// 	if routeA > routeB {
-// 		return 1
-// 	}
-// 	return 0
-// }
