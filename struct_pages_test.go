@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -959,5 +960,109 @@ func TestRenderComponent_OverridesPageConfig(t *testing.T) {
 				t.Errorf("%s: expected body %q, got %q", tt.description, tt.expectedBody, rec.Body.String())
 			}
 		})
+	}
+}
+
+// Test types for WithWarnEmptyRoute
+type emptyPage struct{}
+
+type pageWithHandler struct{}
+
+func (pageWithHandler) Page() testComponent {
+	return testComponent{content: "has-handler"}
+}
+
+func TestWithWarnEmptyRoute(t *testing.T) {
+	var warnMessages []string
+
+	// Custom warn function that captures messages
+	customWarn := func(pn *PageNode) {
+		warnMessages = append(warnMessages, fmt.Sprintf("Warning: %s has no handler or children", pn.Name))
+	}
+
+	sp := New(WithWarnEmptyRoute(customWarn))
+	r := NewRouter(http.NewServeMux())
+
+	type pages struct {
+		EmptyPage       emptyPage       `route:"/empty Empty"`
+		PageWithHandler pageWithHandler `route:"/handler Handler"`
+	}
+
+	err := sp.MountPages(r, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	// Should have one warning for the empty page
+	if len(warnMessages) != 1 {
+		t.Errorf("Expected 1 warning message, got %d: %v", len(warnMessages), warnMessages)
+	}
+
+	expectedMessage := "Warning: EmptyPage has no handler or children"
+	if len(warnMessages) > 0 && warnMessages[0] != expectedMessage {
+		t.Errorf("Expected warning message %q, got %q", expectedMessage, warnMessages[0])
+	}
+
+	// Test that page with handler doesn't trigger warning
+	req := httptest.NewRequest(http.MethodGet, "/handler", http.NoBody)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", rec.Code)
+	}
+
+	if rec.Body.String() != "has-handler" {
+		t.Errorf("Expected body 'has-handler', got %q", rec.Body.String())
+	}
+
+	// Test that empty page returns 404
+	req = httptest.NewRequest(http.MethodGet, "/empty", http.NoBody)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404 for empty page, got %d", rec.Code)
+	}
+}
+
+func TestWithWarnEmptyRoute_DefaultWarning(t *testing.T) {
+	// Test the default warning function by capturing stdout
+	var output []byte
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Capture output in a goroutine
+	done := make(chan bool)
+	go func() {
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output = buf[:n]
+		done <- true
+	}()
+
+	sp := New(WithWarnEmptyRoute(nil)) // nil should use default warning
+	router := NewRouter(http.NewServeMux())
+
+	type pages struct {
+		EmptyPage emptyPage `route:"/empty Empty"`
+	}
+
+	err := sp.MountPages(router, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	// Restore stdout and wait for output
+	w.Close()
+	os.Stdout = oldStdout
+	<-done
+
+	// Check that default warning message was printed
+	outputStr := string(output)
+	expectedPrefix := "⚠️  Warning: page route has no children and no handler, skipping route registration: EmptyPage"
+	if !strings.Contains(outputStr, expectedPrefix) {
+		t.Errorf("Expected default warning message containing %q, got %q", expectedPrefix, outputStr)
 	}
 }
