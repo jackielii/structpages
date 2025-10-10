@@ -524,6 +524,63 @@ templ (d dashboardPage) Content(data ContentData) {
 }
 ```
 
+### Cross-Page Component Rendering
+
+Structpages provides the ability to render components from different pages using the `RenderPageComponent` function. This is useful when you want to conditionally redirect rendering to a component from another page, such as error pages or shared components.
+
+#### RenderPageComponent
+
+The `RenderPageComponent` function can be used in Props methods to render a component from a different page:
+
+```go
+type errorPage struct{}
+
+templ (e errorPage) ErrorComponent(message string) {
+    <div class="error">
+        <h2>Error</h2>
+        <p>{ message }</p>
+    </div>
+}
+
+type productPage struct{}
+
+func (p productPage) Props(r *http.Request, store *Store) (string, error) {
+    productID := r.PathValue("id")
+    product, err := store.LoadProduct(productID)
+    if err != nil {
+        // Instead of returning an error, render the ErrorComponent from errorPage
+        return "", structpages.RenderPageComponent(&errorPage{}, "ErrorComponent", "Product not found")
+    }
+    return product.Name, nil
+}
+
+templ (p productPage) Page(productName string) {
+    <h1>{ productName }</h1>
+    <p>Product details...</p>
+}
+```
+
+#### Parameters
+
+- `page`: The page struct instance containing the component to render
+- `component`: The name of the component method to call on the specified page
+- `args`: Optional arguments to pass to the component method (these replace the original Props return values)
+
+#### Behavior
+
+When `RenderPageComponent` is returned as an error from a Props method:
+
+1. The framework looks up the specified page in the current router
+2. Finds the requested component method on that page
+3. Calls the component with the provided arguments
+4. Renders the component instead of the original page's component
+
+This pattern is particularly useful for:
+- Error handling and displaying error pages
+- Conditional rendering based on authentication or permissions
+- Redirecting to maintenance or unavailable pages
+- Sharing common components across different pages
+
 ## Advanced Features
 
 ### Custom Handlers

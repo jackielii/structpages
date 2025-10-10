@@ -303,10 +303,18 @@ func (p *parseContext) callComponentMethod(pn *PageNode, method *reflect.Method,
 }
 
 func (p *parseContext) urlFor(v any) (string, error) {
+	node, err := p.findPageNode(v)
+	if err != nil {
+		return "", err
+	}
+	return node.FullRoute(), nil
+}
+
+func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 	if f, ok := v.(func(*PageNode) bool); ok {
 		for node := range p.root.All() {
 			if f(node) {
-				return node.FullRoute(), nil
+				return node, nil
 			}
 		}
 	}
@@ -314,10 +322,10 @@ func (p *parseContext) urlFor(v any) (string, error) {
 	for node := range p.root.All() {
 		pt := pointerType(node.Value.Type())
 		if ptv == pt {
-			return node.FullRoute(), nil
+			return node, nil
 		}
 	}
-	return "", fmt.Errorf("urlfor: no page node found for %s", ptv.String())
+	return nil, fmt.Errorf("findPageNode: no page node found for %s", ptv.String())
 }
 
 func pointerType(v reflect.Type) reflect.Type {
