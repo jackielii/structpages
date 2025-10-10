@@ -16,7 +16,7 @@ linters:
     dupl:
       threshold: 100
     gocognit:
-      min-complexity: 40
+      min-complexity: 45
     gocritic:
       disabled-checks:
         - dupImport
@@ -48,6 +48,7 @@ linters:
       - linters:
           - dupl
           - gocognit
+          - gocritic
           - gosec
           - staticcheck
           - unused

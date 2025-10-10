@@ -16,6 +16,7 @@ var ErrSkipPageRender = errors.New("skip page render")
 // errRenderComponent is an internal error type that specifies which component
 // to render and optionally provides replacement arguments for that component.
 type errRenderComponent struct {
+	page      any
 	component string
 	args      []any
 }
@@ -40,6 +41,29 @@ func (e *errRenderComponent) Error() string {
 //	}
 func RenderComponent(component string, args ...any) error {
 	return &errRenderComponent{component: component, args: args}
+}
+
+// RenderPageComponent returns an error that tells the framework to render a specific
+// component from a different page instead of continuing with the normal page rendering.
+// This is useful in Props methods when you want to conditionally render a component
+// from another page based on some logic.
+//
+// Parameters:
+//   - page: The page struct containing the component to render (same type used in route definitions)
+//   - component: The name of the component method to call on the specified page
+//   - args: Optional arguments to pass to the component method, replacing the original Props arguments
+//
+// Example:
+//
+//	func (p *MyPage) Props(r *http.Request) (string, error) {
+//	    if someCondition {
+//	        // Render "ErrorComponent" from ErrorPage instead of this page's normal component
+//	        return "", RenderPageComponent(&ErrorPage{}, "ErrorComponent", "Error message")
+//	    }
+//	    return "normal data", nil
+//	}
+func RenderPageComponent(page any, component string, args ...any) error {
+	return &errRenderComponent{page: page, component: component, args: args}
 }
 
 // MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
@@ -235,6 +259,14 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 						props[i] = reflect.ValueOf(arg)
 					}
 				}
+				if renderErr.page != nil {
+					page, err = pc.findPageNode(renderErr.page)
+					if err != nil {
+						sp.onError(w, r, fmt.Errorf("error finding page for RenderPageComponent: %w", err))
+						return
+					}
+				}
+
 				// Look up the component specified by RenderComponent
 				compMethod, ok := page.Components[renderErr.component]
 				if !ok {

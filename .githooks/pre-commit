@@ -38,15 +38,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Run staticcheck if available
-if command -v staticcheck &> /dev/null; then
-    echo "Running staticcheck..."
-    staticcheck ./...
-    if [ $? -ne 0 ]; then
-        echo "staticcheck failed"
-        exit 1
-    fi
-fi
+# Note: staticcheck is handled by golangci-lint below with proper test exclusions
 
 # Run tests with race detection
 echo "Running tests..."
