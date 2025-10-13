@@ -63,11 +63,7 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
-
-      - name: Run staticcheck
-        run: staticcheck ./...
+      # Note: staticcheck is handled by golangci-lint job with proper test exclusions
 
   lint:
     name: Lint
