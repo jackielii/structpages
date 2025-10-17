@@ -286,7 +286,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			if errors.Is(err, ErrSkipPageRender) {
 				return
 			}
-			sp.onError(w, r, fmt.Errorf("error finding props for %s: %w", page.Name, err))
+			sp.onError(w, r, fmt.Errorf("error running props for %s: %w", page.Name, err))
 			return
 		}
 

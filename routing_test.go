@@ -227,7 +227,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			page:        &errorPropsPage{},
 			route:       "/error-props",
 			requestPath: "/error-props",
-			wantError:   "error finding props for errorPropsPage: props error",
+			wantError:   "error running props for errorPropsPage: props error",
 		},
 		{
 			name:        "default page config error",
