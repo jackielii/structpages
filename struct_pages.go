@@ -22,7 +22,7 @@ type errRenderComponent struct {
 }
 
 func (e *errRenderComponent) Error() string {
-	return fmt.Sprintf("render component: %s", e.component)
+	return fmt.Sprintf("should render component: %s", e.component)
 }
 
 // RenderComponent creates an error that instructs the framework to render
@@ -237,6 +237,55 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	return nil
 }
 
+// handleRenderComponentError checks if the error is an errRenderComponent and handles it.
+// Returns true if it handled the error, false otherwise.
+func (sp *StructPages) handleRenderComponentError(
+	w http.ResponseWriter, r *http.Request, err error, pc *parseContext, page *PageNode, props []reflect.Value,
+) bool {
+	var renderErr *errRenderComponent
+	if !errors.As(err, &renderErr) {
+		return false
+	}
+
+	// If args are provided, use them as component args; otherwise use provided props
+	componentArgs := props
+	if len(renderErr.args) > 0 {
+		// Convert args to reflect.Values
+		componentArgs = make([]reflect.Value, len(renderErr.args))
+		for i, arg := range renderErr.args {
+			componentArgs[i] = reflect.ValueOf(arg)
+		}
+	}
+
+	// If a different page is specified, find it
+	targetPage := page
+	if renderErr.page != nil {
+		var err error
+		targetPage, err = pc.findPageNode(renderErr.page)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error finding page for RenderPageComponent: %w", err))
+			return true
+		}
+	}
+
+	// Look up the component specified by RenderComponent
+	compMethod, ok := targetPage.Components[renderErr.component]
+	if !ok {
+		sp.onError(w, r, fmt.Errorf("component %s not found in %s", renderErr.component, targetPage.Name))
+		return true
+	}
+
+	// Execute the component with the args
+	comp, compErr := pc.callComponentMethod(targetPage, &compMethod, componentArgs...)
+	if compErr != nil {
+		sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", targetPage.Name, compMethod.Name, compErr))
+		return true
+	}
+
+	sp.render(w, r, comp)
+	return true
+}
+
 func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
 	if h := sp.asHandler(pc, page); h != nil {
 		return h
@@ -249,37 +298,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 		props, err := sp.execProps(pc, page, r, w)
 		if err != nil {
 			// Check if it's a render component error
-			var renderErr *errRenderComponent
-			if errors.As(err, &renderErr) {
-				// If args are provided, use them as props; otherwise use original props
-				if len(renderErr.args) > 0 {
-					// Convert args to reflect.Values
-					props = make([]reflect.Value, len(renderErr.args))
-					for i, arg := range renderErr.args {
-						props[i] = reflect.ValueOf(arg)
-					}
-				}
-				if renderErr.page != nil {
-					page, err = pc.findPageNode(renderErr.page)
-					if err != nil {
-						sp.onError(w, r, fmt.Errorf("error finding page for RenderPageComponent: %w", err))
-						return
-					}
-				}
-
-				// Look up the component specified by RenderComponent
-				compMethod, ok := page.Components[renderErr.component]
-				if !ok {
-					sp.onError(w, r, fmt.Errorf("component %s not found in %s", renderErr.component, page.Name))
-					return
-				}
-				// Execute the component with the props
-				comp, compErr := pc.callComponentMethod(page, &compMethod, props...)
-				if compErr != nil {
-					sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, compErr))
-					return
-				}
-				sp.render(w, r, comp)
+			if sp.handleRenderComponentError(w, r, err, pc, page, props) {
 				return
 			}
 
@@ -384,6 +403,10 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			if err := h.ServeHTTP(bw, r); err != nil {
 				// Clear the buffer since we have an error
 				bw.buf.Reset()
+				// Check if it's a render component error
+				if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+					return
+				}
 				// Write error directly to the buffered writer
 				sp.onError(bw, r, err)
 			}
@@ -416,8 +439,13 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			if err != nil {
 				if bw != nil {
 					bw.buf.Reset()
+					// Check if it's a render component error
+					if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+						return
+					}
 					sp.onError(bw, r, err)
 				} else {
+					// if bw is nil it means we didn't need to buffer, i.e. the handler doesn't return error
 					sp.onError(w, r, err)
 				}
 				return
