@@ -430,3 +430,206 @@ func TestRenderPageComponentSharedComponents_Footer(t *testing.T) {
 		}
 	}
 }
+
+// Test RenderPageComponent from httpErrHandler.ServeHTTP
+type errHandlerWithRenderComponent struct{}
+
+func (e errHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	trigger := r.URL.Query().Get("trigger")
+	switch trigger {
+	case "error":
+		return RenderPageComponent(&renderTestErrorPage{}, "ErrorComponent", "Error from handler")
+	case "notfound":
+		return RenderPageComponent(&renderTestErrorPage{}, "NotFoundComponent", "ignored")
+	default:
+		_, _ = w.Write([]byte("<div>normal response</div>"))
+		return nil
+	}
+}
+
+func TestRenderPageComponent_FromErrHandler(t *testing.T) {
+	type pages struct {
+		errHandlerWithRenderComponent `route:"/handler"`
+		renderTestErrorPage           `route:"/error"`
+	}
+
+	sp := New()
+	router := NewRouter(http.NewServeMux())
+
+	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{
+			name:     "normal response",
+			query:    "",
+			expected: "<div>normal response</div>",
+		},
+		{
+			name:     "render error component",
+			query:    "?trigger=error",
+			expected: `<div class="error">Error from handler</div>`,
+		},
+		{
+			name:     "render not found component",
+			query:    "?trigger=notfound",
+			expected: `<div class="not-found">Page not found</div>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/handler"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+
+			body := rec.Body.String()
+			if body != tt.expected {
+				t.Errorf("expected body %q, got %q", tt.expected, body)
+			}
+		})
+	}
+}
+
+// Test RenderPageComponent from extended ServeHTTP (with extra args and error return)
+type extendedHandlerWithRenderComponent struct{}
+
+func (e extendedHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *http.Request, logger string) error {
+	trigger := r.URL.Query().Get("trigger")
+	switch trigger {
+	case "error":
+		return RenderPageComponent(&renderTestErrorPage{}, "ErrorComponent", "Error with logging: "+logger)
+	case "multi":
+		return RenderPageComponent(&multiArgPage{}, "MultiComponent", "extended", 3, false)
+	default:
+		_, _ = w.Write([]byte("<div>extended handler: " + logger + "</div>"))
+		return nil
+	}
+}
+
+func TestRenderPageComponent_FromExtendedServeHTTP(t *testing.T) {
+	type pages struct {
+		extendedHandlerWithRenderComponent `route:"/extended"`
+		renderTestErrorPage                `route:"/error"`
+		multiArgPage                       `route:"/multi"`
+	}
+
+	sp := New()
+	router := NewRouter(http.NewServeMux())
+
+	// Provide logger arg for dependency injection
+	logger := "test-logger"
+	if err := sp.MountPages(router, &pages{}, "/", "Test", logger); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{
+			name:     "normal response",
+			query:    "",
+			expected: "<div>extended handler: test-logger</div>",
+		},
+		{
+			name:     "render error component",
+			query:    "?trigger=error",
+			expected: `<div class="error">Error with logging: test-logger</div>`,
+		},
+		{
+			name:     "render multi-arg component",
+			query:    "?trigger=multi",
+			expected: "<div>extended count:3 status:disabled</div>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/extended"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+
+			body := rec.Body.String()
+			if body != tt.expected {
+				t.Errorf("expected body %q, got %q", tt.expected, body)
+			}
+		})
+	}
+}
+
+// Test RenderComponent (same-page component) from error handlers
+type errHandlerWithRenderSamePageComponent struct{}
+
+func (e errHandlerWithRenderSamePageComponent) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	if r.URL.Query().Get("alt") == "true" {
+		return RenderComponent("AltView", "alternative view")
+	}
+	_, _ = w.Write([]byte("<div>default view</div>"))
+	return nil
+}
+
+func (e errHandlerWithRenderSamePageComponent) AltView(message string) component {
+	return renderTestSuccessComponent{message: message}
+}
+
+func TestRenderComponent_FromErrHandler(t *testing.T) {
+	type pages struct {
+		errHandlerWithRenderSamePageComponent `route:"/samecomp"`
+	}
+
+	sp := New()
+	router := NewRouter(http.NewServeMux())
+
+	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
+		t.Fatalf("MountPages failed: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected string
+	}{
+		{
+			name:     "default view",
+			query:    "",
+			expected: "<div>default view</div>",
+		},
+		{
+			name:     "alternative view via RenderComponent",
+			query:    "?alt=true",
+			expected: `<div class="success">alternative view</div>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/samecomp"+tt.query, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			}
+
+			body := rec.Body.String()
+			if body != tt.expected {
+				t.Errorf("expected body %q, got %q", tt.expected, body)
+			}
+		})
+	}
+}
