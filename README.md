@@ -156,13 +156,16 @@ type adminPages struct {
 Apply middleware to all routes:
 
 ```go
-sp := structpages.New()
-r := structpages.NewRouter(http.NewServeMux(), 
+sp := structpages.New(
     structpages.WithMiddlewares(
         loggingMiddleware,
         authMiddleware,
     ),
 )
+r := structpages.NewRouter(http.NewServeMux())
+if err := sp.MountPages(r, pages{}, "/", "My App"); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ### Page Middlewares
