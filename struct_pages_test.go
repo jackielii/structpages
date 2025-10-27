@@ -1062,6 +1062,16 @@ func (predicateTestPage2) Page() component {
 	return testComponent{"page2"}
 }
 
+type pointerReceiverPage struct{}
+
+func (*pointerReceiverPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (*pointerReceiverPage) Content() component {
+	return testComponent{"content"}
+}
+
 // Test RenderComponent with invalid method expression (non-function)
 func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
 	mux := http.NewServeMux()
@@ -1210,6 +1220,28 @@ func TestRenderTarget_Is_NoReceiver(t *testing.T) {
 	result := rt.Is(noReceiverFunc)
 	if result {
 		t.Error("Expected Is() to return false for function with no receiver")
+	}
+}
+
+// Test RenderTarget.Is() with pointer receiver
+func TestRenderTarget_Is_PointerReceiver(t *testing.T) {
+	// Get the pointer receiver method
+	pageType := reflect.TypeOf(&pointerReceiverPage{})
+	method, ok := pageType.MethodByName("Content")
+	if !ok {
+		t.Fatal("Could not find Content method")
+	}
+
+	rt := &RenderTarget{selectedMethod: method}
+
+	// Test matching with pointer receiver method
+	if !rt.Is((*pointerReceiverPage).Content) {
+		t.Error("Expected Is() to match pointer receiver method")
+	}
+
+	// Test non-matching method
+	if rt.Is((*pointerReceiverPage).Page) {
+		t.Error("Expected Is() to not match different method")
 	}
 }
 
