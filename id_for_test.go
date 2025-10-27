@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -557,6 +558,119 @@ func TestExtractReceiverType(t *testing.T) {
 		receiverType := extractReceiverType(noParamFunc)
 		if receiverType != nil {
 			t.Errorf("extractReceiverType() = %v, want nil for function with no parameters", receiverType)
+		}
+	})
+}
+
+// Test page type for IDFor error cases
+type idForErrorTestPage struct{}
+
+func (idForErrorTestPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (idForErrorTestPage) Content() component {
+	return testComponent{"content"}
+}
+
+type idForUnregisteredPage struct{}
+
+func (idForUnregisteredPage) SomeMethod() component {
+	return testComponent{"unregistered"}
+}
+
+// Test IDFor error cases
+func TestIDFor_ErrorCases(t *testing.T) {
+	t.Run("context without parseContext", func(t *testing.T) {
+		// Call IDFor with a context that doesn't have parseContext
+		ctx := context.Background()
+		_, err := IDFor(ctx, idForErrorTestPage.Content)
+		if err == nil {
+			t.Error("Expected error when parseContext not in context")
+		}
+		if err != nil && !strings.Contains(err.Error(), "parseContext not found") {
+			t.Errorf("Expected 'parseContext not found' error, got: %v", err)
+		}
+	})
+
+	t.Run("non-function method expression", func(t *testing.T) {
+		// Set up a proper context with parseContext
+		mux := http.NewServeMux()
+		sp, err := Mount(mux, &idForErrorTestPage{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		// Create context with parseContext
+		ctx := pcCtx.WithValue(context.Background(), sp.pc)
+
+		// Call IDFor with non-function
+		_, err = IDFor(ctx, "not a function")
+		if err == nil {
+			t.Error("Expected error for non-function")
+		}
+		if err != nil && !strings.Contains(err.Error(), "failed to extract method name") {
+			t.Errorf("Expected 'failed to extract method name' error, got: %v", err)
+		}
+	})
+
+	t.Run("function with no receiver", func(t *testing.T) {
+		mux := http.NewServeMux()
+		sp, err := Mount(mux, &idForErrorTestPage{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		ctx := pcCtx.WithValue(context.Background(), sp.pc)
+
+		// Call IDFor with function that has no receiver
+		noReceiverFunc := func() component { return testComponent{"test"} }
+		_, err = IDFor(ctx, noReceiverFunc)
+		if err == nil {
+			t.Error("Expected error for function with no receiver")
+		}
+		if err != nil && !strings.Contains(err.Error(), "failed to extract receiver type") {
+			t.Errorf("Expected 'failed to extract receiver type' error, got: %v", err)
+		}
+	})
+
+	t.Run("method from unregistered page type", func(t *testing.T) {
+		mux := http.NewServeMux()
+		sp, err := Mount(mux, &idForErrorTestPage{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		ctx := pcCtx.WithValue(context.Background(), sp.pc)
+
+		// Call IDFor with method from unregistered page
+		_, err = IDFor(ctx, idForUnregisteredPage.SomeMethod)
+		if err == nil {
+			t.Error("Expected error for method from unregistered page")
+		}
+		if err != nil && !strings.Contains(err.Error(), "cannot find page for method expression") {
+			t.Errorf("Expected 'cannot find page for method expression' error, got: %v", err)
+		}
+	})
+}
+
+// Test extractMethodName edge cases
+func TestExtractMethodName_EdgeCases(t *testing.T) {
+	t.Run("nil function returns empty", func(t *testing.T) {
+		// Create a nil function value
+		var nilFunc func()
+		name := extractMethodName(nilFunc)
+		if name != "" {
+			t.Errorf("Expected empty name for nil function, got: %q", name)
+		}
+	})
+
+	t.Run("zero value function returns empty", func(t *testing.T) {
+		// Test with a reflect.Value that represents a nil function
+		var f func()
+		name := extractMethodName(f)
+		if name != "" {
+			t.Errorf("Expected empty name for zero value function, got: %q", name)
 		}
 	})
 }
