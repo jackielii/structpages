@@ -220,7 +220,7 @@ func (p *pageWithExtendedServeHTTPError) ServeHTTP(w http.ResponseWriter, r *htt
 
 // Test asHandler with ServeHTTP returning multiple values including error
 func TestStructPages_asHandler_serveHTTPWithError(t *testing.T) {
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
 	pc := &parseContext{args: make(argRegistry)}
 
 	// Create a value that implements the error handler interface
@@ -230,7 +230,7 @@ func TestStructPages_asHandler_serveHTTPWithError(t *testing.T) {
 		Value: reflect.ValueOf(page),
 	}
 
-	handler := router.asHandler(pc, pn)
+	handler := sp.asHandler(pc, pn)
 	if handler == nil {
 		t.Fatal("Expected handler")
 	}
@@ -246,7 +246,7 @@ func TestStructPages_asHandler_serveHTTPWithError(t *testing.T) {
 
 // Test asHandler with extended ServeHTTP that has extra parameters and returns values
 func TestStructPages_asHandler_extendedServeHTTPWithReturnValues(t *testing.T) {
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
 	pc := &parseContext{
 		args: make(argRegistry),
 	}
@@ -258,7 +258,7 @@ func TestStructPages_asHandler_extendedServeHTTPWithReturnValues(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithExtendedServeHTTP{}),
 	}
 
-	handler := router.asHandler(pc, pn)
+	handler := sp.asHandler(pc, pn)
 	if handler == nil {
 		t.Fatal("Expected handler")
 	}
@@ -274,7 +274,7 @@ func TestStructPages_asHandler_extendedServeHTTPWithReturnValues(t *testing.T) {
 
 // Test asHandler with extended ServeHTTP that returns an error
 func TestStructPages_asHandler_extendedServeHTTPReturnsError(t *testing.T) {
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
 	pc := &parseContext{
 		args: make(argRegistry),
 	}
@@ -285,7 +285,7 @@ func TestStructPages_asHandler_extendedServeHTTPReturnsError(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithExtendedServeHTTPError{}),
 	}
 
-	handler := router.asHandler(pc, pn)
+	handler := sp.asHandler(pc, pn)
 	if handler == nil {
 		t.Fatal("Expected handler")
 	}
@@ -307,7 +307,7 @@ func (p pageWithValueReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 // Test more edge cases for asHandler
 func TestStructPages_asHandler_moreEdgeCases(t *testing.T) {
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
 	pc := &parseContext{args: make(argRegistry)}
 
 	// Test with non-pointer receiver ServeHTTP
@@ -316,7 +316,7 @@ func TestStructPages_asHandler_moreEdgeCases(t *testing.T) {
 		Value: reflect.ValueOf(pageWithValueReceiver{}),
 	}
 
-	handler := router.asHandler(pc, pn)
+	handler := sp.asHandler(pc, pn)
 	if handler == nil {
 		t.Fatal("Expected handler for value receiver")
 	}
@@ -338,7 +338,7 @@ func (p *pageWithExtendedNoReturn) ServeHTTP(w http.ResponseWriter, r *http.Requ
 
 // Test extended ServeHTTP with no return values
 func TestStructPages_asHandler_extendedServeHTTPNoReturn(t *testing.T) {
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
 	pc := &parseContext{
 		args: make(argRegistry),
 	}
@@ -349,7 +349,7 @@ func TestStructPages_asHandler_extendedServeHTTPNoReturn(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithExtendedNoReturn{}),
 	}
 
-	handler := router.asHandler(pc, pn)
+	handler := sp.asHandler(pc, pn)
 	if handler == nil {
 		t.Fatal("Expected handler")
 	}

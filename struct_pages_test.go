@@ -1261,6 +1261,42 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 	}
 }
 
+// Test handleRenderComponentError with args provided to RenderComponent
+func TestHandleRenderComponentError_WithArgs(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Trigger component render with args
+	err = RenderComponent(argsComponentTestPage.ComponentWithArgs, "arg1", 42)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Should have successfully rendered the component with args
+	result := rec.Body.String()
+	if !strings.Contains(result, "arg1") || !strings.Contains(result, "42") {
+		t.Errorf("Expected component to render with args, got: %s", result)
+	}
+}
+
+type argsComponentTestPage struct{}
+
+func (argsComponentTestPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (argsComponentTestPage) ComponentWithArgs(s string, i int) component {
+	return testComponent{fmt.Sprintf("component: %s, %d", s, i)}
+}
+
 // Test Props method that returns error
 func TestExecProps_PropsError(t *testing.T) {
 	mux := http.NewServeMux()
