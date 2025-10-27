@@ -379,6 +379,119 @@ func TestURLFor_notFound(t *testing.T) {
 	}
 }
 
+// Test types for URLFor with Ref
+type homePageRef struct{}
+type userPageRef struct{}
+type productPageRef struct{}
+
+func (homePageRef) Page() component    { return testComponent{"home"} }
+func (userPageRef) Page() component    { return testComponent{"user"} }
+func (productPageRef) Page() component { return testComponent{"product"} }
+
+// Test URLFor with Ref type for dynamic page references
+func TestURLFor_withRef(t *testing.T) {
+	type testPages struct {
+		home    homePageRef    `route:"/ Home"`
+		user    userPageRef    `route:"/user User"`
+		product productPageRef `route:"/product/{id} Product"`
+	}
+
+	// Parse the page tree
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	t.Run("Ref by page name", func(t *testing.T) {
+		url, err := URLFor(ctx, Ref("home"))
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/" {
+			t.Errorf("URLFor() = %q, want %q", url, "/")
+		}
+
+		url, err = URLFor(ctx, Ref("user"))
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/user" {
+			t.Errorf("URLFor() = %q, want %q", url, "/user")
+		}
+	})
+
+	t.Run("Ref by route", func(t *testing.T) {
+		url, err := URLFor(ctx, Ref("/"))
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/" {
+			t.Errorf("URLFor() = %q, want %q", url, "/")
+		}
+
+		url, err = URLFor(ctx, Ref("/user"))
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/user" {
+			t.Errorf("URLFor() = %q, want %q", url, "/user")
+		}
+	})
+
+	t.Run("Ref with path parameters", func(t *testing.T) {
+		url, err := URLFor(ctx, Ref("product"), "123")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/product/123" {
+			t.Errorf("URLFor() = %q, want %q", url, "/product/123")
+		}
+
+		// Using route reference
+		url, err = URLFor(ctx, Ref("/product/{id}"), "456")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/product/456" {
+			t.Errorf("URLFor() = %q, want %q", url, "/product/456")
+		}
+	})
+
+	t.Run("Ref with []any for composition", func(t *testing.T) {
+		url, err := URLFor(ctx, []any{Ref("user"), "?tab=profile"})
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/user?tab=profile" {
+			t.Errorf("URLFor() = %q, want %q", url, "/user?tab=profile")
+		}
+	})
+
+	t.Run("Ref error - page not found by name", func(t *testing.T) {
+		_, err := URLFor(ctx, Ref("NonExistentPage"))
+		if err == nil {
+			t.Error("Expected error for non-existent page name")
+		}
+		expectedMsg := `no page found with name "NonExistentPage"`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("Ref error - page not found by route", func(t *testing.T) {
+		_, err := URLFor(ctx, Ref("/nonexistent"))
+		if err == nil {
+			t.Error("Expected error for non-existent route")
+		}
+		expectedMsg := `no page found with route "/nonexistent"`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+		}
+	})
+}
+
 // Test page for wildcard routes
 type fileServer struct{}
 

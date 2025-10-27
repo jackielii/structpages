@@ -14,6 +14,37 @@ import (
 // implementing conditional rendering or redirects within page logic.
 var ErrSkipPageRender = errors.New("skip page render")
 
+// Ref represents a dynamic reference to a page or method by name.
+// Use it when static type references aren't available (e.g., configuration-driven
+// menus, generic components, or code generation scenarios).
+//
+// For URLFor, the string can be:
+//   - Page name: Ref("UserManagement")
+//   - Route path: Ref("/user/management") - must start with /
+//
+// For IDFor, the string can be:
+//   - Qualified method: Ref("PageName.MethodName")
+//   - Simple method: Ref("MethodName") - must be unambiguous across all pages
+//
+// Both URLFor and IDFor return descriptive errors if the reference is invalid,
+// providing runtime safety for dynamic references.
+//
+// Example usage:
+//
+//	// Dynamic menu from configuration
+//	menuItems := []struct{ Page Ref; Label string }{
+//	    {Ref("HomePage"), "Home"},
+//	    {Ref("UserManagement"), "Users"},
+//	}
+//	for _, item := range menuItems {
+//	    url, err := URLFor(ctx, item.Page)
+//	    // Handle error if page doesn't exist
+//	}
+//
+//	// Dynamic component reference
+//	targetID, err := IDFor(ctx, Ref("UserManagement.UserList"))
+type Ref string
+
 // RenderTarget contains information about which component will be rendered.
 // It's available to Props methods via dependency injection, allowing Props to
 // load only the data needed for the target component.

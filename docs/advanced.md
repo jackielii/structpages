@@ -162,3 +162,154 @@ func (p protectedPages) Middlewares(sm *SessionManager) []structpages.Middleware
         },
     }
 }
+```
+
+### Dynamic References with Ref
+
+The `Ref` type enables dynamic references to pages and methods when static type references aren't available. This is useful for configuration-driven menus, generic components, and scenarios where page or method names are determined at runtime.
+
+#### URLFor with Ref
+
+Use `Ref` to reference pages dynamically:
+
+```go
+// Reference by page name (struct field name)
+url, err := URLFor(ctx, Ref("homePage"))
+// → "/"
+
+// Reference by route path (must start with /)
+url, err := URLFor(ctx, Ref("/user/settings"))
+// → "/user/settings"
+
+// With path parameters
+url, err := URLFor(ctx, Ref("productPage"), "123")
+// → "/product/123"
+
+// Compose with literals
+url, err := URLFor(ctx, []any{Ref("userPage"), "?tab=profile"})
+// → "/user?tab=profile"
+```
+
+**Matching rules for URLFor:**
+- If `Ref` starts with `/`, matches by full route
+- Otherwise, matches by page name (the struct field name)
+- Returns error if no match found
+
+**Example: Dynamic Menu**
+
+```go
+type MenuItem struct {
+    PageRef Ref
+    Label   string
+}
+
+var menu = []MenuItem{
+    {Ref("home"), "Home"},
+    {Ref("users"), "Users"},
+    {Ref("settings"), "Settings"},
+}
+
+templ Navigation(ctx context.Context) {
+    <nav>
+        for _, item := range menu {
+            <a href={ URLFor(ctx, item.PageRef) }>{ item.Label }</a>
+        }
+    </nav>
+}
+```
+
+#### IDFor with Ref
+
+Use `Ref` to reference component methods dynamically:
+
+```go
+// Qualified reference (PageName.MethodName)
+id, err := IDFor(ctx, Ref("userPage.UserList"))
+// → "#user-page-user-list"
+
+// Simple method name (must be unambiguous)
+id, err := IDFor(ctx, Ref("UserList"))
+// → "#user-page-user-list" (if only one page has UserList)
+
+// With IDParams for suffixes and raw IDs
+id, err := IDFor(ctx, IDParams{
+    Method:   Ref("userPage.UserModal"),
+    Suffixes: []string{"container"},
+    RawID:    true,
+})
+// → "user-page-user-modal-container"
+```
+
+**Matching rules for IDFor:**
+- If `Ref` contains `.`, splits into `PageName.MethodName` (qualified)
+- Otherwise, searches all pages for the method name
+  - If found on one page, returns that page's ID
+  - If found on multiple pages, returns error with helpful message
+- Verifies method exists on resolved page
+- Returns error if not found
+
+**Example: Configuration-Driven Form**
+
+```go
+type FormConfig struct {
+    ActionPage      string  // From config file
+    TargetComponent string  // From config file
+}
+
+templ DynamicForm(ctx context.Context, config FormConfig) {
+    @{
+        actionURL, _ := URLFor(ctx, Ref(config.ActionPage))
+        targetID, _ := IDFor(ctx, Ref(config.TargetComponent))
+    }
+    <form hx-post={ actionURL } hx-target={ targetID }>
+        <button>Submit</button>
+    </form>
+}
+```
+
+#### Error Handling
+
+Both URLFor and IDFor with `Ref` return descriptive errors for runtime safety:
+
+```go
+// Page not found by name
+url, err := URLFor(ctx, Ref("NonExistentPage"))
+// Error: "no page found with name \"NonExistentPage\""
+
+// Page not found by route
+url, err := URLFor(ctx, Ref("/bad/route"))
+// Error: "no page found with route \"/bad/route\""
+
+// Method not found
+id, err := IDFor(ctx, Ref("NonExistentMethod"))
+// Error: "method \"NonExistentMethod\" not found on any page"
+
+// Ambiguous method (exists on multiple pages)
+id, err := IDFor(ctx, Ref("UserList"))
+// Error: "method \"UserList\" found on multiple pages: userPage, adminPage.
+//         Use qualified name like \"userPage.UserList\""
+
+// Method not on specified page
+id, err := IDFor(ctx, Ref("userPage.AdminSettings"))
+// Error: "method \"AdminSettings\" not found on page \"userPage\""
+```
+
+**Testing Dynamic References**
+
+```go
+func TestMenuReferences(t *testing.T) {
+    // Mount pages
+    mux := http.NewServeMux()
+    sp, _ := structpages.Mount(mux, &pages{}, "/", "App")
+
+    // Get context with parseContext
+    ctx := sp.Context()
+
+    // Verify all menu items reference valid pages
+    for _, item := range menu {
+        _, err := structpages.URLFor(ctx, item.PageRef)
+        if err != nil {
+            t.Errorf("Invalid menu item %s: %v", item.Label, err)
+        }
+    }
+}

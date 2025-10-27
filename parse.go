@@ -309,13 +309,22 @@ func (p *parseContext) urlFor(v any) (string, error) {
 }
 
 func (p *parseContext) findPageNode(v any) (*PageNode, error) {
+	// Handle Ref type for dynamic page references
+	if ref, ok := v.(Ref); ok {
+		return p.findPageNodeByRef(string(ref))
+	}
+
+	// Handle predicate function for custom matching
 	if f, ok := v.(func(*PageNode) bool); ok {
 		for node := range p.root.All() {
 			if f(node) {
 				return node, nil
 			}
 		}
+		return nil, fmt.Errorf("no page matched the provided predicate function")
 	}
+
+	// Handle static type reference
 	ptv := pointerType(reflect.TypeOf(v))
 	for node := range p.root.All() {
 		pt := pointerType(node.Value.Type())
@@ -323,7 +332,29 @@ func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 			return node, nil
 		}
 	}
-	return nil, fmt.Errorf("findPageNode: no page node found for %s", ptv.String())
+	return nil, fmt.Errorf("no page node found for type %s", ptv.String())
+}
+
+// findPageNodeByRef finds a page node by name or route from a Ref string.
+// If the ref starts with "/", it matches by route; otherwise by page name.
+func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
+	if strings.HasPrefix(ref, "/") {
+		// Match by route
+		for node := range p.root.All() {
+			if node.FullRoute() == ref {
+				return node, nil
+			}
+		}
+		return nil, fmt.Errorf("no page found with route %q", ref)
+	}
+
+	// Match by page name
+	for node := range p.root.All() {
+		if node.Name == ref {
+			return node, nil
+		}
+	}
+	return nil, fmt.Errorf("no page found with name %q", ref)
 }
 
 func pointerType(v reflect.Type) reflect.Type {
