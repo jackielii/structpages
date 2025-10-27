@@ -1,6 +1,7 @@
 package structpages
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -211,7 +212,7 @@ func (r *StructPages) URLFor(page any, args ...any) (string, error) {
 			pattern += p
 		}
 	}
-	path, err := formatPathSegmentsNoCtx(pattern, args...)
+	path, err := formatPathSegments(context.Background(), pattern, args...)
 	if err != nil {
 		return "", fmt.Errorf("urlfor: %w", err)
 	}
