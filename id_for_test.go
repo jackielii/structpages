@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -467,6 +468,95 @@ func TestIDFor_withRef(t *testing.T) {
 		expectedMsg := `method "GroupList" not found on page "adminManagement"`
 		if !strings.Contains(err.Error(), expectedMsg) {
 			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+		}
+	})
+}
+
+// TestExtractMethodName tests the extractMethodName helper function
+func TestExtractMethodName(t *testing.T) {
+	t.Run("valid method expression", func(t *testing.T) {
+		name := extractMethodName(TeamManagementViewTest.UserList)
+		if name != "UserList" {
+			t.Errorf("extractMethodName() = %q, want %q", name, "UserList")
+		}
+	})
+
+	t.Run("non-function returns empty string", func(t *testing.T) {
+		name := extractMethodName("not a function")
+		if name != "" {
+			t.Errorf("extractMethodName() = %q, want empty string", name)
+		}
+
+		name = extractMethodName(123)
+		if name != "" {
+			t.Errorf("extractMethodName() = %q, want empty string", name)
+		}
+
+		name = extractMethodName(nil)
+		if name != "" {
+			t.Errorf("extractMethodName() = %q, want empty string", name)
+		}
+	})
+
+	t.Run("method with -fm suffix", func(t *testing.T) {
+		// Method values (bound methods) have "-fm" suffix internally
+		// extractMethodName should strip it
+		method := TeamManagementViewTest{}.UserList
+		name := extractMethodName(method)
+		if name != "UserList" {
+			t.Errorf("extractMethodName() = %q, want %q", name, "UserList")
+		}
+	})
+}
+
+// TestExtractReceiverType tests the extractReceiverType helper function
+func TestExtractReceiverType(t *testing.T) {
+	t.Run("valid method expression", func(t *testing.T) {
+		receiverType := extractReceiverType(TeamManagementViewTest.UserList)
+		if receiverType == nil {
+			t.Fatal("extractReceiverType() returned nil")
+		}
+		expectedType := reflect.TypeOf(TeamManagementViewTest{})
+		if receiverType != expectedType {
+			t.Errorf("extractReceiverType() = %v, want %v", receiverType, expectedType)
+		}
+	})
+
+	t.Run("non-function returns nil", func(t *testing.T) {
+		receiverType := extractReceiverType("not a function")
+		if receiverType != nil {
+			t.Errorf("extractReceiverType() = %v, want nil", receiverType)
+		}
+
+		receiverType = extractReceiverType(123)
+		if receiverType != nil {
+			t.Errorf("extractReceiverType() = %v, want nil", receiverType)
+		}
+
+		receiverType = extractReceiverType(nil)
+		if receiverType != nil {
+			t.Errorf("extractReceiverType() = %v, want nil", receiverType)
+		}
+	})
+
+	t.Run("normalizes pointer to value type", func(t *testing.T) {
+		// Test that pointer receiver is normalized to value type
+		receiverType := extractReceiverType((*TeamManagementViewTest).UserList)
+		if receiverType == nil {
+			t.Fatal("extractReceiverType() returned nil")
+		}
+		expectedType := reflect.TypeOf(TeamManagementViewTest{})
+		if receiverType != expectedType {
+			t.Errorf("extractReceiverType() = %v, want %v (should normalize pointer)", receiverType, expectedType)
+		}
+	})
+
+	t.Run("function with no parameters returns nil", func(t *testing.T) {
+		// Create a function with no parameters
+		noParamFunc := func() {}
+		receiverType := extractReceiverType(noParamFunc)
+		if receiverType != nil {
+			t.Errorf("extractReceiverType() = %v, want nil for function with no parameters", receiverType)
 		}
 	})
 }
