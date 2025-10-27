@@ -26,6 +26,14 @@ func (t testComponent) Render(ctx context.Context, w io.Writer) error {
 	return err
 }
 
+type errComponent struct {
+	err error
+}
+
+func (e errComponent) Render(ctx context.Context, w io.Writer) error {
+	return e.err
+}
+
 type TestHandlerPage struct{}
 
 func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -1205,8 +1213,8 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
 
-	// Trigger component error
-	err = RenderComponent(errorComponentPage.ErrorComponent, true)
+	// Trigger component render error
+	err = RenderComponent(errorComponentPage.ErrorComponent)
 	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
 
 	if !handled {
