@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jackielii/ctxkey"
@@ -15,6 +16,22 @@ var (
 	pcCtx        = ctxkey.New[*parseContext]("structpages.parseContext", nil)
 	urlParamsCtx = ctxkey.New[map[string]string]("structpages.urlParams", nil)
 )
+
+// encodePathSegment converts a value to string and URL-encodes it for use in path segments.
+// For wildcard segments ({path...}), slashes are preserved as they're part of the path.
+func encodePathSegment(value any, isWildcard bool) string {
+	s := fmt.Sprint(value)
+	if isWildcard {
+		// For wildcards, split on slashes, escape each part, then rejoin
+		// This preserves slashes while properly encoding each path segment
+		parts := strings.Split(s, "/")
+		for i, part := range parts {
+			parts[i] = url.PathEscape(part)
+		}
+		return strings.Join(parts, "/")
+	}
+	return url.PathEscape(s)
+}
 
 func withPcCtx(pc *parseContext) MiddlewareFunc {
 	return func(next http.Handler, node *PageNode) http.Handler {
@@ -162,7 +179,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := arg[name]; ok {
-				segments[idx].value = fmt.Sprint(value)
+				segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
 			}
 			// If value not in args map, it should keep the pre-filled value from context
 		}
@@ -178,7 +195,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 		case len(args) == len(indicies):
 			for i, idx := range indicies {
 				// Always override with provided args when count matches exactly
-				segments[idx].value = fmt.Sprint(args[i])
+				segments[idx].value = encodePathSegment(args[i], segments[idx].wildcard)
 			}
 		case len(args)%2 == 0 && len(args) >= 2:
 			// Check if all even-indexed args are strings AND at least one matches a parameter name
@@ -211,7 +228,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				for _, idx := range indicies {
 					name := segments[idx].name
 					if value, ok := m[name]; ok {
-						segments[idx].value = fmt.Sprint(value)
+						segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
 					} else if segments[idx].value == "" {
 						// Only error if no value from context either
 						return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
@@ -236,7 +253,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			argIdx := 0
 			for _, idx := range indicies {
 				if segments[idx].value == "" && argIdx < len(args) {
-					segments[idx].value = fmt.Sprint(args[argIdx])
+					segments[idx].value = encodePathSegment(args[argIdx], segments[idx].wildcard)
 					argIdx++
 				}
 			}
@@ -252,9 +269,10 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 }
 
 type segment struct {
-	name  string
-	param bool
-	value string
+	name     string
+	param    bool
+	wildcard bool
+	value    string
 }
 
 func parseSegments(pattern string) (segments []segment, err error) {
@@ -285,8 +303,9 @@ func parseSegments(pattern string) (segments []segment, err error) {
 			segments = append(segments, segment{name: "{$}"})
 			continue
 		}
+		wildcard := strings.HasSuffix(name, "...")
 		name = strings.TrimSuffix(name, "...")
-		segments = append(segments, segment{name: name, param: true})
+		segments = append(segments, segment{name: name, param: true, wildcard: wildcard})
 	}
 	return segments, nil
 }

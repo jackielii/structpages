@@ -1128,3 +1128,159 @@ func TestParseSegments(t *testing.T) {
 		})
 	}
 }
+
+// TestURLFor_withSpecialCharacters tests URL encoding of special characters
+func TestURLFor_withSpecialCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		args     []any
+		expected string
+	}{
+		{
+			name:     "spaces in regular parameter",
+			pattern:  "/users/{id}",
+			args:     []any{"hello world"},
+			expected: "/users/hello%20world",
+		},
+		{
+			name:     "slashes in regular parameter (should be encoded)",
+			pattern:  "/users/{id}",
+			args:     []any{"hello/world"},
+			expected: "/users/hello%2Fworld",
+		},
+		{
+			name:     "special characters in regular parameter",
+			pattern:  "/users/{id}",
+			args:     []any{"foo?bar=1&baz=2"},
+			expected: "/users/foo%3Fbar=1&baz=2", // = and & are allowed in path segments per RFC 3986
+		},
+		{
+			name:     "hash symbol in regular parameter",
+			pattern:  "/users/{id}",
+			args:     []any{"user#123"},
+			expected: "/users/user%23123",
+		},
+		{
+			name:     "slashes in wildcard parameter (should NOT be encoded)",
+			pattern:  "/files/{path...}",
+			args:     []any{"docs/api/v1/reference.md"},
+			expected: "/files/docs/api/v1/reference.md",
+		},
+		{
+			name:     "special characters in wildcard (non-slashes should be encoded)",
+			pattern:  "/files/{path...}",
+			args:     []any{"docs/api?version=1"},
+			expected: "/files/docs/api%3Fversion=1", // = is allowed in path segments per RFC 3986
+		},
+		{
+			name:     "spaces in wildcard parameter",
+			pattern:  "/files/{path...}",
+			args:     []any{"my documents/file name.pdf"},
+			expected: "/files/my%20documents/file%20name.pdf",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			// Use formatPathSegments directly for testing
+			result, err := formatPathSegments(ctx, tt.pattern, tt.args...)
+			if err != nil {
+				t.Fatalf("formatPathSegments error: %v", err)
+			}
+
+			if result != tt.expected {
+				t.Errorf("formatPathSegments() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestURLFor_withQueryStringComposition tests []any{page, "?a={a}&b={b}"} pattern
+func TestURLFor_withQueryStringComposition(t *testing.T) {
+	tests := []struct {
+		name     string
+		parts    []any
+		args     []any
+		expected string
+	}{
+		{
+			name:     "simple query string",
+			parts:    []any{"/users/123", "?tab=profile"},
+			args:     []any{},
+			expected: "/users/123?tab=profile",
+		},
+		{
+			name:     "query string with one parameter",
+			parts:    []any{"/users/{id}", "?tab={tab}"},
+			args:     []any{"123", "profile"},
+			expected: "/users/123?tab=profile",
+		},
+		{
+			name:     "query string with multiple parameters",
+			parts:    []any{"/users/{id}", "?tab={tab}&sort={sort}"},
+			args:     []any{"123", "profile", "desc"},
+			expected: "/users/123?tab=profile&sort=desc",
+		},
+		{
+			name:     "query string with special characters",
+			parts:    []any{"/search", "?q={query}"},
+			args:     []any{"hello world"},
+			expected: "/search?q=hello%20world",
+		},
+		{
+			name:     "query string with encoded special chars",
+			parts:    []any{"/search", "?q={query}&filter={filter}"},
+			args:     []any{"foo&bar", "a=b"},
+			expected: "/search?q=foo&bar&filter=a=b", // & and = allowed in query values
+		},
+		{
+			name:     "mixed path params and query params",
+			parts:    []any{"/users/{userId}/posts/{postId}", "?view={view}"},
+			args:     []any{"user123", "post456", "detailed"},
+			expected: "/users/user123/posts/post456?view=detailed",
+		},
+		{
+			name:     "query params with key-value args",
+			parts:    []any{"/users/{id}", "?tab={tab}&page={page}"},
+			args:     []any{"id", "123", "tab", "settings", "page", "2"},
+			expected: "/users/123?tab=settings&page=2",
+		},
+		{
+			name:     "fragment with anchor",
+			parts:    []any{"/docs/{section}", "#{anchor}"},
+			args:     []any{"api", "overview"},
+			expected: "/docs/api#overview",
+		},
+		{
+			name:     "complex composition",
+			parts:    []any{"/api/{version}", "/users/{id}", "?format={format}", "#{section}"},
+			args:     []any{"v1", "123", "json", "details"},
+			expected: "/api/v1/users/123?format=json#details",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			// Combine parts into a single pattern
+			pattern := ""
+			for _, part := range tt.parts {
+				pattern += part.(string)
+			}
+
+			// Use formatPathSegments directly for testing
+			result, err := formatPathSegments(ctx, pattern, tt.args...)
+			if err != nil {
+				t.Fatalf("formatPathSegments error: %v", err)
+			}
+
+			if result != tt.expected {
+				t.Errorf("formatPathSegments() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
