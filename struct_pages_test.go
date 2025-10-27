@@ -849,3 +849,184 @@ func TestWithWarnEmptyRoute_DefaultWarning(t *testing.T) {
 		t.Errorf("Expected default warning message containing %q, got %q", expectedPrefix, outputStr)
 	}
 }
+
+// Test types for URLFor wrapper test
+type homePageURLFor struct{}
+
+func (homePageURLFor) Page() component { return testComponent{"home"} }
+
+type userPageURLFor struct{}
+
+func (userPageURLFor) Page() component { return testComponent{"user"} }
+
+// TestStructPages_URLFor tests the StructPages.URLFor wrapper method
+func TestStructPages_URLFor(t *testing.T) {
+	type pages struct {
+		home homePageURLFor `route:"/ Home"`
+		user userPageURLFor `route:"/user/{id} User"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	t.Run("URLFor with static type reference", func(t *testing.T) {
+		url, err := sp.URLFor(homePageURLFor{})
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/" {
+			t.Errorf("URLFor() = %q, want %q", url, "/")
+		}
+	})
+
+	t.Run("URLFor with Ref", func(t *testing.T) {
+		url, err := sp.URLFor(Ref("user"), "123")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/user/123" {
+			t.Errorf("URLFor() = %q, want %q", url, "/user/123")
+		}
+	})
+
+	t.Run("URLFor with path parameters", func(t *testing.T) {
+		url, err := sp.URLFor(userPageURLFor{}, "456")
+		if err != nil {
+			t.Errorf("URLFor error: %v", err)
+		}
+		if url != "/user/456" {
+			t.Errorf("URLFor() = %q, want %q", url, "/user/456")
+		}
+	})
+}
+
+// Test types for IDFor wrapper test
+type testPageIDFor struct{}
+
+func (testPageIDFor) Page() component      { return testComponent{"page"} }
+func (testPageIDFor) UserList() component  { return testComponent{"userlist"} }
+func (testPageIDFor) UserModal() component { return testComponent{"usermodal"} }
+
+// TestStructPages_IDFor tests the StructPages.IDFor wrapper method
+func TestStructPages_IDFor(t *testing.T) {
+	type pages struct {
+		test testPageIDFor `route:"/ Test"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	t.Run("IDFor with method expression", func(t *testing.T) {
+		id, err := sp.IDFor(testPageIDFor.UserList)
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#test-user-list" {
+			t.Errorf("IDFor() = %q, want %q", id, "#test-user-list")
+		}
+	})
+
+	t.Run("IDFor with Ref", func(t *testing.T) {
+		id, err := sp.IDFor(Ref("test.UserModal"))
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#test-user-modal" {
+			t.Errorf("IDFor() = %q, want %q", id, "#test-user-modal")
+		}
+	})
+
+	t.Run("IDFor with IDParams", func(t *testing.T) {
+		id, err := sp.IDFor(IDParams{
+			Method:   testPageIDFor.UserList,
+			Suffixes: []string{"container"},
+			RawID:    true,
+		})
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "test-user-list-container" {
+			t.Errorf("IDFor() = %q, want %q", id, "test-user-list-container")
+		}
+	})
+}
+
+// Test type for Error test
+type testPageError struct{}
+
+func (testPageError) Component() component { return testComponent{"test"} }
+
+// TestErrRenderComponent_Error tests the Error method of errRenderComponent
+func TestErrRenderComponent_Error(t *testing.T) {
+	err := RenderComponent(testPageError.Component)
+	if err == nil {
+		t.Fatal("RenderComponent should return non-nil error")
+	}
+
+	expectedMsg := "should render component from method expression"
+	if err.Error() != expectedMsg {
+		t.Errorf("Error() = %q, want %q", err.Error(), expectedMsg)
+	}
+}
+
+// Test types for WithDefaultComponentSelector test
+type testPageSelector struct{}
+
+func (testPageSelector) Page() component    { return testComponent{"page"} }
+func (testPageSelector) Content() component { return testComponent{"content"} }
+
+// TestWithDefaultComponentSelector tests the WithDefaultComponentSelector option
+func TestWithDefaultComponentSelector(t *testing.T) {
+	type pages struct {
+		test testPageSelector `route:"/ Test"`
+	}
+
+	// Create selector that returns Content for HX-Request
+	selector := func(r *http.Request, pn *PageNode) (string, error) {
+		if r.Header.Get("HX-Request") == "true" {
+			return "Content", nil
+		}
+		return "Page", nil
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	t.Run("renders Content for HTMX request", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		rec := httptest.NewRecorder()
+
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if rec.Body.String() != "content" {
+			t.Errorf("Body = %q, want %q", rec.Body.String(), "content")
+		}
+	})
+
+	t.Run("renders Page for normal request", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", http.NoBody)
+		rec := httptest.NewRecorder()
+
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("Status = %d, want %d", rec.Code, http.StatusOK)
+		}
+		if rec.Body.String() != "page" {
+			t.Errorf("Body = %q, want %q", rec.Body.String(), "page")
+		}
+	})
+}

@@ -363,3 +363,43 @@ func (w *nonFlushingWriter) WriteHeader(status int) {
 func timeInFuture() time.Time {
 	return time.Now().Add(5 * time.Second)
 }
+
+// TestBufferedStatus tests the Status() method
+func TestBufferedStatus(t *testing.T) {
+	t.Run("returns default status when not set", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		bw := newBuffered(recorder)
+
+		// Status should return http.StatusOK (200) by default
+		if status := bw.Status(); status != http.StatusOK {
+			t.Errorf("Status() = %d, want %d", status, http.StatusOK)
+		}
+	})
+
+	t.Run("returns set status", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		bw := newBuffered(recorder)
+
+		// Set custom status
+		bw.WriteHeader(http.StatusCreated)
+
+		// Status should return the set status
+		if status := bw.Status(); status != http.StatusCreated {
+			t.Errorf("Status() = %d, want %d", status, http.StatusCreated)
+		}
+	})
+
+	t.Run("returns first status when set multiple times", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		bw := newBuffered(recorder)
+
+		// Set status multiple times
+		bw.WriteHeader(http.StatusCreated)
+		bw.WriteHeader(http.StatusBadRequest)
+
+		// Should return the first status (subsequent WriteHeaders are ignored)
+		if status := bw.Status(); status != http.StatusCreated {
+			t.Errorf("Status() = %d, want %d", status, http.StatusCreated)
+		}
+	})
+}
