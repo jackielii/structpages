@@ -48,24 +48,6 @@ func (wrongTypeMiddlewaresPage) Page() component { return nil }
 // Page with no handler and no children
 type noHandlerPage struct{}
 
-// Page with error-returning PageConfig
-type errorPageConfigPage struct{}
-
-func (errorPageConfigPage) PageConfig(r *http.Request) (string, error) {
-	return "", errors.New("pageconfig error")
-}
-
-func (errorPageConfigPage) Page() component { return nil }
-
-// Page with PageConfig returning unknown component
-type unknownComponentPage struct{}
-
-func (unknownComponentPage) PageConfig(r *http.Request) string {
-	return "UnknownComponent"
-}
-
-func (unknownComponentPage) Page() component { return nil }
-
 // Page with error-returning component
 type errorComponentPage struct{}
 
@@ -290,8 +272,6 @@ func TestFindComponent_NoPageComponent(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
-
-// Note: TestFindComponent_CallMethodError removed - PageConfig method support has been removed
 
 // Test extended handler without buffered writer that returns error
 type extendedNoReturnHandler struct{}
