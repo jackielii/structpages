@@ -23,7 +23,6 @@ func PrintRoutes(sb *strings.Builder) structpages.MiddlewareFunc {
 func main() {
 	var routes strings.Builder
 	sp := structpages.New(
-		structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
 		structpages.WithErrorHandler(errorHandler),
 		structpages.WithMiddlewares(PrintRoutes(&routes)),
 	)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"github.com/jackielii/structpages"
 	"net/http"
 	"strconv"
@@ -18,8 +17,8 @@ templ (p index) Page() {
 		<div class="todo-app">
 			<h1>TODO App</h1>
 			<form
-				hx-post={ urlFor(ctx, add{}) }
-				hx-target="#todo-list"
+				hx-post={ structpages.URLFor(ctx, add{}) }
+				hx-target={ structpages.IDFor(ctx, index.TodoList) }
 				hx-swap="innerHTML"
 				hx-on:htmx:after-request="this.reset()"
 			>
@@ -33,11 +32,15 @@ templ (p index) Page() {
 					<button type="submit">Add Todo</button>
 				</div>
 			</form>
-			<div id="todo-list">
-				@todoList()
+			<div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.TodoList, RawID: true}) }>
+				@p.TodoList()
 			</div>
 		</div>
 	}
+}
+
+templ (p index) TodoList() {
+	@todoList()
 }
 
 type add struct{}
@@ -49,8 +52,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 			addTodo(text)
 		}
 	}
-	templ.Handler(todoList()).ServeHTTP(w, r)
-	return nil
+	return structpages.RenderComponent(index.TodoList)
 }
 
 type toggle struct{}
@@ -63,8 +65,7 @@ func (t toggle) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "POST" {
 		toggleTodo(id)
 	}
-	templ.Handler(todoList()).ServeHTTP(w, r)
-	return nil
+	return structpages.RenderComponent(index.TodoList)
 }
 
 type deleteTodo struct{}
@@ -77,8 +78,7 @@ func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "DELETE" {
 		removeTodo(id)
 	}
-	templ.Handler(todoList()).ServeHTTP(w, r)
-	return nil
+	return structpages.RenderComponent(index.TodoList)
 }
 
 templ todoList() {
@@ -89,16 +89,16 @@ templ todoList() {
 					<input
 						type="checkbox"
 						checked?={ todo.Completed }
-						hx-post={ urlFor(ctx, toggle{}, "id", todo.ID) }
-						hx-target="#todo-list"
+						hx-post={ structpages.URLFor(ctx, toggle{}, "id", todo.ID) }
+						hx-target={ structpages.IDFor(ctx, index.TodoList) }
 						hx-swap="innerHTML"
 					/>
 					<span class="todo-text">{ todo.Text }</span>
 				</div>
 				<button
 					class="delete-btn"
-					hx-delete={ urlFor(ctx, deleteTodo{}, "id", todo.ID) }
-					hx-target="#todo-list"
+					hx-delete={ structpages.URLFor(ctx, deleteTodo{}, "id", todo.ID) }
+					hx-target={ structpages.IDFor(ctx, index.TodoList) }
 					hx-swap="innerHTML"
 					hx-confirm="Are you sure you want to delete this todo?"
 				>
@@ -230,10 +230,4 @@ templ errorPage(err error) {
 templ errorComp(err error) {
 	<h1>Error</h1>
 	<p>{ err.Error() }</p>
-}
-
-// We using a patched version of templ to generate, see: https://github.com/a-h/templ/pull/1171
-func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
-	s, err := structpages.URLFor(ctx, page, args...)
-	return templ.SafeURL(s), err
 }

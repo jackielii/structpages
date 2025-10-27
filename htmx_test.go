@@ -1,302 +1,218 @@
 package structpages
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
-func Test_mixedCase(t *testing.T) {
+func TestKebabToPascal(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		s    string
-		want string
+		input    string
+		expected string
 	}{
-		{
-			name: "Empty string",
-			s:    "",
-			want: "",
-		},
-		{
-			name: "Single word",
-			s:    "hello",
-			want: "Hello",
-		},
-		{
-			name: "Hyphenated words",
-			s:    "hello-world",
-			want: "HelloWorld",
-		},
-		{
-			name: "Mixed case with hyphens",
-			s:    "hello-World",
-			want: "HelloWorld",
-		},
-		{
-			name: "Multiple hyphenated words",
-			s:    "hello-world-example",
-			want: "HelloWorldExample",
-		},
-		{
-			name: "No hyphens, just spaces",
-			s:    "hello world",
-			want: "",
-		},
+		{"", ""},
+		{"content", "Content"},
+		{"todo-list", "TodoList"},
+		{"user-profile-settings", "UserProfileSettings"},
+		{"html-content", "HtmlContent"},
 	}
+
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := mixedCase(tt.s)
-			// Compare the result with expected value
-			if diff := cmp.Diff(got, tt.want); diff != "" {
-				t.Errorf("mixedCase() mismatch (-got +want):\n%s", diff)
+		t.Run(tt.input, func(t *testing.T) {
+			result := kebabToPascal(tt.input)
+			if result != tt.expected {
+				t.Errorf("kebabToPascal(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestHTMXPageRetargetMiddleware(t *testing.T) {
+func TestExtractComponentName(t *testing.T) {
 	tests := []struct {
-		name           string
-		headers        map[string]string
-		pageConfig     func(r *http.Request, pn *PageNode) (string, error)
-		pageNode       *PageNode
-		wantRetarget   bool
-		wantRetargetTo string
+		name     string
+		target   string
+		pageNode *PageNode
+		expected string
 	}{
 		{
-			name: "Non-HTMX request should not retarget",
-			headers: map[string]string{
-				"HX-Target": "content",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "Page", nil
-			},
-			pageNode:     &PageNode{},
-			wantRetarget: false,
+			name:     "simple component name",
+			target:   "content",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "Content",
 		},
 		{
-			name: "HTMX request with no HX-Target should not retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "Page", nil
-			},
-			pageNode:     &PageNode{},
-			wantRetarget: false,
+			name:     "with # prefix",
+			target:   "#content",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "Content",
 		},
 		{
-			name: "HTMX request targeting body should not retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "body",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "Page", nil
-			},
-			pageNode:     &PageNode{},
-			wantRetarget: false,
+			name:     "IDFor format - strips page prefix",
+			target:   "index-todo-list",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "TodoList",
 		},
 		{
-			name: "HTMX request with partial component should not retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "content",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "Content", nil
-			},
-			pageNode:     &PageNode{},
-			wantRetarget: false,
+			name:     "IDFor format with # - strips page prefix",
+			target:   "#index-todo-list",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "TodoList",
 		},
 		{
-			name: "HTMX request with target but page config returns Page should retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "content",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "Page", nil
-			},
-			pageNode:       &PageNode{},
-			wantRetarget:   true,
-			wantRetargetTo: "body",
+			name:     "multi-word page prefix",
+			target:   "user-profile-settings-form",
+			pageNode: &PageNode{Title: "UserProfile"},
+			expected: "SettingsForm",
 		},
 		{
-			name: "HTMX request with target but page config returns page (lowercase) should retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "sidebar",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "page", nil
-			},
-			pageNode:       &PageNode{},
-			wantRetarget:   true,
-			wantRetargetTo: "body",
+			name:     "empty target",
+			target:   "",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "",
 		},
 		{
-			name: "HTMX request with page config error should not retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "content",
-			},
-			pageConfig: func(r *http.Request, pn *PageNode) (string, error) {
-				return "", fmt.Errorf("config error")
-			},
-			pageNode:     &PageNode{},
-			wantRetarget: false,
+			name:     "target with spaces (invalid)",
+			target:   "todo list",
+			pageNode: &PageNode{Title: "Index"},
+			expected: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create middleware
-			middleware := HTMXPageRetargetMiddleware(tt.pageConfig)
+			result := extractComponentName(tt.target, tt.pageNode)
+			if result != tt.expected {
+				t.Errorf("extractComponentName(%q, %v) = %q, want %q",
+					tt.target, tt.pageNode.Title, result, tt.expected)
+			}
+		})
+	}
+}
 
-			// Create a test handler that does nothing
-			nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Empty handler for testing
-			})
+func TestHTMXPageConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		headers    map[string]string
+		pageNode   *PageNode
+		expected   string
+		shouldFail bool
+	}{
+		{
+			name:     "non-HTMX request returns Page",
+			headers:  map[string]string{},
+			pageNode: &PageNode{Title: "Index", Components: map[string]reflect.Method{}},
+			expected: "Page",
+		},
+		{
+			name: "HTMX request without target returns Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+			},
+			pageNode: &PageNode{Title: "Index", Components: map[string]reflect.Method{}},
+			expected: "Page",
+		},
+		{
+			name: "HTMX request with simple target",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "content",
+			},
+			pageNode: &PageNode{
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"Content": {},
+				},
+			},
+			expected: "Content",
+		},
+		{
+			name: "HTMX request with IDFor-generated target",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "index-todo-list",
+			},
+			pageNode: &PageNode{
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"TodoList": {},
+				},
+			},
+			expected: "TodoList",
+		},
+		{
+			name: "HTMX request with # prefix in target",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "#index-todo-list",
+			},
+			pageNode: &PageNode{
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"TodoList": {},
+				},
+			},
+			expected: "TodoList",
+		},
+		{
+			name: "HTMX request with non-existent component falls back to Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "index-nonexistent",
+			},
+			pageNode: &PageNode{
+				Title:      "Index",
+				Components: map[string]reflect.Method{},
+			},
+			expected: "Page",
+		},
+	}
 
-			// Apply middleware
-			handler := middleware(nextHandler, tt.pageNode)
-
-			// Create request with headers
-			req := httptest.NewRequest("GET", "/test", http.NoBody)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			for key, value := range tt.headers {
 				req.Header.Set(key, value)
 			}
 
-			// Create response recorder
-			rec := httptest.NewRecorder()
-
-			// Execute handler
-			handler.ServeHTTP(rec, req)
-
-			// Check if HX-Retarget header is set correctly
-			gotRetarget := rec.Header().Get("HX-Retarget")
-			if tt.wantRetarget {
-				if gotRetarget != tt.wantRetargetTo {
-					t.Errorf("Expected HX-Retarget header to be %q, got %q", tt.wantRetargetTo, gotRetarget)
-				}
-			} else {
-				if gotRetarget != "" {
-					t.Errorf("Expected no HX-Retarget header, but got %q", gotRetarget)
-				}
-			}
-		})
-	}
-}
-
-// testPageForRetarget is a test page with both Page and Content methods
-type testPageForRetarget struct{}
-
-func (p testPageForRetarget) Page() component {
-	return testComponent{content: "<html><body>Full Page</body></html>"}
-}
-
-func (p testPageForRetarget) Content() component {
-	return testComponent{content: "<div>Partial Content</div>"}
-}
-
-func TestHTMXPageRetargetMiddleware_Integration(t *testing.T) {
-	tests := []struct {
-		name          string
-		headers       map[string]string
-		useHTMXConfig bool
-		wantBody      string
-		wantRetarget  string
-	}{
-		{
-			name:          "Regular request should render full page",
-			headers:       map[string]string{},
-			useHTMXConfig: true,
-			wantBody:      "<html><body>Full Page</body></html>",
-			wantRetarget:  "",
-		},
-		{
-			name: "HTMX request with content target should render partial",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "content",
-			},
-			useHTMXConfig: true,
-			wantBody:      "<div>Partial Content</div>",
-			wantRetarget:  "",
-		},
-		{
-			name: "HTMX request with unknown target should render full page and retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "sidebar",
-			},
-			useHTMXConfig: true,
-			wantBody:      "<html><body>Full Page</body></html>",
-			wantRetarget:  "body",
-		},
-		{
-			name: "HTMX request targeting body should render full page without retarget",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "body",
-			},
-			useHTMXConfig: true,
-			wantBody:      "<html><body>Full Page</body></html>",
-			wantRetarget:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create StructPages with HTMXPageConfig and HTMXPageRetargetMiddleware
-			var sp *StructPages
-			if tt.useHTMXConfig {
-				sp = New(
-					WithDefaultPageConfig(HTMXPageConfig),
-					WithMiddlewares(HTMXPageRetargetMiddleware(HTMXPageConfig)),
-				)
-			} else {
-				sp = New()
-			}
-
-			// Create router
-			mux := http.NewServeMux()
-			router := NewRouter(mux)
-
-			// Mount the test page
-			testPage := testPageForRetarget{}
-			err := sp.MountPages(router, testPage, "/test", "Test Page")
+			result, err := HTMXPageConfig(req, tt.pageNode)
 			if err != nil {
-				t.Fatalf("Failed to handle pages: %v", err)
+				t.Errorf("HTMXPageConfig() unexpected error: %v", err)
+				return
 			}
 
-			// Create request
-			req := httptest.NewRequest("GET", "/test", http.NoBody)
-			for key, value := range tt.headers {
-				req.Header.Set(key, value)
-			}
-
-			// Create response recorder
-			rec := httptest.NewRecorder()
-
-			// Serve the request
-			mux.ServeHTTP(rec, req)
-
-			// Check response body
-			gotBody := rec.Body.String()
-			if gotBody != tt.wantBody {
-				t.Errorf("Expected body %q, got %q", tt.wantBody, gotBody)
-			}
-
-			// Check HX-Retarget header
-			gotRetarget := rec.Header().Get("HX-Retarget")
-			if gotRetarget != tt.wantRetarget {
-				t.Errorf("Expected HX-Retarget header %q, got %q", tt.wantRetarget, gotRetarget)
+			if result != tt.expected {
+				t.Errorf("HTMXPageConfig() = %q, want %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestHTMXPageConfig_Default(t *testing.T) {
+	// Test that HTMXPageConfig is the default component selector
+	sp := New()
+	if sp.defaultComponentSelector == nil {
+		t.Error("Expected default component selector to be set")
+	}
+
+	// Verify it behaves like HTMXPageConfig
+	pn := &PageNode{
+		Title: "Test",
+		Components: map[string]reflect.Method{
+			"Content": {},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "content")
+
+	result, err := sp.defaultComponentSelector(req, pn)
+	if err != nil {
+		t.Errorf("default component selector error: %v", err)
+	}
+	if result != "Content" {
+		t.Errorf("expected default selector to return Content, got %q", result)
 	}
 }

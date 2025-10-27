@@ -123,11 +123,11 @@ func (c complexErrorPage) WithHeaders() component {
 	return partialWriteWithHeadersErrorComponent{}
 }
 
-func (c complexErrorPage) PageConfig(r *http.Request) string {
+func (c complexErrorPage) Props(r *http.Request) error {
 	if r.URL.Query().Get("headers") == "true" {
-		return "WithHeaders"
+		return RenderComponent((*complexErrorPage).WithHeaders)
 	}
-	return "Page"
+	return nil
 }
 
 // Test various partial write scenarios
