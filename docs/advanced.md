@@ -77,18 +77,18 @@ type SessionManager struct {
 }
 
 // Pass services when mounting pages
-sp := structpages.New()
-r := structpages.NewRouter(http.NewServeMux())
+mux := http.NewServeMux()
 
 store := &Store{db: db}
 sessionManager := NewSessionManager()
 
-// Services are passed as additional arguments to MountPages
-if err := sp.MountPages(r, pages{}, "/", "My App", 
+// Services are passed as additional arguments to Mount
+sp, err := structpages.Mount(mux, pages{}, "/", "My App",
     store,           // Will be available in page & other methods
     sessionManager,  // Will be available in page & other methods
     logger,          // Any other dependencies
-); err != nil {
+)
+if err != nil {
     log.Fatal(err)
 }
 ```
@@ -97,10 +97,12 @@ if err := sp.MountPages(r, pages{}, "/", "My App",
 
 ```go
 // DON'T do this - will return an error for duplicate type
-if err := sp.MountPages(r, pages{}, "/", "My App", 
+mux := http.NewServeMux()
+_, err := structpages.Mount(mux, pages{}, "/", "My App",
     "api-key",      // First string
     "db-name",      // Second string - will cause error
-); err != nil {
+)
+if err != nil {
     // Error: duplicate type string in args registry
 }
 
@@ -108,10 +110,11 @@ if err := sp.MountPages(r, pages{}, "/", "My App",
 type APIKey string
 type DatabaseName string
 
-if err := sp.MountPages(r, pages{}, "/", "My App", 
+sp, err := structpages.Mount(mux, pages{}, "/", "My App",
     APIKey("your-api-key"),
     DatabaseName("mydb"),
-); err != nil {
+)
+if err != nil {
     log.Fatal(err)
 }
 

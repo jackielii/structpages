@@ -353,7 +353,8 @@ func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
 The default `HTMXPageConfig` works for most use cases, but you can customize the component selection logic if needed:
 
 ```go
-sp := structpages.New(
+mux := http.NewServeMux()
+sp, err := structpages.Mount(mux, pages{}, "/", "My App",
     structpages.WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
         // Your custom logic
         // For example, select based on custom headers, query params, etc.
@@ -363,6 +364,9 @@ sp := structpages.New(
         return "Page", nil
     }),
 )
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 **Key insight:** No matter how you configure component selection (whether using the default `HTMXPageConfig` or a custom selector), your Props method receives a `RenderTarget` that correctly identifies the selected component. Your Props code using `sel.Is(component)` remains the same and works with any component selection strategy.
