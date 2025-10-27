@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -328,6 +329,144 @@ func TestIDFor_RealWorldExamples(t *testing.T) {
 		if teamID == adminID {
 			t.Errorf("IDs should be different for same method on different pages: team=%q, admin=%q",
 				teamID, adminID)
+		}
+	})
+}
+
+// TestIDFor_withRef tests IDFor with Ref type for dynamic method references
+//
+//nolint:gocyclo // Test function with multiple subtests
+func TestIDFor_withRef(t *testing.T) {
+	// Set up page tree with multiple pages
+	type testPages struct {
+		teamManagement  TeamManagementViewTest  `route:"/team Team"`
+		adminManagement AdminManagementViewTest `route:"/admin Admin"`
+	}
+
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	t.Run("qualified reference - PageName.MethodName", func(t *testing.T) {
+		id, err := IDFor(ctx, Ref("teamManagement.UserList"))
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#team-management-user-list" {
+			t.Errorf("IDFor() = %q, want %q", id, "#team-management-user-list")
+		}
+
+		id, err = IDFor(ctx, Ref("teamManagement.GroupModal"))
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#team-management-group-modal" {
+			t.Errorf("IDFor() = %q, want %q", id, "#team-management-group-modal")
+		}
+	})
+
+	t.Run("simple method name - unambiguous", func(t *testing.T) {
+		// GroupList only exists on TeamManagementViewTest
+		id, err := IDFor(ctx, Ref("GroupList"))
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#team-management-group-list" {
+			t.Errorf("IDFor() = %q, want %q", id, "#team-management-group-list")
+		}
+	})
+
+	t.Run("Ref with IDParams - qualified", func(t *testing.T) {
+		id, err := IDFor(ctx, IDParams{
+			Method:   Ref("teamManagement.UserModal"),
+			Suffixes: []string{"container"},
+		})
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "#team-management-user-modal-container" {
+			t.Errorf("IDFor() = %q, want %q", id, "#team-management-user-modal-container")
+		}
+	})
+
+	t.Run("Ref with IDParams - RawID", func(t *testing.T) {
+		id, err := IDFor(ctx, IDParams{
+			Method: Ref("teamManagement.GroupSearch"),
+			RawID:  true,
+		})
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "team-management-group-search" {
+			t.Errorf("IDFor() = %q, want %q", id, "team-management-group-search")
+		}
+	})
+
+	t.Run("Ref with IDParams - suffixes and RawID", func(t *testing.T) {
+		id, err := IDFor(ctx, IDParams{
+			Method:   Ref("teamManagement.UserSearch"),
+			Suffixes: []string{"input", "field"},
+			RawID:    true,
+		})
+		if err != nil {
+			t.Errorf("IDFor error: %v", err)
+		}
+		if id != "team-management-user-search-input-field" {
+			t.Errorf("IDFor() = %q, want %q", id, "team-management-user-search-input-field")
+		}
+	})
+
+	t.Run("error - ambiguous method name", func(t *testing.T) {
+		// UserList exists on both TeamManagementViewTest and AdminManagementViewTest
+		_, err := IDFor(ctx, Ref("UserList"))
+		if err == nil {
+			t.Error("Expected error for ambiguous method name")
+		}
+		// Should suggest using qualified name
+		expectedSubstr := "found on multiple pages"
+		if !strings.Contains(err.Error(), expectedSubstr) {
+			t.Errorf("Expected error to contain %q, got %q", expectedSubstr, err.Error())
+		}
+		// Should list the pages (using field names)
+		if !strings.Contains(err.Error(), "teamManagement") || !strings.Contains(err.Error(), "adminManagement") {
+			t.Errorf("Expected error to list both pages, got %q", err.Error())
+		}
+	})
+
+	t.Run("error - method not found", func(t *testing.T) {
+		_, err := IDFor(ctx, Ref("NonExistentMethod"))
+		if err == nil {
+			t.Error("Expected error for non-existent method")
+		}
+		expectedMsg := `method "NonExistentMethod" not found on any page`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("error - page not found", func(t *testing.T) {
+		_, err := IDFor(ctx, Ref("NonExistentPage.UserList"))
+		if err == nil {
+			t.Error("Expected error for non-existent page")
+		}
+		expectedMsg := `no page found with name "NonExistentPage"`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+		}
+	})
+
+	t.Run("error - method not on specified page", func(t *testing.T) {
+		// GroupList doesn't exist on adminManagement page
+		_, err := IDFor(ctx, Ref("adminManagement.GroupList"))
+		if err == nil {
+			t.Error("Expected error for method not on page")
+		}
+		expectedMsg := `method "GroupList" not found on page "adminManagement"`
+		if !strings.Contains(err.Error(), expectedMsg) {
+			t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
 		}
 	})
 }

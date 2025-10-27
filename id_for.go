@@ -87,6 +87,11 @@ func IDFor(ctx context.Context, v any) (string, error) {
 		methodExpr = v
 	}
 
+	// Handle Ref type for dynamic method references
+	if ref, ok := methodExpr.(Ref); ok {
+		return idForRef(pc, string(ref), suffixes, rawID)
+	}
+
 	// Extract method and receiver info
 	methodName := extractMethodName(methodExpr)
 	if methodName == "" {
@@ -104,19 +109,8 @@ func IDFor(ctx context.Context, v any) (string, error) {
 		return "", fmt.Errorf("cannot find page for method expression: %w", err)
 	}
 
-	// Build ID with page name prefix for conflict prevention
-	id := camelToKebab(pn.Name) + "-" + camelToKebab(methodName)
-
-	// Append suffixes if provided
-	for _, suffix := range suffixes {
-		id += "-" + camelToKebab(suffix)
-	}
-
-	// Prepend "#" unless RawID requested
-	if !rawID {
-		id = "#" + id
-	}
-
+	// Build ID
+	id := buildID(pn.Name, methodName, suffixes, rawID)
 	return id, nil
 }
 
@@ -194,4 +188,77 @@ func extractReceiverType(methodExpr any) reflect.Type {
 	}
 
 	return receiverType
+}
+
+// idForRef handles dynamic method references using the Ref type.
+// It supports both qualified references (PageName.MethodName) and simple method names.
+func idForRef(pc *parseContext, ref string, suffixes []string, rawID bool) (string, error) {
+	var pageName, methodName string
+
+	// Check if qualified reference (PageName.MethodName)
+	if idx := strings.Index(ref, "."); idx != -1 {
+		pageName = ref[:idx]
+		methodName = ref[idx+1:]
+	} else {
+		// Simple method name - find which page(s) have it
+		methodName = ref
+		matches := findPagesWithMethod(pc, methodName)
+
+		if len(matches) == 0 {
+			return "", fmt.Errorf("method %q not found on any page", methodName)
+		}
+		if len(matches) > 1 {
+			names := make([]string, len(matches))
+			for i, m := range matches {
+				names[i] = m.Name
+			}
+			return "", fmt.Errorf("method %q found on multiple pages: %s. Use qualified name like %q",
+				methodName, strings.Join(names, ", "), names[0]+"."+methodName)
+		}
+		pageName = matches[0].Name
+	}
+
+	// Find the page
+	var pn *PageNode
+	for node := range pc.root.All() {
+		if node.Name == pageName {
+			pn = node
+			break
+		}
+	}
+	if pn == nil {
+		return "", fmt.Errorf("no page found with name %q", pageName)
+	}
+
+	// Verify method exists on the page
+	pageType := pn.Value.Type()
+	if _, found := pageType.MethodByName(methodName); !found {
+		return "", fmt.Errorf("method %q not found on page %q", methodName, pageName)
+	}
+
+	// Build ID
+	return buildID(pn.Name, methodName, suffixes, rawID), nil
+}
+
+// findPagesWithMethod finds all pages that have a method with the given name.
+func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
+	var matches []*PageNode
+	for node := range pc.root.All() {
+		if _, found := node.Value.Type().MethodByName(methodName); found {
+			matches = append(matches, node)
+		}
+	}
+	return matches
+}
+
+// buildID constructs the HTML ID string from page name, method name, and optional suffixes.
+func buildID(pageName, methodName string, suffixes []string, rawID bool) string {
+	id := camelToKebab(pageName) + "-" + camelToKebab(methodName)
+	for _, suffix := range suffixes {
+		id += "-" + camelToKebab(suffix)
+	}
+	if !rawID {
+		id = "#" + id
+	}
+	return id
 }
