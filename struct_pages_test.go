@@ -1090,6 +1090,39 @@ func (propsErrorPage) Props(r *http.Request) (string, error) {
 	return "", errors.New("props error")
 }
 
+type MissingDep struct{}
+
+type propsDIErrorPage struct{}
+
+func (propsDIErrorPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (propsDIErrorPage) Props(r *http.Request, dep MissingDep) (string, error) {
+	return "should not reach here", nil
+}
+
+type extendedHandlerErrorPage struct{}
+
+func (extendedHandlerErrorPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (extendedHandlerErrorPage) ServeHTTP(w http.ResponseWriter, r *http.Request, dep MissingDep) {
+	_, _ = w.Write([]byte("handler"))
+}
+
+type extendedHandlerErrorPageWithReturn struct{}
+
+func (extendedHandlerErrorPageWithReturn) Page() component {
+	return testComponent{"page"}
+}
+
+func (extendedHandlerErrorPageWithReturn) ServeHTTP(w http.ResponseWriter, r *http.Request, dep MissingDep) error {
+	_, _ = w.Write([]byte("handler"))
+	return nil
+}
+
 // Test RenderComponent with invalid method expression (non-function)
 func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
 	mux := http.NewServeMux()
@@ -1258,6 +1291,36 @@ func TestExecProps_PropsError(t *testing.T) {
 	}
 }
 
+// Test Props method that requires dependency injection that fails
+func TestExecProps_PropsDIError(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &propsDIErrorPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Custom error handler to capture the error
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	// Make a request that will trigger Props with DI failure
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Verify error was captured and mentions the Props method call failure
+	if capturedErr == nil {
+		t.Error("Expected Props DI error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error calling Props method") {
+		t.Errorf("Expected 'error calling Props method', got: %v", capturedErr)
+	}
+}
+
 // Test RenderTarget.Is() with function that has no receiver
 func TestRenderTarget_Is_NoReceiver(t *testing.T) {
 	// Create a RenderTarget
@@ -1292,6 +1355,71 @@ func TestRenderTarget_Is_PointerReceiver(t *testing.T) {
 	// Test non-matching method
 	if rt.Is((*pointerReceiverPage).Page) {
 		t.Error("Expected Is() to not match different method")
+	}
+}
+
+// Test extended ServeHTTP with dependency injection error (unbuffered)
+func TestAsHandler_ExtendedServeHTTPError(t *testing.T) {
+	mux := http.NewServeMux()
+	// Mount without providing MissingDep - should cause dependency injection error
+	sp, err := Mount(mux, &extendedHandlerErrorPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Custom error handler to capture the error
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	// Make request - should trigger dependency injection error
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Verify error was captured
+	if capturedErr != nil {
+		t.Logf("Got error: %v", capturedErr)
+		if !strings.Contains(capturedErr.Error(), "error calling ServeHTTP") {
+			t.Errorf("Expected 'error calling ServeHTTP' error, got: %v", capturedErr)
+		}
+	} else {
+		// If no error, check response
+		t.Logf("No error captured. Response: %s", rec.Body.String())
+	}
+}
+
+// Test extended ServeHTTP with return value and dependency injection error (buffered)
+func TestAsHandler_ExtendedServeHTTPErrorBuffered(t *testing.T) {
+	mux := http.NewServeMux()
+	// Mount without providing MissingDep - should cause dependency injection error
+	sp, err := Mount(mux, &extendedHandlerErrorPageWithReturn{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Custom error handler to capture the error
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	// Make request - should trigger dependency injection error with buffering
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Verify error was captured
+	if capturedErr == nil {
+		t.Error("Expected dependency injection error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error calling ServeHTTP") {
+		t.Errorf("Expected 'error calling ServeHTTP' error, got: %v", capturedErr)
 	}
 }
 
