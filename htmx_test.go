@@ -191,8 +191,8 @@ func TestHTMXPageConfig(t *testing.T) {
 
 func TestHTMXPageConfig_Default(t *testing.T) {
 	// Test that HTMXPageConfig is the default component selector
-	router, _ := Mount(nil, struct{}{}, "/", "Test")
-	if router.defaultComponentSelector == nil {
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
+	if sp.defaultComponentSelector == nil {
 		t.Error("Expected default component selector to be set")
 	}
 
@@ -208,7 +208,7 @@ func TestHTMXPageConfig_Default(t *testing.T) {
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", "content")
 
-	result, err := router.defaultComponentSelector(req, pn)
+	result, err := sp.defaultComponentSelector(req, pn)
 	if err != nil {
 		t.Errorf("default component selector error: %v", err)
 	}
