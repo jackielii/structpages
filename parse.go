@@ -134,8 +134,6 @@ func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) err
 	}
 
 	switch method.Name {
-	case "PageConfig":
-		item.Config = method
 	case "Middlewares":
 		item.Middlewares = method
 	case "Init":

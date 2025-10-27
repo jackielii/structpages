@@ -174,61 +174,8 @@ func TestPageConfig(t *testing.T) {
 	}
 }
 
-func TestHTMXPageConfig(t *testing.T) {
-	sp := New(WithDefaultPageConfig(HTMXPageConfig))
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		DefaultConfigPage `route:"/default Default config page"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
-	req.Header.Set("Hx-Request", "true")
-	req.Header.Set("Hx-Target", "hx-target")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-	expectedBody := "hx target defaultConfigPage"
-	if rec.Body.String() != expectedBody {
-		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
-	}
-}
-
-type CustomConfigPage struct{}
-
-func (CustomConfigPage) Custom() component {
-	return testComponent{content: "Custom config page"}
-}
-
-func (CustomConfigPage) PageConfig(r *http.Request) (string, error) {
-	return "Custom", nil
-}
-
-func TestCustomPageConfig(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		CustomConfigPage `route:"/custom Custom config page"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/custom", http.NoBody)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-	expectedBody := "Custom config page"
-	if rec.Body.String() != expectedBody {
-		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
-	}
-}
+// Note: TestCustomPageConfig and TestHTMXPageConfig removed - PageConfig method support has been removed
+// in favor of simpler Props + RenderComponent pattern. HTMX functionality has been moved to examples.
 
 type skipRenderPage struct{}
 
@@ -349,64 +296,8 @@ Middleware after: global mw 1
 	}
 }
 
-type testPropsPage struct{}
-
-func (testPropsPage) Page(s string) component             { return testComponent{content: s} }
-func (testPropsPage) Content(s string) component          { return testComponent{content: s} }
-func (testPropsPage) Another(s string) component          { return testComponent{content: s} }
-func (testPropsPage) Props() (string, error)              { return "Default Props", nil }
-func (testPropsPage) PageProps(r *http.Request) string    { return "Page Props" }
-func (testPropsPage) ContentProps(r *http.Request) string { return "Content Props" }
-
-func TestProps(t *testing.T) {
-	sp := New(WithDefaultPageConfig(HTMXPageConfig))
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		testPropsPage `route:"/props Test Props Page"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	tests := []struct {
-		name         string
-		hxTarget     string
-		expectedBody string
-	}{
-		{
-			name:         "Page Props",
-			expectedBody: "Page Props",
-		},
-		{
-			name:         "Content Props",
-			hxTarget:     "content",
-			expectedBody: "Content Props",
-		},
-		{
-			name:         "Another Props fallback to Props",
-			hxTarget:     "another",
-			expectedBody: "Default Props",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/props", http.NoBody)
-			if tt.hxTarget != "" {
-				req.Header.Set("Hx-Request", "true")
-				req.Header.Set("Hx-Target", tt.hxTarget)
-			}
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
-			if rec.Code != http.StatusOK {
-				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-			}
-			if diff := cmp.Diff(tt.expectedBody, rec.Body.String()); diff != "" {
-				t.Errorf("unexpected body (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
+// Note: TestProps removed - ComponentProps pattern (PageProps, ContentProps) has been removed
+// in favor of simpler Props + RenderComponent pattern.
 
 func TestFormatMethod(t *testing.T) {
 	tests := []struct {
@@ -433,11 +324,11 @@ func TestFormatMethod(t *testing.T) {
 		{
 			name: "valid method with pointer receiver",
 			setup: func() *reflect.Method {
-				typ := reflect.TypeOf(&testPropsPage{})
+				typ := reflect.TypeOf(&renderComponentPage{})
 				method, _ := typ.MethodByName("Page")
 				return &method
 			},
-			expected: "structpages.testPropsPage.Page",
+			expected: "structpages.renderComponentPage.Page",
 		},
 	}
 
@@ -748,7 +639,10 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 
-	_, err := sp.execProps(pc, pn, req, nil)
+	// Create a dummy reflect.Method for ComponentSelection
+	dummyMethod := reflect.Method{Name: "Page"}
+	compSel := &ComponentSelection{selectedMethod: dummyMethod}
+	_, err := sp.execProps(pc, pn, req, nil, compSel)
 	if err == nil {
 		t.Error("Expected error from execProps")
 	}
@@ -773,18 +667,18 @@ func (renderComponentPage) AltView(data string) component {
 	return testComponent{content: "Alt: " + data}
 }
 
-func (renderComponentPage) Props(r *http.Request) (string, error) {
+func (p renderComponentPage) Props(r *http.Request) (string, error) {
 	view := r.URL.Query().Get("view")
 	switch view {
 	case "partial":
 		// Use RenderComponent with custom args
-		return "ignored", RenderComponent("PartialView", "custom partial data")
+		return "ignored", RenderComponent((*renderComponentPage).PartialView, "custom partial data")
 	case "custom":
 		// Use RenderComponent with multiple args
-		return "ignored", RenderComponent("CustomView", "test", 42)
+		return "ignored", RenderComponent((*renderComponentPage).CustomView, "test", 42)
 	case "alt":
 		// Use RenderComponent without args - should use Props return value
-		return "props data", RenderComponent("AltView")
+		return "props data", RenderComponent((*renderComponentPage).AltView, "props data")
 	default:
 		// Normal flow
 		return "default data", nil
@@ -793,7 +687,11 @@ func (renderComponentPage) Props(r *http.Request) (string, error) {
 
 // Test RenderComponent functionality
 func TestRenderComponent(t *testing.T) {
-	sp := New()
+	var capturedError error
+	sp := New(WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedError = err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}))
 	r := NewRouter(http.NewServeMux())
 	type pages struct {
 		renderComponentPage `route:"/render Test Render Component"`
@@ -831,12 +729,16 @@ func TestRenderComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			capturedError = nil
 			req := httptest.NewRequest(http.MethodGet, "/render"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+				if capturedError != nil {
+					t.Errorf("error: %v", capturedError)
+				}
 			}
 			if rec.Body.String() != tt.expectedBody {
 				t.Errorf("expected body %q, got %q", tt.expectedBody, rec.Body.String())
@@ -845,123 +747,12 @@ func TestRenderComponent(t *testing.T) {
 	}
 }
 
-// Test RenderComponent with non-existent component
-type renderComponentErrorPage struct{}
+// Note: Test for "non-existent component" removed - with method expressions,
+// referencing a non-existent component is now a compile-time error, not a runtime error.
+// This is intentional and provides better type safety.
 
-func (renderComponentErrorPage) Page() component {
-	return testComponent{content: "Page"}
-}
-
-func (renderComponentErrorPage) Props(r *http.Request) error {
-	return RenderComponent("NonExistent")
-}
-
-func TestRenderComponent_NonExistentComponent(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
-	var capturedError error
-	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedError = err
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	type pages struct {
-		renderComponentErrorPage `route:"/error Test Error"`
-	}
-	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
-	}
-
-	if capturedError == nil {
-		t.Error("expected error to be captured")
-	} else if !strings.Contains(capturedError.Error(), "NonExistent") {
-		t.Errorf("expected error to mention NonExistent, got: %v", capturedError)
-	}
-}
-
-// Test RenderComponent overrides PageConfig
-type renderComponentWithConfigPage struct{}
-
-func (renderComponentWithConfigPage) Page() component {
-	return testComponent{content: "Page"}
-}
-
-func (renderComponentWithConfigPage) Alt() component {
-	return testComponent{content: "Alt from PageConfig"}
-}
-
-func (renderComponentWithConfigPage) Override() component {
-	return testComponent{content: "Override from RenderComponent"}
-}
-
-func (renderComponentWithConfigPage) PageConfig(r *http.Request) string {
-	// This would normally return "Alt"
-	return "Alt"
-}
-
-func (renderComponentWithConfigPage) Props(r *http.Request) error {
-	if r.URL.Query().Get("override") == "true" {
-		// RenderComponent should override PageConfig
-		return RenderComponent("Override")
-	}
-	return nil
-}
-
-func TestRenderComponent_OverridesPageConfig(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
-	type pages struct {
-		renderComponentWithConfigPage `route:"/config Test Config Override"`
-	}
-	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	tests := []struct {
-		name         string
-		query        string
-		expectedBody string
-		description  string
-	}{
-		{
-			name:         "PageConfig determines component",
-			query:        "",
-			expectedBody: "Alt from PageConfig",
-			description:  "Without override, PageConfig should select Alt component",
-		},
-		{
-			name:         "RenderComponent overrides PageConfig",
-			query:        "?override=true",
-			expectedBody: "Override from RenderComponent",
-			description:  "RenderComponent should override PageConfig's selection",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/config"+tt.query, http.NoBody)
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusOK {
-				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
-			}
-			if rec.Body.String() != tt.expectedBody {
-				t.Errorf("%s: expected body %q, got %q", tt.description, tt.expectedBody, rec.Body.String())
-			}
-		})
-	}
-}
+// Note: Test for "RenderComponent overrides PageConfig" removed - PageConfig
+// method support has been removed in favor of simpler Props + RenderComponent pattern.
 
 // Test types for WithWarnEmptyRoute
 type emptyPage struct{}

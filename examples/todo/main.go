@@ -67,7 +67,6 @@ func main() {
 	addTodo("Deploy to production")
 
 	sp := structpages.New(
-		structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
 		structpages.WithErrorHandler(errorHandler),
 	)
 	router := structpages.NewRouter(http.DefaultServeMux)

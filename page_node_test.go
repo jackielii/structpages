@@ -115,7 +115,6 @@ func TestPageNode_String_edgeCases(t *testing.T) {
 		Route:       "/test",
 		Value:       reflect.Value{}, // Zero value
 		Middlewares: nil,
-		Config:      nil,
 		Components:  make(map[string]reflect.Method),
 		Props:       make(map[string]reflect.Method),
 	}

@@ -225,57 +225,49 @@ The middleware execution forms a chain where each middleware wraps the next, cre
 
 ## HTMX Integration
 
-Structpages has built-in support for HTMX partial rendering:
+Structpages has built-in HTMX support enabled by default through `HTMXPageConfig`. This makes `IDFor` work seamlessly with HTMX partial rendering out of the box.
 
-### HTMX Helper Functions
+### How It Works
 
-Enable HTMX support globally when creating your StructPages instance:
+When an HTMX request is detected (via `HX-Request` header), the framework automatically:
+
+1. Reads the `HX-Target` header value
+2. Converts it from kebab-case to a component method name
+3. Renders that specific component instead of the full page
+
+For example:
+- `HX-Target: "content"` → calls `Content()` method
+- `HX-Target: "index-todo-list"` → calls `TodoList()` method on the index page (strips page prefix automatically)
+- No HX-Target or non-existent component → falls back to `Page()` method
+
+This works automatically with `IDFor`:
+
+```go
+// In your template
+<div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.TodoList, RawID: true}) }>
+    @p.TodoList()
+</div>
+
+// In HTMX attributes
+hx-target={ structpages.IDFor(ctx, index.TodoList) }  // Generates "#index-todo-list"
+```
+
+The HTMX request will automatically extract the component name from the target ID and render just that component.
+
+### Custom Component Selector
+
+If you need different behavior, you can override the default:
 
 ```go
 sp := structpages.New(
-    structpages.WithDefaultPageConfig(structpages.HTMXPageConfig),
-    // other options...
+    structpages.WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
+        // Your custom logic
+        return "Page", nil
+    }),
 )
 ```
 
-With this configuration, HTMX requests will automatically render the appropriate component based on the HX-Target header. For example:
-- If HX-Target is "content", it will look for and call the `Content()` method on your page struct
-- If HX-Target is "sidebar", it will look for and call the `Sidebar()` method
-- If no HX-Target or the method doesn't exist, it falls back to the `Page()` method
-
-### Custom HTMX Target Handling
-
-For more complex scenarios, implement custom PageConfig that switches based on HX-Target:
-
-```go
-type todoPage struct{}
-
-templ (t todoPage) Page() {
-    // Full page
-}
-
-templ (t todoPage) TodoList() {
-    // Render just the todo list
-}
-
-templ (t todoPage) TodoItem() {
-    // Render a single todo item
-}
-
-// Return the component name as a string based on HX-Target
-func (t todoPage) PageConfig(r *http.Request) (string, error) {
-    hxTarget := r.Header.Get("HX-Target")
-    
-    switch hxTarget {
-    case "todo-list":
-        return "TodoList", nil
-    case "todo-item":
-        return "TodoItem", nil
-    default:
-        return "Page", nil
-    }
-}
-```
+See `examples/htmx/main.go` and `examples/todo/main.go` for complete working examples.
 
 ## URLFor Functionality
 
@@ -409,6 +401,73 @@ templ (v viewPost) Page() {
 ```
 
 This automatic extraction eliminates the need to manually pass parameters that are already present in the current request context, making URL generation more convenient and less error-prone.
+
+### IDFor - Consistent HTML IDs
+
+The `IDFor` function generates consistent HTML IDs from component method references, helping maintain consistency between template IDs, HTMX targets, and component names.
+
+#### The Problem
+
+When building HTMX applications, you often need to keep three things in sync:
+1. The ID attribute in your component template
+2. The HTMX target selector in your requests
+3. The component method name
+
+```templ
+// If you change "UserList" to "UserTable", you need to manually update:
+<div id="user-list">...</div>  // Manual ID
+<button hx-target="#user-list">Refresh</button>  // Manual target reference
+templ (p TeamManagementView) UserList(users []User) { ... }  // Component name
+```
+
+#### The Solution
+
+Use `IDFor` with method expressions to generate IDs automatically:
+
+```templ
+// In your component template
+templ (p TeamManagementView) UserList(users []User) {
+    <div id={ structpages.IDFor(p.UserList) }>
+        <!-- content -->
+    </div>
+}
+
+// In HTMX attributes
+@PrimaryButton(templ.Attributes{
+    "hx-get":    "/api/users",
+    "hx-target": "#" + structpages.IDFor(TeamManagementView{}.UserList),
+})
+```
+
+Now when you rename `UserList` to `UserTable` using your IDE's refactoring tools, all references including `p.UserList` and `TeamManagementView{}.UserList` will be automatically updated!
+
+#### With Suffixes
+
+For compound IDs like `user-modal-container` or `group-search-input`:
+
+```templ
+// Generate "user-modal-container"
+<div id={ structpages.IDFor(p.UserModal, "container") }>
+    <!-- modal content -->
+</div>
+
+// Generate "group-search-input"
+<input
+    id={ structpages.IDFor(p.GroupSearch, "input") }
+    name="search"
+/>
+```
+
+#### Naming Convention
+
+`IDFor` converts CamelCase/PascalCase to kebab-case:
+
+- `IDFor(p.UserList)` → `user-list`
+- `IDFor(p.GroupMembers)` → `group-members`
+- `IDFor(p.HTMLParser)` → `html-parser`
+- `IDFor(p.UserModal, "container")` → `user-modal-container`
+
+See [IDFOR_USAGE.md](./IDFOR_USAGE.md) for more detailed examples and usage patterns.
 
 ## Templ Patterns
 

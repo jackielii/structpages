@@ -19,7 +19,6 @@ type PageNode struct {
 	Value       reflect.Value
 	Props       map[string]reflect.Method
 	Components  map[string]reflect.Method
-	Config      *reflect.Method
 	Middlewares *reflect.Method
 	Parent      *PageNode
 	Children    []*PageNode
@@ -48,7 +47,6 @@ func (pn PageNode) String() string {
 	if pn.Value.IsValid() && pn.Value.Type().AssignableTo(handlerType) {
 		sb.WriteString("\n  is http.Handler: true")
 	}
-	sb.WriteString("\n  config: " + formatMethod(pn.Config))
 	if len(pn.Components) == 0 {
 		sb.WriteString("\n  components: []")
 	}

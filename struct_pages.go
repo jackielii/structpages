@@ -13,57 +13,83 @@ import (
 // implementing conditional rendering or redirects within page logic.
 var ErrSkipPageRender = errors.New("skip page render")
 
+// ComponentSelection contains information about which component was selected
+// for rendering. It's available to Props methods via dependency injection.
+//
+// Example usage in Props:
+//
+//	func (p index) Props(r *http.Request, sel *structpages.ComponentSelection) ([]Todo, error) {
+//	    switch {
+//	    case sel.Selected(index.TodoList):
+//	        return getTodos(), nil
+//	    case sel.Selected(index.Page):
+//	        return getAllData(), nil
+//	    default:
+//	        return getAllData(), nil
+//	    }
+//	}
+type ComponentSelection struct {
+	selectedMethod reflect.Method // The actual component method that was selected
+}
+
+// Selected returns true if the given method expression matches the selected component.
+// Uses method expressions for compile-time safety and IDE refactoring support.
+//
+// Example:
+//
+//	if sel.Selected(index.TodoList) {
+//	    // TodoList component is being rendered
+//	}
+func (cs *ComponentSelection) Selected(method any) bool {
+	methodName := extractMethodName(method)
+	if methodName == "" {
+		return false
+	}
+
+	// Compare both method name and receiver type for more robust matching
+	receiverType := extractReceiverType(method)
+	if receiverType == nil {
+		return false
+	}
+
+	selectedReceiverType := cs.selectedMethod.Type.In(0)
+	if selectedReceiverType.Kind() == reflect.Pointer {
+		selectedReceiverType = selectedReceiverType.Elem()
+	}
+
+	return cs.selectedMethod.Name == methodName &&
+		selectedReceiverType == receiverType
+}
+
 // errRenderComponent is an internal error type that specifies which component
 // to render and optionally provides replacement arguments for that component.
 type errRenderComponent struct {
-	page      any
-	component string
-	args      []any
+	method any   // Method expression (e.g., p.UserList)
+	args   []any // Optional replacement arguments
 }
 
 func (e *errRenderComponent) Error() string {
-	return fmt.Sprintf("should render component: %s", e.component)
+	return "should render component from method expression"
 }
 
 // RenderComponent creates an error that instructs the framework to render
-// a specific component method instead of the default one determined by PageConfig.
+// a specific component method instead of the default component.
 // If args are provided, they completely replace the Props return values for the component.
 // If no args are provided, the Props return values are used with the specified component.
+//
+// Uses method expressions for compile-time safety and IDE refactoring support.
 //
 // Example:
 //
 //	func (p MyPage) Props(r *http.Request) (string, error) {
 //	    if r.URL.Query().Get("partial") == "true" {
 //	        // PartialView will receive only these args
-//	        return "", RenderComponent("PartialView", "custom data")
+//	        return "", RenderComponent(p.PartialView, "custom data")
 //	    }
 //	    return "default data", nil
 //	}
-func RenderComponent(component string, args ...any) error {
-	return &errRenderComponent{component: component, args: args}
-}
-
-// RenderPageComponent returns an error that tells the framework to render a specific
-// component from a different page instead of continuing with the normal page rendering.
-// This is useful in Props methods when you want to conditionally render a component
-// from another page based on some logic.
-//
-// Parameters:
-//   - page: The page struct containing the component to render (same type used in route definitions)
-//   - component: The name of the component method to call on the specified page
-//   - args: Optional arguments to pass to the component method, replacing the original Props arguments
-//
-// Example:
-//
-//	func (p *MyPage) Props(r *http.Request) (string, error) {
-//	    if someCondition {
-//	        // Render "ErrorComponent" from ErrorPage instead of this page's normal component
-//	        return "", RenderPageComponent(&ErrorPage{}, "ErrorComponent", "Error message")
-//	    }
-//	    return "normal data", nil
-//	}
-func RenderPageComponent(page any, component string, args ...any) error {
-	return &errRenderComponent{page: page, component: component, args: args}
+func RenderComponent(method any, args ...any) error {
+	return &errRenderComponent{method: method, args: args}
 }
 
 // MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
@@ -74,10 +100,10 @@ type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 // StructPages is the main type for managing struct-based page routing.
 // It provides configuration options for error handling, middleware, and page rendering.
 type StructPages struct {
-	onError           func(http.ResponseWriter, *http.Request, error)
-	middlewares       []MiddlewareFunc
-	defaultPageConfig func(r *http.Request, pn *PageNode) (string, error)
-	warnEmptyRoute    func(*PageNode)
+	onError                  func(http.ResponseWriter, *http.Request, error)
+	middlewares              []MiddlewareFunc
+	defaultComponentSelector func(r *http.Request, pn *PageNode) (string, error)
+	warnEmptyRoute           func(*PageNode)
 }
 
 // New creates a new StructPages instance with the provided options.
@@ -94,6 +120,7 @@ func New(options ...func(*StructPages)) *StructPages {
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
+		defaultComponentSelector: HTMXPageConfig,
 	}
 	for _, opt := range options {
 		opt(sp)
@@ -101,15 +128,24 @@ func New(options ...func(*StructPages)) *StructPages {
 	return sp
 }
 
-// WithDefaultPageConfig sets a default page configuration function that will be used
-// when a page doesn't implement its own PageConfig method. This is useful for implementing
-// common patterns like HTMX partial rendering across all pages.
+// WithDefaultComponentSelector sets a global component selector function that determines
+// which component to render when RenderComponent is not explicitly called in Props.
+// This is useful for implementing common patterns like HTMX partial rendering across all pages.
 //
-// The config function should return the name of the method to call on the page struct.
-// For example, returning "Main" will call the Main() method instead of Page().
-func WithDefaultPageConfig(configFunc func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages) {
+// The selector function receives the request and page node, and returns the component method name.
+// For example, returning "Content" will render the Content() method instead of Page().
+//
+// Example - HTMX boost pattern:
+//
+//	sp := New(WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
+//	    if r.Header.Get("HX-Request") == "true" {
+//	        return "Content", nil  // Skip layout, render just content
+//	    }
+//	    return "Page", nil  // Full page with layout
+//	}))
+func WithDefaultComponentSelector(selector func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages) {
 	return func(sp *StructPages) {
-		sp.defaultPageConfig = configFunc
+		sp.defaultComponentSelector = selector
 	}
 }
 
@@ -257,21 +293,30 @@ func (sp *StructPages) handleRenderComponentError(
 		}
 	}
 
-	// If a different page is specified, find it
-	targetPage := page
-	if renderErr.page != nil {
-		var err error
-		targetPage, err = pc.findPageNode(renderErr.page)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error finding page for RenderPageComponent: %w", err))
-			return true
-		}
+	// Extract method info from method expression
+	methodName := extractMethodName(renderErr.method)
+	if methodName == "" {
+		sp.onError(w, r, fmt.Errorf("failed to extract method name from method expression"))
+		return true
 	}
 
-	// Look up the component specified by RenderComponent
-	compMethod, ok := targetPage.Components[renderErr.component]
+	receiverType := extractReceiverType(renderErr.method)
+	if receiverType == nil {
+		sp.onError(w, r, fmt.Errorf("failed to extract receiver type from method expression"))
+		return true
+	}
+
+	// Find the page that owns this component
+	targetPage, err := pc.findPageNodeByType(receiverType)
+	if err != nil {
+		sp.onError(w, r, fmt.Errorf("cannot find page for method expression: %w", err))
+		return true
+	}
+
+	// Look up the component method
+	compMethod, ok := targetPage.Components[methodName]
 	if !ok {
-		sp.onError(w, r, fmt.Errorf("component %s not found in %s", renderErr.component, targetPage.Name))
+		sp.onError(w, r, fmt.Errorf("component %s not found in page %s", methodName, targetPage.Name))
 		return true
 	}
 
@@ -295,7 +340,25 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		props, err := sp.execProps(pc, page, r, w)
+		// 1. Determine which component to render (before calling Props)
+		compMethod, err := sp.findComponent(pc, page, r)
+		if err != nil {
+			sp.onError(w, r, fmt.Errorf("error finding component for %s: %w", page.Name, err))
+			return
+		}
+
+		if !compMethod.Func.IsValid() {
+			sp.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
+			return
+		}
+
+		// 2. Create ComponentSelection with the selected component info
+		componentSelection := &ComponentSelection{
+			selectedMethod: compMethod,
+		}
+
+		// 3. Call Props with ComponentSelection available for injection
+		props, err := sp.execProps(pc, page, r, w, componentSelection)
 		if err != nil {
 			// Check if it's a render component error
 			if sp.handleRenderComponentError(w, r, err, pc, page, props) {
@@ -309,18 +372,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		// Normal flow: use PageConfig to determine component
-		compMethod, err := sp.findComponent(pc, page, r)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error calling PageConfig method on %s: %w", page.Name, err))
-			return
-		}
-
-		if !compMethod.Func.IsValid() {
-			sp.onError(w, r, fmt.Errorf("page %s does not have a Page or PageConfig method", page.Name))
-			return
-		}
-
+		// 4. Render the selected component with props
 		comp, err := pc.callComponentMethod(page, &compMethod, props...)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
@@ -457,81 +509,45 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 }
 
 func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
-	if pn.Config != nil {
-		res, err := pc.callMethod(pn, pn.Config, reflect.ValueOf(r))
+	// Use default component selector if configured (e.g., for HTMX boost pattern)
+	if sp.defaultComponentSelector != nil {
+		name, err := sp.defaultComponentSelector(r, pn)
 		if err != nil {
-			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
+			return reflect.Method{}, fmt.Errorf("error calling default component selector for %s: %w", pn.Name, err)
 		}
-		res, err = extractError(res)
-		if err != nil {
-			return reflect.Method{}, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
-		}
-		if len(res) >= 1 && res[0].Type().Kind() == reflect.String {
-			name := res[0].String()
-			if comp, ok := pn.Components[name]; ok {
-				return comp, nil
-			}
-			return reflect.Method{}, fmt.Errorf("PageConfig method for %s returned unknown component name: %s", pn.Name, name)
-		}
-	}
-	if sp.defaultPageConfig != nil {
-		name, err := sp.defaultPageConfig(r, pn)
-		if err != nil {
-			return reflect.Method{}, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
-		}
-		page, ok := pn.Components[name]
+		comp, ok := pn.Components[name]
 		if !ok {
-			return reflect.Method{}, fmt.Errorf("default PageConfig for %s returned unknown component name: %s", pn.Name, name)
+			return reflect.Method{}, fmt.Errorf(
+				"default component selector for %s returned unknown component name: %s",
+				pn.Name, name)
 		}
-		return page, nil
+		return comp, nil
 	}
+
+	// Default to "Page" component
 	page, ok := pn.Components["Page"]
 	if !ok {
-		return reflect.Method{}, fmt.Errorf("no Page component or PageConfig method found for %s", pn.Name)
+		return reflect.Method{}, fmt.Errorf("no Page component found for %s", pn.Name)
 	}
 	return page, nil
 }
 
 func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
-	r *http.Request, w http.ResponseWriter,
+	r *http.Request, w http.ResponseWriter, componentSelection *ComponentSelection,
 ) ([]reflect.Value, error) {
-	// First check if PageConfig returns a component name to determine which Props method to use
-	var propsMethodName string
-	if pn.Config != nil {
-		res, err := pc.callMethod(pn, pn.Config, reflect.ValueOf(r))
-		if err != nil {
-			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
-		}
-		res, err = extractError(res)
-		if err != nil {
-			return nil, fmt.Errorf("error calling PageConfig method for %s: %w", pn.Name, err)
-		}
-		if len(res) >= 1 && res[0].Type().Kind() == reflect.String {
-			propsMethodName = res[0].String() + "Props"
-		}
-	} else if sp.defaultPageConfig != nil {
-		name, err := sp.defaultPageConfig(r, pn)
-		if err != nil {
-			return nil, fmt.Errorf("error calling default page config for %s: %w", pn.Name, err)
-		}
-		propsMethodName = name + "Props"
-	} else {
-		propsMethodName = "PageProps"
-	}
-
-	// Try to find the specific props method, fall back to generic Props
-	var propMethod reflect.Method
-	for _, name := range []string{propsMethodName, "Props"} {
-		if pm, ok := pn.Props[name]; ok {
-			propMethod = pm
-			break
-		}
+	// Look for Props method
+	propMethod, ok := pn.Props["Props"]
+	if !ok {
+		return nil, nil
 	}
 
 	if propMethod.Func.IsValid() {
-		props, err := pc.callMethod(pn, &propMethod, reflect.ValueOf(r), reflect.ValueOf(w))
+		// Make ComponentSelection available for injection along with r and w
+		props, err := pc.callMethod(
+			pn, &propMethod,
+			reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(componentSelection))
 		if err != nil {
-			return nil, fmt.Errorf("error calling props method %s.%s: %w", pn.Name, propMethod.Name, err)
+			return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
 		}
 		return extractError(props)
 	}

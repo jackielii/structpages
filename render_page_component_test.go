@@ -43,9 +43,9 @@ func (c renderTestConditionalPage) Props(r *http.Request) (string, error) {
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return "", RenderPageComponent(&renderTestErrorPage{}, "ErrorComponent", "Something went wrong")
+		return "", RenderComponent((*renderTestErrorPage).ErrorComponent, "Something went wrong")
 	case "notfound":
-		return "", RenderPageComponent(&renderTestErrorPage{}, "NotFoundComponent")
+		return "", RenderComponent((*renderTestErrorPage).NotFoundComponent, "ignored")
 	default:
 		return "success", nil
 	}
@@ -177,7 +177,7 @@ func (m multiArgComponent) Render(ctx context.Context, w io.Writer) error {
 type multiArgTestPage struct{}
 
 func (m multiArgTestPage) Props(r *http.Request) (string, error) {
-	return "", RenderPageComponent(&multiArgPage{}, "MultiComponent", "test", 5, true)
+	return "", RenderComponent((*multiArgPage).MultiComponent, "test", 5, true)
 }
 
 func (m multiArgTestPage) Page(message string) component {
@@ -216,9 +216,16 @@ func TestRenderPageComponentMultipleArgs(t *testing.T) {
 // Test error handling when page not found
 type invalidPageTestPage struct{}
 
+// Helper type that has methods but won't be registered
+type unregisteredPage struct{}
+
+func (u unregisteredPage) SomeComponent() component {
+	return renderTestSuccessComponent{message: "unregistered"}
+}
+
 func (i invalidPageTestPage) Props(r *http.Request) (string, error) {
 	// Reference a page that doesn't exist in the router
-	return "", RenderPageComponent(&struct{}{}, "SomeComponent")
+	return "", RenderComponent((*unregisteredPage).SomeComponent)
 }
 
 func (i invalidPageTestPage) Page(message string) component {
@@ -255,61 +262,16 @@ func TestRenderPageComponentInvalidPage(t *testing.T) {
 	if capturedError == nil {
 		t.Error("expected error to be captured")
 	} else {
-		expectedErrorSubstring := "findPageNode: no page node found"
+		expectedErrorSubstring := "no page node found"
 		if !strings.Contains(capturedError.Error(), expectedErrorSubstring) {
 			t.Errorf("expected error to contain %q, got %q", expectedErrorSubstring, capturedError.Error())
 		}
 	}
 }
 
-// Test error handling when component not found
-type invalidComponentTestPage struct{}
-
-func (i invalidComponentTestPage) Props(r *http.Request) (string, error) {
-	return "", RenderPageComponent(&renderTestErrorPage{}, "NonExistentComponent")
-}
-
-func (i invalidComponentTestPage) Page(message string) component {
-	return renderTestSuccessComponent{message: message}
-}
-
-// Test RenderPageComponent with invalid component
-func TestRenderPageComponentInvalidComponent(t *testing.T) {
-	type pages struct {
-		invalidComponentTestPage `route:"/invalidcomp"`
-		renderTestErrorPage      `route:"/error"`
-	}
-
-	var capturedError error
-	errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedError = err
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	sp := New(WithErrorHandler(errorHandler))
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/invalidcomp", nil)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
-	}
-
-	if capturedError == nil {
-		t.Error("expected error to be captured")
-	} else {
-		expectedErrorSubstring := "component NonExistentComponent not found"
-		if !strings.Contains(capturedError.Error(), expectedErrorSubstring) {
-			t.Errorf("expected error to contain %q, got %q", expectedErrorSubstring, capturedError.Error())
-		}
-	}
-}
+// Note: Test for "component not found" removed - with method expressions,
+// referencing a non-existent component is now a compile-time error, not a runtime error.
+// This is intentional and provides better type safety.
 
 // Test RenderPageComponent with different component methods
 type componentVariationsPage struct{}
@@ -318,9 +280,9 @@ func (c componentVariationsPage) Props(r *http.Request) (string, error) {
 	component := r.URL.Query().Get("component")
 	switch component {
 	case "header":
-		return "", RenderPageComponent(&headerPage{}, "Page")
+		return "", RenderComponent((*headerPage).Page, "ignored")
 	case "footer":
-		return "", RenderPageComponent(&footerPage{}, "Page", "© 2024")
+		return "", RenderComponent((*footerPage).Page, "© 2024")
 	default:
 		return "default", nil
 	}
@@ -438,9 +400,9 @@ func (e errHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *http.
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return RenderPageComponent(&renderTestErrorPage{}, "ErrorComponent", "Error from handler")
+		return RenderComponent((*renderTestErrorPage).ErrorComponent, "Error from handler")
 	case "notfound":
-		return RenderPageComponent(&renderTestErrorPage{}, "NotFoundComponent", "ignored")
+		return RenderComponent((*renderTestErrorPage).NotFoundComponent, "ignored")
 	default:
 		_, _ = w.Write([]byte("<div>normal response</div>"))
 		return nil
@@ -507,9 +469,9 @@ func (e extendedHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return RenderPageComponent(&renderTestErrorPage{}, "ErrorComponent", "Error with logging: "+logger)
+		return RenderComponent((*renderTestErrorPage).ErrorComponent, "Error with logging: "+logger)
 	case "multi":
-		return RenderPageComponent(&multiArgPage{}, "MultiComponent", "extended", 3, false)
+		return RenderComponent((*multiArgPage).MultiComponent, "extended", 3, false)
 	default:
 		_, _ = w.Write([]byte("<div>extended handler: " + logger + "</div>"))
 		return nil
@@ -577,7 +539,7 @@ type errHandlerWithRenderSamePageComponent struct{}
 
 func (e errHandlerWithRenderSamePageComponent) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.URL.Query().Get("alt") == "true" {
-		return RenderComponent("AltView", "alternative view")
+		return RenderComponent((*errHandlerWithRenderSamePageComponent).AltView, "alternative view")
 	}
 	_, _ = w.Write([]byte("<div>default view</div>"))
 	return nil

@@ -88,7 +88,7 @@ type errorPropsPage struct{}
 
 func (errorPropsPage) Page() component { return mockComponent{} }
 
-func (errorPropsPage) PageProps() (map[string]any, error) {
+func (errorPropsPage) Props() (map[string]any, error) {
 	return nil, errors.New("props error")
 }
 
@@ -202,20 +202,6 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 		defaultConfig func(*http.Request, *PageNode) (string, error)
 	}{
 		{
-			name:        "PageConfig method error",
-			page:        &errorPageConfigPage{},
-			route:       "/error-config",
-			requestPath: "/error-config",
-			wantError:   "error calling PageConfig method for errorPageConfigPage: pageconfig error",
-		},
-		{
-			name:        "PageConfig unknown component",
-			page:        &unknownComponentPage{},
-			route:       "/unknown",
-			requestPath: "/unknown",
-			wantError:   "PageConfig method for unknownComponentPage returned unknown component name: UnknownComponent",
-		},
-		{
 			name:        "render error",
 			page:        &errorComponentPage{},
 			route:       "/error-render",
@@ -230,21 +216,21 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			wantError:   "error running props for errorPropsPage: props error",
 		},
 		{
-			name:        "default page config error",
+			name:        "default component selector error",
 			page:        &emptyRoutePage{},
 			route:       "/default-error",
 			requestPath: "/default-error",
-			wantError:   "error calling default page config for emptyRoutePage: default config error",
+			wantError:   "error calling default component selector for emptyRoutePage: default config error",
 			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "", errors.New("default config error")
 			},
 		},
 		{
-			name:        "default page config unknown component",
+			name:        "default component selector unknown component",
 			page:        &mockPage{},
 			route:       "/default-unknown",
 			requestPath: "/default-unknown",
-			wantError:   "default PageConfig for mockPage returned unknown component name: UnknownComponent",
+			wantError:   "default component selector for mockPage returned unknown component name: UnknownComponent",
 			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "UnknownComponent", nil
 			},
@@ -256,7 +242,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			capturedErrors = []error{}
 			sp := New(WithErrorHandler(errorHandler))
 			if tt.defaultConfig != nil {
-				sp.defaultPageConfig = tt.defaultConfig
+				sp.defaultComponentSelector = tt.defaultConfig
 			}
 
 			router := NewRouter(http.NewServeMux())
@@ -282,15 +268,6 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 	}
 }
 
-// Page with PageConfig that requires missing argument
-type pageConfigMissingArgPage struct{}
-
-func (pageConfigMissingArgPage) PageConfig(r *http.Request, missingArg string) string {
-	return "Page"
-}
-
-func (pageConfigMissingArgPage) Page() component { return mockComponent{} }
-
 // Test findComponent edge cases
 func TestFindComponent_NoPageComponent(t *testing.T) {
 	sp := New()
@@ -311,29 +288,13 @@ func TestFindComponent_NoPageComponent(t *testing.T) {
 	_, err := sp.findComponent(pc, pn, req)
 	if err == nil {
 		t.Errorf("expected error for no Page component")
-	} else if !contains(err.Error(), "no Page component or PageConfig method found") {
+	} else if !contains(err.Error(), "no Page component found") &&
+		!contains(err.Error(), "returned unknown component name: Page") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-// Test findComponent callMethod error
-func TestFindComponent_CallMethodError(t *testing.T) {
-	sp := New()
-
-	// Parse the page to get proper PageNode with Config method
-	pc, err := parsePageTree("/test", &pageConfigMissingArgPage{})
-	if err != nil {
-		t.Fatalf("parsePageTree failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	_, err = sp.findComponent(pc, pc.root, req)
-	if err == nil {
-		t.Errorf("expected error for PageConfig with missing argument")
-	} else if !contains(err.Error(), "error calling PageConfig method") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
+// Note: TestFindComponent_CallMethodError removed - PageConfig method support has been removed
 
 // Test extended handler without buffered writer that returns error
 type extendedNoReturnHandler struct{}
@@ -419,7 +380,7 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 		t.Errorf("expected error for invalid component method")
 	} else {
 		lastError := capturedErrors[len(capturedErrors)-1]
-		if !contains(lastError.Error(), "does not have a Page or PageConfig method") {
+		if !contains(lastError.Error(), "does not have a Page component method") {
 			t.Errorf("unexpected error: %v", lastError.Error())
 		}
 	}
