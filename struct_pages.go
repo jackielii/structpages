@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
-	"strings"
 )
 
 // ErrSkipPageRender is a sentinel error that can be returned from a Props method
@@ -195,28 +194,10 @@ func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages
 //
 // It also supports a func(*PageNode) bool as the Page argument to match a specific page.
 // It can be useful when you have multiple pages with the same type but different routes.
-func (r *StructPages) URLFor(page any, args ...any) (string, error) {
-	var pattern string
-	parts, ok := page.([]any)
-	if !ok {
-		parts = []any{page}
-	}
-	for _, page := range parts {
-		if s, ok := page.(string); ok {
-			pattern += s
-		} else {
-			p, err := r.pc.urlFor(page)
-			if err != nil {
-				return "", err
-			}
-			pattern += p
-		}
-	}
-	path, err := formatPathSegments(context.Background(), pattern, args...)
-	if err != nil {
-		return "", fmt.Errorf("urlfor: %w", err)
-	}
-	return strings.Replace(path, "{$}", "", 1), nil
+func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
+	// Create a context with parseContext and call the context-based URLFor
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	return URLFor(ctx, page, args...)
 }
 
 // IDFor generates a consistent HTML ID or CSS selector for a component method.
@@ -248,51 +229,10 @@ func (r *StructPages) URLFor(page any, args ...any) (string, error) {
 //	    Suffixes: []string{"container"},
 //	})
 //	// → "#team-management-view-user-modal-container"
-func (r *StructPages) IDFor(v any) (string, error) {
-	// Handle IDParams pattern
-	var methodExpr any
-	var suffixes []string
-	rawID := false
-
-	if params, ok := v.(IDParams); ok {
-		methodExpr = params.Method
-		suffixes = params.Suffixes
-		rawID = params.RawID
-	} else {
-		methodExpr = v
-	}
-
-	// Extract method and receiver info
-	methodName := extractMethodName(methodExpr)
-	if methodName == "" {
-		return "", errors.New("failed to extract method name from expression")
-	}
-
-	receiverType := extractReceiverType(methodExpr)
-	if receiverType == nil {
-		return "", errors.New("failed to extract receiver type from method expression")
-	}
-
-	// Find page node - this gives us the page name
-	pn, err := r.pc.findPageNodeByType(receiverType)
-	if err != nil {
-		return "", fmt.Errorf("cannot find page for method expression: %w", err)
-	}
-
-	// Build ID with page name prefix for conflict prevention
-	id := camelToKebab(pn.Name) + "-" + camelToKebab(methodName)
-
-	// Append suffixes if provided
-	for _, suffix := range suffixes {
-		id += "-" + camelToKebab(suffix)
-	}
-
-	// Prepend "#" unless RawID requested
-	if !rawID {
-		id = "#" + id
-	}
-
-	return id, nil
+func (sp *StructPages) IDFor(v any) (string, error) {
+	// Create a context with parseContext and call the context-based IDFor
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	return IDFor(ctx, v)
 }
 
 // WithDefaultComponentSelector sets a global component selector function that determines
