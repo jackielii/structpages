@@ -5,14 +5,14 @@
 Apply middleware to all routes:
 
 ```go
-sp := structpages.New(
+mux := http.NewServeMux()
+sp, err := structpages.Mount(mux, pages{}, "/", "My App",
     structpages.WithMiddlewares(
         loggingMiddleware,
         authMiddleware,
     ),
 )
-r := structpages.NewRouter(http.NewServeMux())
-if err := sp.MountPages(r, pages{}, "/", "My App"); err != nil {
+if err != nil {
     log.Fatal(err)
 }
 ```

@@ -289,7 +289,11 @@ func (u userManager) ServeHTTP(w http.ResponseWriter, r *http.Request,
 }
 
 // Pass dependencies when mounting pages
-sp.MountPages(router, &pages{}, "/", "App", db, logger)
+mux := http.NewServeMux()
+sp, err := structpages.Mount(mux, pages{}, "/", "App", db, logger)
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 **Same as Flow 2, but with injected dependencies available**
