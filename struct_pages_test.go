@@ -1030,3 +1030,227 @@ func TestWithDefaultComponentSelector(t *testing.T) {
 		}
 	})
 }
+
+// Test handleRenderComponentError edge cases
+
+// Test page types for edge cases
+type handleErrorTestPage struct{}
+
+func (handleErrorTestPage) Page() component {
+	return testComponent{"page"}
+}
+
+type renderTargetIsTestPage struct{}
+
+func (renderTargetIsTestPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (renderTargetIsTestPage) Content() component {
+	return testComponent{"content"}
+}
+
+type predicateTestPage1 struct{}
+
+func (predicateTestPage1) Page() component {
+	return testComponent{"page1"}
+}
+
+type predicateTestPage2 struct{}
+
+func (predicateTestPage2) Page() component {
+	return testComponent{"page2"}
+}
+
+// Test RenderComponent with invalid method expression (non-function)
+func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Create a custom error handler that captures errors
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Trigger handleRenderComponentError with invalid method expression
+	err = RenderComponent("not a function") // Not a function, should fail
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract method name") {
+		t.Errorf("Expected 'failed to extract method name' error, got: %v", capturedErr)
+	}
+}
+
+// Test RenderComponent with function having no receiver
+func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Create a custom error handler that captures errors
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Create a function with no receiver (no parameters)
+	noReceiverFunc := func() component { return testComponent{"test"} }
+
+	err = RenderComponent(noReceiverFunc)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract receiver type") {
+		t.Errorf("Expected 'failed to extract receiver type' error, got: %v", capturedErr)
+	}
+}
+
+// Test RenderComponent with method from unregistered page type
+func TestHandleRenderComponentError_PageNotFound(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Create a custom error handler that captures errors
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Try to render component from unregistered page
+	err = RenderComponent(unregisteredPage.SomeComponent)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "cannot find page for method expression") {
+		t.Errorf("Expected 'cannot find page for method expression' error, got: %v", capturedErr)
+	}
+}
+
+// Test component method that returns error
+func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &errorComponentPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Create a custom error handler that captures errors
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Trigger component error
+	err = RenderComponent(errorComponentPage.ErrorComponent, true)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	}
+	// Error captured successfully - the component error path was exercised
+}
+
+// Test RenderTarget.Is() with function that has no receiver
+func TestRenderTarget_Is_NoReceiver(t *testing.T) {
+	// Create a RenderTarget
+	pageType := reflect.TypeOf(renderTargetIsTestPage{})
+	method, _ := pageType.MethodByName("Page")
+	rt := &RenderTarget{selectedMethod: method}
+
+	// Test with function that has no parameters (no receiver)
+	noReceiverFunc := func() component { return testComponent{"test"} }
+	result := rt.Is(noReceiverFunc)
+	if result {
+		t.Error("Expected Is() to return false for function with no receiver")
+	}
+}
+
+// Test findPageNode with predicate that matches no pages
+func TestFindPageNode_PredicateNoMatch(t *testing.T) {
+	type pages struct {
+		p1 predicateTestPage1 `route:"/ Page1"`
+		p2 predicateTestPage2 `route:"/page2 Page2"`
+	}
+
+	// Use predicate that matches no pages
+	predicate := func(node *PageNode) bool {
+		return node.Name == "NonExistentPage"
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, urlErr := URLFor(r.Context(), predicate)
+			if urlErr == nil {
+				http.Error(w, "Expected error when predicate matches no pages", http.StatusInternalServerError)
+				return
+			}
+			if !strings.Contains(urlErr.Error(), "no page matched the provided predicate function") {
+				http.Error(w, fmt.Sprintf("Expected 'no page matched' error, got: %v", urlErr), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("success"))
+		})
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Make a request to trigger the middleware
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Test failed: %s", rec.Body.String())
+	}
+}
