@@ -79,16 +79,13 @@ func printRoutes(counter *int) MiddlewareFunc {
 // Test that reproduces the exact user issue and verifies the fix
 func TestUserIssueReproduction(t *testing.T) {
 	mux := http.NewServeMux()
-	router := NewRouter(mux)
-
 	var routeCount int
-	sp := New(WithMiddlewares(printRoutes(&routeCount)))
-
-	err := sp.MountPages(router, userReproduceIssue{}, "/", "Test App")
+	sp, err := Mount(mux, userReproduceIssue{}, "/", "Test App", WithMiddlewares(printRoutes(&routeCount)))
 	// After the fix, this should NOT fail - EventDeletePage should just be skipped
 	if err != nil {
 		t.Fatalf("Expected no error after fix, but got: %v", err)
 	}
+	_ = sp
 
 	// Assert that we have the expected number of routes registered
 	// Expected routes:
@@ -132,7 +129,7 @@ func TestUserIssueReproduction(t *testing.T) {
 			req, _ := http.NewRequest("GET", tt.path, http.NoBody)
 			w := &responseRecorder{}
 
-			router.ServeHTTP(w, req)
+			mux.ServeHTTP(w, req)
 
 			if w.code != http.StatusOK {
 				t.Errorf("Expected status 200, got %d for path %s", w.code, tt.path)
@@ -150,7 +147,7 @@ func TestUserIssueReproduction(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/events/nonexistent", http.NoBody)
 		w := &responseRecorder{}
 
-		router.ServeHTTP(w, req)
+		mux.ServeHTTP(w, req)
 
 		if w.code != http.StatusNotFound {
 			t.Errorf("Expected unregistered route to return 404, got %d", w.code)

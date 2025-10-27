@@ -155,8 +155,8 @@ func TestRegisterPageItem_ErrorScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sp := New()
-			router := NewRouter(http.NewServeMux())
+			sp := &StructPages{}
+			mux := http.NewServeMux()
 
 			pc, err := parsePageTree(tt.route, tt.page)
 			if err != nil {
@@ -170,7 +170,7 @@ func TestRegisterPageItem_ErrorScenarios(t *testing.T) {
 				tt.setupPage(pc.root)
 			}
 
-			err = sp.registerPageItem(router, pc, pc.root, tt.middlewares)
+			err = sp.registerPageItem(mux, pc, pc.root, tt.middlewares)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.wantErr)
@@ -240,21 +240,18 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			capturedErrors = []error{}
-			sp := New(WithErrorHandler(errorHandler))
+			mux := http.NewServeMux()
+			sp, err := Mount(mux, tt.page, tt.route, "Test", WithErrorHandler(errorHandler))
+			if err != nil {
+				t.Fatalf("Mount failed: %v", err)
+			}
 			if tt.defaultConfig != nil {
 				sp.defaultComponentSelector = tt.defaultConfig
 			}
 
-			router := NewRouter(http.NewServeMux())
-
-			err := sp.MountPages(router, tt.page, tt.route, "Test")
-			if err != nil {
-				t.Fatalf("MountPages failed: %v", err)
-			}
-
 			req := httptest.NewRequest(http.MethodGet, tt.requestPath, http.NoBody)
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if len(capturedErrors) == 0 {
 				t.Errorf("expected error to be captured, but none were")
@@ -270,7 +267,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 
 // Test findComponent edge cases
 func TestFindComponent_NoPageComponent(t *testing.T) {
-	sp := New()
+	sp := &StructPages{}
 	pc := &parseContext{args: make(argRegistry)}
 
 	// Create a PageNode without Page component manually
@@ -312,7 +309,9 @@ func TestAsHandler_ExtendedHandlerErrors(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
+	sp := &StructPages{
+		onError: errorHandler,
+	}
 	pc := &parseContext{args: make(argRegistry)}
 
 	// Don't provide the required string argument
@@ -351,7 +350,9 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
+	sp := &StructPages{
+		onError: errorHandler,
+	}
 	pc := &parseContext{args: make(argRegistry)}
 
 	// Create a page node with an invalid component method
@@ -394,17 +395,15 @@ func TestBuildHandler_ComponentMethodError(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
-	router := NewRouter(http.NewServeMux())
-
-	err := sp.MountPages(router, &errorInComponentMethodPage{}, "/test", "Test")
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &errorInComponentMethodPage{}, "/test", "Test", WithErrorHandler(errorHandler))
 	if err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if len(capturedErrors) == 0 {
 		t.Errorf("expected error for component method call")

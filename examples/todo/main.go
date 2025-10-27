@@ -66,15 +66,15 @@ func main() {
 	addTodo("Build a TODO app")
 	addTodo("Deploy to production")
 
-	sp := structpages.New(
+	sp, err := structpages.Mount(nil, index{}, "/", "index",
 		structpages.WithErrorHandler(errorHandler),
 	)
-	router := structpages.NewRouter(http.DefaultServeMux)
-	if err := sp.MountPages(router, index{}, "/", "index"); err != nil {
+	if err != nil {
 		log.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp // sp provides URLFor and IDFor methods
 	log.Println("Starting TODO app on :8080")
-	http.ListenAndServe(":8080", router)
+	http.ListenAndServe(":8080", nil) // nil uses http.DefaultServeMux
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {

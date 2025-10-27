@@ -10,13 +10,11 @@ func TestParentAndChildrenRegistration(t *testing.T) {
 	var routeCount int
 
 	mux := http.NewServeMux()
-	router := NewRouter(mux)
-	sp := New(WithMiddlewares(printRoutes(&routeCount)))
-
-	err := sp.MountPages(router, testParentChildStructure{}, "/", "Test App")
+	sp, err := Mount(mux, testParentChildStructure{}, "/", "Test App", WithMiddlewares(printRoutes(&routeCount)))
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp
 
 	// Expected routes:
 	// 1. /admin -> AdminSection (parent with handler)

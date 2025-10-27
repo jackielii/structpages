@@ -7,13 +7,13 @@ import (
 	"github.com/jackielii/structpages"
 )
 
-var sp = structpages.New()
-
 func main() {
-	r := structpages.NewRouter(nil)
-	if err := sp.MountPages(r, index{}, "/", "index"); err != nil {
+	mux := http.NewServeMux()
+	sp, err := structpages.Mount(mux, index{}, "/", "index")
+	if err != nil {
 		log.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp // sp provides URLFor and IDFor methods
 	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8080", mux)
 }

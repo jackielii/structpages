@@ -214,7 +214,8 @@ func TestUrlFor(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sp := New(WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
+			mux := http.NewServeMux()
+			_, err := Mount(mux, &index{}, "/", "index", WithMiddlewares(func(h http.Handler, pn *PageNode) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					url, err := URLFor(r.Context(), tt.page, tt.args...)
 					if err != nil {
@@ -224,13 +225,12 @@ func TestUrlFor(t *testing.T) {
 					_, _ = w.Write([]byte(url))
 				})
 			}))
-			r := NewRouter(http.NewServeMux())
-			if err := sp.MountPages(r, &index{}, "/", "index"); err != nil {
-				t.Fatalf("MountPages failed: %v", err)
+			if err != nil {
+				t.Fatalf("Mount failed: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 			}
@@ -465,16 +465,14 @@ func TestURLFor_withExtractedParams(t *testing.T) {
 
 	// Test complete middleware integration
 	t.Run("Full integration with middleware", func(t *testing.T) {
-		sp := New()
-		mux := http.NewServeMux()
-		r := NewRouter(mux)
-
 		type testPages struct {
 			product productPage `route:"/product/{id} Product"`
 		}
 
-		if err := sp.MountPages(r, &testPages{}, "/", "Test"); err != nil {
-			t.Fatalf("MountPages failed: %v", err)
+		mux := http.NewServeMux()
+		_, err := Mount(mux, &testPages{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
 		}
 
 		// Create a handler that will check if params are extracted
@@ -502,17 +500,15 @@ func TestURLFor_withExtractedParams(t *testing.T) {
 
 	// Test real handler scenario
 	t.Run("Handler with URLFor using extracted params", func(t *testing.T) {
-		sp := New()
-		mux := http.NewServeMux()
-		r := NewRouter(mux)
-
 		type testPages struct {
 			view viewPage `route:"GET /product/{id} View Product"`
 			edit editPage `route:"GET /product/{id}/edit Edit Product"`
 		}
 
-		if err := sp.MountPages(r, &testPages{}, "/", "Test"); err != nil {
-			t.Fatalf("MountPages failed: %v", err)
+		mux := http.NewServeMux()
+		_, err := Mount(mux, &testPages{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
 		}
 
 		// Request the view page with ID 123
