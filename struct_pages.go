@@ -661,15 +661,16 @@ func (router *StructPages) execProps(pc *parseContext, pn *PageNode,
 		return nil, nil
 	}
 
-	if propMethod.Func.IsValid() {
-		// Make RenderTarget available for injection along with r and w
-		props, err := pc.callMethod(
-			pn, &propMethod,
-			reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(renderTarget))
-		if err != nil {
-			return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
-		}
-		return extractError(props)
+	if !propMethod.Func.IsValid() {
+		return nil, fmt.Errorf("Props method for page %s has invalid Func", pn.Name)
 	}
-	return nil, nil
+
+	// Make RenderTarget available for injection along with r and w
+	props, err := pc.callMethod(
+		pn, &propMethod,
+		reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(renderTarget))
+	if err != nil {
+		return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
+	}
+	return extractError(props)
 }
