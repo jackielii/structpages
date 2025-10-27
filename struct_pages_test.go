@@ -1072,6 +1072,16 @@ func (*pointerReceiverPage) Content() component {
 	return testComponent{"content"}
 }
 
+type propsErrorPage struct{}
+
+func (propsErrorPage) Page() component {
+	return testComponent{"page"}
+}
+
+func (propsErrorPage) Props(r *http.Request) (string, error) {
+	return "", errors.New("props error")
+}
+
 // Test RenderComponent with invalid method expression (non-function)
 func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
 	mux := http.NewServeMux()
@@ -1205,7 +1215,39 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 	if capturedErr == nil {
 		t.Error("Expected error to be captured")
 	}
-	// Error captured successfully - the component error path was exercised
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error calling component") {
+		t.Logf("Got error: %v", capturedErr)
+	}
+}
+
+// Test Props method that returns error
+func TestExecProps_PropsError(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &propsErrorPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Custom error handler to capture the error
+	var capturedErr error
+	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}
+
+	// Make a request that will trigger Props
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Verify error was captured
+	if capturedErr == nil {
+		t.Error("Expected Props error to be captured")
+	}
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "props error") {
+		t.Errorf("Expected 'props error', got: %v", capturedErr)
+	}
 }
 
 // Test RenderTarget.Is() with function that has no receiver
