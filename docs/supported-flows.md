@@ -9,7 +9,7 @@ This document explains how structpages processes different types of requests and
 | **1** | Full control over request/response | `ServeHTTP(w, r)` | N/A | File uploads, WebSockets |
 | **2** | Actions that render components | `ServeHTTP(w, r) error` | Return `RenderComponent(method)` | Add todo → render todo list |
 | **3** | Actions with database/logger | `ServeHTTP(w, r, db, logger) error` | Return `RenderComponent(method)` | CRUD operations |
-| **4** | Standard pages with HTMX | `Props(r, sel)` + Component methods | Automatic via `HTMXPageConfig` + `ComponentSelection` | **Primary pattern** ⭐ |
+| **4** | Standard pages with HTMX | `Props(r, sel)` + Component methods | Automatic via `HTMXPageConfig` + `RenderTarget` | **Primary pattern** ⭐ |
 
 ## Flow 4: Component-Based Rendering (Recommended)
 
@@ -25,7 +25,7 @@ This is the primary way to build pages in structpages. It handles both full page
    ├─ HTMX request with HX-Target: "content" → "Content" component
    └─ HTMX request with HX-Target: "index-todo-list" → "TodoList" component
    ↓
-3. Props runs (with ComponentSelection injected)
+3. Props runs (with RenderTarget injected)
    - Knows which component will render
    - Returns appropriate data
    ↓
@@ -36,27 +36,27 @@ This is the primary way to build pages in structpages. It handles both full page
 
 | Request Type | HX-Request | HX-Target | Selected Component | Props Receives | Use Case |
 |-------------|-----------|-----------|-------------------|----------------|----------|
-| **Browser navigation** | ❌ No | N/A | `Page` | `sel.Selected(index.Page) == true` | Initial page load |
-| **HTMX boost** | ✅ Yes | ❌ Empty | `Page` | `sel.Selected(index.Page) == true` | Progressive enhancement |
-| **Simple HTMX target** | ✅ Yes | `"content"` | `Content` | `sel.Selected(index.Content) == true` | Direct component name |
-| **IDFor target** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `sel.Selected(index.TodoList) == true` | **Primary pattern** |
-| **Unknown target** | ✅ Yes | `"nonexistent"` | `Page` (fallback) | `sel.Selected(index.Page) == true` | Graceful degradation |
+| **Browser navigation** | ❌ No | N/A | `Page` | `sel.Is(index.Page) == true` | Initial page load |
+| **HTMX boost** | ✅ Yes | ❌ Empty | `Page` | `sel.Is(index.Page) == true` | Progressive enhancement |
+| **Simple HTMX target** | ✅ Yes | `"content"` | `Content` | `sel.Is(index.Content) == true` | Direct component name |
+| **IDFor target** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `sel.Is(index.TodoList) == true` | **Primary pattern** |
+| **Unknown target** | ✅ Yes | `"nonexistent"` | `Page` (fallback) | `sel.Is(index.Page) == true` | Graceful degradation |
 
-### Complete Example: Flow 4 with ComponentSelection
+### Complete Example: Flow 4 with RenderTarget
 
 ```go
 type index struct {
     add `route:"POST /add"`
 }
 
-// Props knows which component will render via ComponentSelection
-func (p index) Props(r *http.Request, sel *structpages.ComponentSelection) ([]Todo, error) {
+// Props knows which component will render via RenderTarget
+func (p index) Props(r *http.Request, sel *structpages.RenderTarget) ([]Todo, error) {
     switch {
-    case sel.Selected(index.TodoList):
+    case sel.Is(index.TodoList):
         // Only load active todos for TodoList component
         return getActiveTodos(), nil
 
-    case sel.Selected(index.Page):
+    case sel.Is(index.Page):
         // Load everything for full page
         return getAllTodos(), nil
 
@@ -86,8 +86,8 @@ templ (p index) TodoList(todos []Todo) {
 ```
 
 **What happens:**
-1. **Initial page load**: Browser requests `/` → Props gets `sel.Selected(index.Page) == true` → loads all todos → renders full page
-2. **Add todo via HTMX**: Form submits → Add handler runs → returns `RenderComponent(index.TodoList)` → Props gets `sel.Selected(index.TodoList) == true` → loads active todos → renders just TodoList component → HTMX swaps it in
+1. **Initial page load**: Browser requests `/` → Props gets `sel.Is(index.Page) == true` → loads all todos → renders full page
+2. **Add todo via HTMX**: Form submits → Add handler runs → returns `RenderComponent(index.TodoList)` → Props gets `sel.Is(index.TodoList) == true` → loads active todos → renders just TodoList component → HTMX swaps it in
 
 **Benefits:**
 - ✅ Props efficiently loads only needed data
@@ -117,9 +117,9 @@ type index struct {
 
 // Props returns the full IndexProps structure
 // This matches the Page component signature
-func (p index) Props(r *http.Request, sel *ComponentSelection) (IndexProps, error) {
+func (p index) Props(r *http.Request, sel *RenderTarget) (IndexProps, error) {
     switch {
-    case sel.Selected(index.Page):
+    case sel.Is(index.Page):
         // Full page load - get everything
         return IndexProps{
             Users:      getAllUsers(),
@@ -261,7 +261,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 **Flow:**
 - ✅ Perform action (add todo)
 - ✅ Return `RenderComponent(method)` to render a component
-- ✅ Props runs with `ComponentSelection` for that component
+- ✅ Props runs with `RenderTarget` for that component
 - ✅ Component renders with fresh data
 
 ---
@@ -298,16 +298,16 @@ sp.MountPages(router, &pages{}, "/", "App", db, logger)
 
 ## Key Takeaways
 
-### ComponentSelection Benefits
+### RenderTarget Benefits
 
-Props receives ComponentSelection to know which component will render:
+Props receives RenderTarget to know which component will render:
 
 ```go
-func (p index) Props(r *http.Request, sel *ComponentSelection) (interface{}, error) {
+func (p index) Props(r *http.Request, sel *RenderTarget) (interface{}, error) {
     switch {
-    case sel.Selected(index.TodoList):
+    case sel.Is(index.TodoList):
         return getTodos(), nil
-    case sel.Selected(index.Page):
+    case sel.Is(index.Page):
         return getAllData(), nil
     }
 }
@@ -324,8 +324,8 @@ func (p index) Props(r *http.Request, sel *ComponentSelection) (interface{}, err
 Flow 4 executes in this order:
 ```
 1. findComponent() → Determines which component (e.g., "TodoList")
-2. Create ComponentSelection with selected component
-3. Props() → Receives ComponentSelection, returns data
+2. Create RenderTarget with selected component
+3. Props() → Receives RenderTarget, returns data
 4. Render component with data from Props
 ```
 
@@ -336,7 +336,7 @@ Flow 4 executes in this order:
 Props can override the selected component:
 
 ```go
-func (p search) Props(r *http.Request, sel *ComponentSelection) ([]Result, error) {
+func (p search) Props(r *http.Request, sel *RenderTarget) ([]Result, error) {
     query := r.URL.Query().Get("q")
 
     // Override component selection based on logic
@@ -344,9 +344,9 @@ func (p search) Props(r *http.Request, sel *ComponentSelection) ([]Result, error
         return nil, structpages.RenderComponent(search.EmptyState)
     }
 
-    // Normal flow uses ComponentSelection
+    // Normal flow uses RenderTarget
     switch {
-    case sel.Selected(search.Results):
+    case sel.Is(search.Results):
         return performSearch(query), nil
     }
 }
@@ -356,6 +356,6 @@ func (p search) Props(r *http.Request, sel *ComponentSelection) ([]Result, error
 
 ## See Also
 
-- [ComponentSelection Guide](./component-selection.md) - Detailed ComponentSelection documentation
+- [RenderTarget Guide](./component-selection.md) - Detailed RenderTarget documentation
 - [IDFor Usage](../IDFOR_USAGE.md) - Type-safe ID generation
 - [examples/todo](../examples/todo) - Complete working example

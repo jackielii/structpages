@@ -14,34 +14,35 @@ import (
 // implementing conditional rendering or redirects within page logic.
 var ErrSkipPageRender = errors.New("skip page render")
 
-// ComponentSelection contains information about which component was selected
-// for rendering. It's available to Props methods via dependency injection.
+// RenderTarget contains information about which component will be rendered.
+// It's available to Props methods via dependency injection, allowing Props to
+// load only the data needed for the target component.
 //
 // Example usage in Props:
 //
-//	func (p index) Props(r *http.Request, sel *structpages.ComponentSelection) ([]Todo, error) {
+//	func (p index) Props(r *http.Request, target *structpages.RenderTarget) ([]Todo, error) {
 //	    switch {
-//	    case sel.Selected(index.TodoList):
+//	    case target.Is(index.TodoList):
 //	        return getTodos(), nil
-//	    case sel.Selected(index.Page):
+//	    case target.Is(index.Page):
 //	        return getAllData(), nil
 //	    default:
 //	        return getAllData(), nil
 //	    }
 //	}
-type ComponentSelection struct {
+type RenderTarget struct {
 	selectedMethod reflect.Method // The actual component method that was selected
 }
 
-// Selected returns true if the given method expression matches the selected component.
+// Is returns true if the given method expression matches the target component.
 // Uses method expressions for compile-time safety and IDE refactoring support.
 //
 // Example:
 //
-//	if sel.Selected(index.TodoList) {
-//	    // TodoList component is being rendered
+//	if target.Is(index.TodoList) {
+//	    // TodoList component will be rendered
 //	}
-func (cs *ComponentSelection) Selected(method any) bool {
+func (rt *RenderTarget) Is(method any) bool {
 	methodName := extractMethodName(method)
 	if methodName == "" {
 		return false
@@ -53,12 +54,12 @@ func (cs *ComponentSelection) Selected(method any) bool {
 		return false
 	}
 
-	selectedReceiverType := cs.selectedMethod.Type.In(0)
+	selectedReceiverType := rt.selectedMethod.Type.In(0)
 	if selectedReceiverType.Kind() == reflect.Pointer {
 		selectedReceiverType = selectedReceiverType.Elem()
 	}
 
-	return cs.selectedMethod.Name == methodName &&
+	return rt.selectedMethod.Name == methodName &&
 		selectedReceiverType == receiverType
 }
 
@@ -440,13 +441,13 @@ func (router *StructPages) buildHandler(page *PageNode, pc *parseContext) http.H
 			return
 		}
 
-		// 2. Create ComponentSelection with the selected component info
-		componentSelection := &ComponentSelection{
+		// 2. Create RenderTarget with the selected component info
+		renderTarget := &RenderTarget{
 			selectedMethod: compMethod,
 		}
 
-		// 3. Call Props with ComponentSelection available for injection
-		props, err := router.execProps(pc, page, r, w, componentSelection)
+		// 3. Call Props with RenderTarget available for injection
+		props, err := router.execProps(pc, page, r, w, renderTarget)
 		if err != nil {
 			// Check if it's a render component error
 			if router.handleRenderComponentError(w, r, err, pc, page, props) {
@@ -621,7 +622,7 @@ func (router *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http
 }
 
 func (router *StructPages) execProps(pc *parseContext, pn *PageNode,
-	r *http.Request, w http.ResponseWriter, componentSelection *ComponentSelection,
+	r *http.Request, w http.ResponseWriter, renderTarget *RenderTarget,
 ) ([]reflect.Value, error) {
 	// Look for Props method
 	propMethod, ok := pn.Props["Props"]
@@ -630,10 +631,10 @@ func (router *StructPages) execProps(pc *parseContext, pn *PageNode,
 	}
 
 	if propMethod.Func.IsValid() {
-		// Make ComponentSelection available for injection along with r and w
+		// Make RenderTarget available for injection along with r and w
 		props, err := pc.callMethod(
 			pn, &propMethod,
-			reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(componentSelection))
+			reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(renderTarget))
 		if err != nil {
 			return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
 		}

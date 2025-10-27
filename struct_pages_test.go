@@ -642,9 +642,9 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 
-	// Create a dummy reflect.Method for ComponentSelection
+	// Create a dummy reflect.Method for RenderTarget
 	dummyMethod := reflect.Method{Name: "Page"}
-	compSel := &ComponentSelection{selectedMethod: dummyMethod}
+	compSel := &RenderTarget{selectedMethod: dummyMethod}
 	_, err := sp.execProps(pc, pn, req, nil, compSel)
 	if err == nil {
 		t.Error("Expected error from execProps")
