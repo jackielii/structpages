@@ -98,6 +98,100 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	return strings.Replace(path, "{$}", "", 1), nil
 }
 
+// formatPathSegmentsNoCtx formats URL pattern segments with provided arguments.
+// This version doesn't use context, so all parameters must be provided as args.
+//
+//nolint:gocognit,gocyclo // This function handles multiple cases for flexible argument passing
+func formatPathSegmentsNoCtx(pattern string, args ...any) (string, error) {
+	segments, err := parseSegments(pattern)
+	if err != nil {
+		return pattern, fmt.Errorf("pattern %s: %w", pattern, err)
+	}
+	indices := make([]int, 0, len(segments)/2+1)
+	for i, segment := range segments {
+		if segment.param {
+			indices = append(indices, i)
+		}
+	}
+	if len(args) == 0 && len(indices) == 0 {
+		return pattern, nil // no args and no params, return the pattern as is
+	}
+
+	if len(args) == 0 && len(indices) > 0 {
+		return pattern, fmt.Errorf("pattern %s: no arguments provided", pattern)
+	}
+
+	if arg, ok := args[0].(map[string]any); ok {
+		for _, idx := range indices {
+			name := segments[idx].name
+			if value, ok := arg[name]; ok {
+				segments[idx].value = fmt.Sprint(value)
+			}
+		}
+		// Check if all params are filled
+		for _, idx := range indices {
+			if segments[idx].value == "" {
+				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v",
+					pattern, segments[idx].name, args)
+			}
+		}
+	} else {
+		switch {
+		case len(args) == len(indices):
+			for i, idx := range indices {
+				segments[idx].value = fmt.Sprint(args[i])
+			}
+		case len(args)%2 == 0 && len(args) >= 2:
+			// Check if all even-indexed args are strings AND at least one matches a parameter name
+			isPairs := true
+			matchKey := false
+			paramNames := make(map[string]bool)
+			for _, idx := range indices {
+				paramNames[segments[idx].name] = true
+			}
+
+			for i := 0; i < len(args); i += 2 {
+				key, ok := args[i].(string)
+				if !ok {
+					isPairs = false
+					break
+				}
+				if paramNames[key] {
+					matchKey = true
+				}
+			}
+
+			// Only treat as key-value pairs if all even args are strings AND at least one matches
+			if isPairs && matchKey {
+				m := make(map[string]any)
+				for i := 0; i < len(args); i += 2 {
+					key := args[i].(string)
+					m[key] = args[i+1]
+				}
+				for _, idx := range indices {
+					name := segments[idx].name
+					if value, ok := m[name]; ok {
+						segments[idx].value = fmt.Sprint(value)
+					} else {
+						return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
+					}
+				}
+				break
+			}
+			fallthrough
+		default:
+			return pattern, fmt.Errorf("pattern %s: not enough arguments provided, args: %v", pattern, args)
+		}
+	}
+
+	s := ""
+	for _, segment := range segments {
+		s += cmp.Or(segment.value, segment.name)
+	}
+
+	return s, nil
+}
+
 // formatPathSegments formats URL pattern segments with provided arguments,
 // using pre-extracted parameters from context if available.
 // For more sophisticated path parsing, see Go's standard library implementation

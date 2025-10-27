@@ -71,16 +71,15 @@ func TestRenderPageComponent_Normal(t *testing.T) {
 		renderTestErrorPage       `route:"/error"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -100,16 +99,15 @@ func TestRenderPageComponent_Error(t *testing.T) {
 		renderTestErrorPage       `route:"/error"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test?trigger=error", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -129,16 +127,15 @@ func TestRenderPageComponent_NotFound(t *testing.T) {
 		renderTestErrorPage       `route:"/error"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test?trigger=notfound", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -191,16 +188,15 @@ func TestRenderPageComponentMultipleArgs(t *testing.T) {
 		multiArgPage     `route:"/multi"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/multitest", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -244,16 +240,15 @@ func TestRenderPageComponentInvalidPage(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(errorHandler))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/invalid", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
@@ -328,16 +323,15 @@ func TestRenderPageComponentSharedComponents_Header(t *testing.T) {
 		footerPage              `route:"/footer"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/shared?component=header", nil)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -364,17 +358,16 @@ func TestRenderPageComponentSharedComponents_Footer(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(errorHandler))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/shared?component=footer", nil)
 	rec := httptest.NewRecorder()
 	capturedError = nil
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -415,11 +408,10 @@ func TestRenderPageComponent_FromErrHandler(t *testing.T) {
 		renderTestErrorPage           `route:"/error"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	tests := []struct {
@@ -448,7 +440,7 @@ func TestRenderPageComponent_FromErrHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/handler"+tt.query, nil)
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -485,13 +477,12 @@ func TestRenderPageComponent_FromExtendedServeHTTP(t *testing.T) {
 		multiArgPage                       `route:"/multi"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// Provide logger arg for dependency injection
 	logger := "test-logger"
-	if err := sp.MountPages(router, &pages{}, "/", "Test", logger); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", logger)
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	tests := []struct {
@@ -520,7 +511,7 @@ func TestRenderPageComponent_FromExtendedServeHTTP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/extended"+tt.query, nil)
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -554,11 +545,10 @@ func TestRenderComponent_FromErrHandler(t *testing.T) {
 		errHandlerWithRenderSamePageComponent `route:"/samecomp"`
 	}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	tests := []struct {
@@ -582,7 +572,7 @@ func TestRenderComponent_FromErrHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/samecomp"+tt.query, nil)
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)

@@ -263,25 +263,25 @@ var nodeInfoMiddleware = func(next http.Handler, node *PageNode) http.Handler {
 
 // Test middleware execution order with global and page-specific middlewares
 func TestMiddlewareExecutionOrder(t *testing.T) {
-	// Create StructPages with global middlewares
-	sp := New(
+	// Create Router with global middlewares
+	type topPage struct {
+		orderTestPage `route:"/order Order Test"`
+	}
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page",
 		WithMiddlewares(
 			makeOrderMiddleware("global1"),
 			makeOrderMiddleware("global2"),
 		),
 	)
-
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		orderTestPage `route:"/order Order Test"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/order", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -322,19 +322,20 @@ func TestMiddlewareContextModification(t *testing.T) {
 		})
 	}
 
-	sp := New(WithMiddlewares(contextMiddleware1, contextMiddleware2))
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		contextTestPage `route:"/context Context Test"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page",
+		WithMiddlewares(contextMiddleware1, contextMiddleware2))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/context", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -348,21 +349,21 @@ func TestMiddlewareContextModification(t *testing.T) {
 
 // Test that middlewares can short-circuit the request
 func TestMiddlewareShortCircuit(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		protectedPage `route:"/protected Protected Page"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	// Test without authorization header
 	{
 		req := httptest.NewRequest(http.MethodGet, "/protected", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("expected status %d, got %d", http.StatusUnauthorized, rec.Code)
@@ -380,7 +381,7 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/protected", http.NoBody)
 		req.Header.Set("Authorization", "Bearer token")
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -396,21 +397,21 @@ func TestMiddlewareShortCircuit(t *testing.T) {
 
 // Test nested pages with middlewares
 func TestNestedPagesMiddleware(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		parentPageMw `route:"/parent Parent Page"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	// Test parent page - should only have parent middleware
 	{
 		req := httptest.NewRequest(http.MethodGet, "/parent", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -430,7 +431,7 @@ func TestNestedPagesMiddleware(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodGet, "/parent/child", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -449,24 +450,24 @@ func TestNestedPagesMiddleware(t *testing.T) {
 
 // Test multiple global middlewares with multiple page middlewares
 func TestComplexMiddlewareChain(t *testing.T) {
-	sp := New(
+	type topPage struct {
+		complexPage `route:"/complex Complex Page"`
+	}
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page",
 		WithMiddlewares(
 			makeComplexMiddleware("global-mw-1", "X-Flow"),
 			makeComplexMiddleware("global-mw-2", "X-Flow"),
 		),
 	)
-
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		complexPage `route:"/complex Complex Page"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/complex", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -490,22 +491,21 @@ func TestComplexMiddlewareChain(t *testing.T) {
 
 // Test error handling in middlewares
 func TestMiddlewareErrorHandling(t *testing.T) {
-	// Test with recovery middleware as global
-	sp := New(WithMiddlewares(recoveryMiddleware))
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		errorTestPage `route:"/error Error Test"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page", WithMiddlewares(recoveryMiddleware))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+		_ = sp
 	}
 
 	// Test normal request
 	{
 		req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -519,7 +519,7 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodGet, "/error?panic=true", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
@@ -533,22 +533,23 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 
 // Test middleware with different HTTP methods
 func TestMiddlewareWithHTTPMethods(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		getPage  methodPage `route:"GET /method Method GET"`
 		postPage methodPage `route:"POST /method Method POST"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
+	_ = sp
 
 	// Test GET request
 	{
 		req := httptest.NewRequest(http.MethodGet, "/method", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -568,7 +569,7 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodPost, "/method", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -587,19 +588,20 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 
 // Test middleware access to PageNode information
 func TestMiddlewarePageNodeAccess(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
-
 	type topPage struct {
 		infoPage `route:"POST /info Info Page Title"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest(http.MethodPost, "/info", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -623,21 +625,23 @@ func TestMiddlewarePageNodeAccess(t *testing.T) {
 func TestMiddlewareIntegration(t *testing.T) {
 	// This tests the integration with the existing middleware pattern
 	// to ensure our new tests don't break existing functionality
-	sp := New()
-	r := NewRouter(http.NewServeMux())
 
 	type topPage struct {
 		integrationPage `route:"/integration Integration Test"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
+	_ = sp
 
 	// Test parent page
 	{
 		req := httptest.NewRequest(http.MethodGet, "/integration", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -654,7 +658,7 @@ func TestMiddlewareIntegration(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodGet, "/integration/child", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)

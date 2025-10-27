@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"slices"
+	"strings"
 )
 
 // ErrSkipPageRender is a sentinel error that can be returned from a Props method
@@ -97,35 +98,200 @@ func RenderComponent(method any, args ...any) error {
 // to access page metadata like route, title, and other properties.
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 
-// StructPages is the main type for managing struct-based page routing.
-// It provides configuration options for error handling, middleware, and page rendering.
+// Mux represents any HTTP router that can register handlers using the Handle method.
+// This interface is satisfied by http.ServeMux and must follow the same pattern support
+// for route registration.
+type Mux interface {
+	Handle(pattern string, handler http.Handler)
+}
+
+// StructPages holds the parsed page tree context for URL generation.
+// It is returned by Mount and provides URLFor and IDFor methods.
 type StructPages struct {
+	pc                       *parseContext
 	onError                  func(http.ResponseWriter, *http.Request, error)
 	middlewares              []MiddlewareFunc
 	defaultComponentSelector func(r *http.Request, pn *PageNode) (string, error)
 	warnEmptyRoute           func(*PageNode)
 }
 
-// New creates a new StructPages instance with the provided options.
-// Options can be used to configure error handling, middleware, and default page configuration.
+// Mount parses the page tree and registers all routes onto the provided mux.
+// If mux is nil, routes are registered on http.DefaultServeMux.
+// Returns a StructPages that provides URLFor and IDFor methods.
 //
-// Example:
+// Parameters:
+//   - mux: Any router satisfying the Mux interface (e.g., http.ServeMux). If nil, uses http.DefaultServeMux.
+//   - page: A struct instance with route-tagged fields
+//   - route: The base route path for this page tree (e.g., "/" or "/admin")
+//   - title: The title for the root page
+//   - options: Optional configuration (WithErrorHandler, WithMiddlewares, etc.) and dependency injection args
 //
-//	sp := structpages.New(
-//	    structpages.WithErrorHandler(customErrorHandler),
-//	    structpages.WithMiddlewares(loggingMiddleware, authMiddleware),
-//	)
-func New(options ...func(*StructPages)) *StructPages {
+// Example with custom mux:
+//
+//	mux := http.NewServeMux()
+//	sp, err := structpages.Mount(mux, index{}, "/", "My App",
+//	    structpages.WithErrorHandler(customHandler))
+//	sp.URLFor(index.Page)
+//	http.ListenAndServe(":8080", mux)
+//
+// Example with DefaultServeMux:
+//
+//	sp, err := structpages.Mount(nil, index{}, "/", "My App")
+//	http.ListenAndServe(":8080", nil)
+func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages, error) {
+	if mux == nil {
+		mux = http.DefaultServeMux
+	}
+
 	sp := &StructPages{
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
 		defaultComponentSelector: HTMXPageConfig,
 	}
+
+	// Separate options from dependency injection args
+	var args []any
 	for _, opt := range options {
-		opt(sp)
+		if fn, ok := opt.(func(*StructPages)); ok {
+			fn(sp)
+		} else {
+			args = append(args, opt)
+		}
 	}
-	return sp
+
+	// Parse page tree
+	pc, err := parsePageTree(route, page, args...)
+	if err != nil {
+		return nil, err
+	}
+	pc.root.Title = title
+	sp.pc = pc
+
+	// Register all pages
+	middlewares := append([]MiddlewareFunc{withPcCtx(pc), extractURLParams}, sp.middlewares...)
+	if err := sp.registerPageItem(mux, pc, pc.root, middlewares); err != nil {
+		return nil, err
+	}
+
+	return sp, nil
+}
+
+// URLFor returns the URL for a given page type. If args is provided, it'll replace
+// the path segments. Supported format is similar to http.ServeMux.
+//
+// Unlike the context-based URLFor function, this method doesn't have access to
+// pre-extracted URL parameters from the current request, so all required parameters
+// must be provided as args.
+//
+// If multiple page type matches are found, the first one is returned.
+// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
+//
+// Additionally, you can pass []any to page to join multiple path segments together.
+// Strings will be joined as is. Example:
+//
+//	router.URLFor([]any{Page{}, "?foo={bar}"}, "bar", "baz")
+//
+// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
+// It can be useful when you have multiple pages with the same type but different routes.
+func (r *StructPages) URLFor(page any, args ...any) (string, error) {
+	var pattern string
+	parts, ok := page.([]any)
+	if !ok {
+		parts = []any{page}
+	}
+	for _, page := range parts {
+		if s, ok := page.(string); ok {
+			pattern += s
+		} else {
+			p, err := r.pc.urlFor(page)
+			if err != nil {
+				return "", err
+			}
+			pattern += p
+		}
+	}
+	path, err := formatPathSegmentsNoCtx(pattern, args...)
+	if err != nil {
+		return "", fmt.Errorf("urlfor: %w", err)
+	}
+	return strings.Replace(path, "{$}", "", 1), nil
+}
+
+// IDFor generates a consistent HTML ID or CSS selector for a component method.
+// It works without context by using the router's parseContext directly.
+//
+// By default, returns a CSS selector (with "#" prefix) for use in HTMX targets.
+// The ID includes the page name prefix to avoid conflicts across pages.
+//
+// Basic usage (returns CSS selector):
+//
+//	router.IDFor(p.UserList)
+//	// → "#team-management-view-user-list"
+//
+//	router.IDFor(TeamManagementView{}.GroupMembers)
+//	// → "#team-management-view-group-members"
+//
+// Advanced usage with IDParams:
+//
+//	// For id attribute (raw ID without "#")
+//	router.IDFor(IDParams{
+//	    Method: p.UserList,
+//	    RawID: true,
+//	})
+//	// → "team-management-view-user-list"
+//
+//	// With suffixes for compound IDs
+//	router.IDFor(IDParams{
+//	    Method: p.UserModal,
+//	    Suffixes: []string{"container"},
+//	})
+//	// → "#team-management-view-user-modal-container"
+func (r *StructPages) IDFor(v any) (string, error) {
+	// Handle IDParams pattern
+	var methodExpr any
+	var suffixes []string
+	rawID := false
+
+	if params, ok := v.(IDParams); ok {
+		methodExpr = params.Method
+		suffixes = params.Suffixes
+		rawID = params.RawID
+	} else {
+		methodExpr = v
+	}
+
+	// Extract method and receiver info
+	methodName := extractMethodName(methodExpr)
+	if methodName == "" {
+		return "", errors.New("failed to extract method name from expression")
+	}
+
+	receiverType := extractReceiverType(methodExpr)
+	if receiverType == nil {
+		return "", errors.New("failed to extract receiver type from method expression")
+	}
+
+	// Find page node - this gives us the page name
+	pn, err := r.pc.findPageNodeByType(receiverType)
+	if err != nil {
+		return "", fmt.Errorf("cannot find page for method expression: %w", err)
+	}
+
+	// Build ID with page name prefix for conflict prevention
+	id := camelToKebab(pn.Name) + "-" + camelToKebab(methodName)
+
+	// Append suffixes if provided
+	for _, suffix := range suffixes {
+		id += "-" + camelToKebab(suffix)
+	}
+
+	// Prepend "#" unless RawID requested
+	if !rawID {
+		id = "#" + id
+	}
+
+	return id, nil
 }
 
 // WithDefaultComponentSelector sets a global component selector function that determines
@@ -137,15 +303,16 @@ func New(options ...func(*StructPages)) *StructPages {
 //
 // Example - HTMX boost pattern:
 //
-//	sp := New(WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
-//	    if r.Header.Get("HX-Request") == "true" {
-//	        return "Content", nil  // Skip layout, render just content
-//	    }
-//	    return "Page", nil  // Full page with layout
-//	}))
+//	router := Mount(http.NewServeMux(), index{}, "/", "My App",
+//	    WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
+//	        if r.Header.Get("HX-Request") == "true" {
+//	            return "Content", nil  // Skip layout, render just content
+//	        }
+//	        return "Page", nil  // Full page with layout
+//	    }))
 func WithDefaultComponentSelector(selector func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages) {
-	return func(sp *StructPages) {
-		sp.defaultComponentSelector = selector
+	return func(r *StructPages) {
+		r.defaultComponentSelector = selector
 	}
 }
 
@@ -153,8 +320,8 @@ func WithDefaultComponentSelector(selector func(r *http.Request, pn *PageNode) (
 // an error occurs during page rendering or request handling. If not set, a default
 // handler returns a generic "Internal Server Error" response.
 func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) func(*StructPages) {
-	return func(sp *StructPages) {
-		sp.onError = onError
+	return func(r *StructPages) {
+		r.onError = onError
 	}
 }
 
@@ -162,8 +329,8 @@ func WithErrorHandler(onError func(http.ResponseWriter, *http.Request, error)) f
 // Middleware is executed in the order provided, with the first middleware being the
 // outermost handler. These global middlewares run before any page-specific middlewares.
 func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
-	return func(sp *StructPages) {
-		sp.middlewares = append(sp.middlewares, middlewares...)
+	return func(r *StructPages) {
+		r.middlewares = append(r.middlewares, middlewares...)
 	}
 }
 
@@ -175,62 +342,36 @@ func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages) {
 // Example usage:
 //
 //	// Use default warning (prints to stdout)
-//	sp := structpages.New(structpages.WithWarnEmptyRoute(nil))
+//	router := structpages.Mount(
+//		http.NewServeMux(), index{}, "/", "App",
+//		structpages.WithWarnEmptyRoute(nil),
+//	)
 //
 //	// Custom warning function
-//	sp := structpages.New(structpages.WithWarnEmptyRoute(func(pn *PageNode) {
-//		log.Printf("Skipping empty page: %s", pn.Name)
-//	}))
+//	router := structpages.Mount(
+//		http.NewServeMux(), index{}, "/", "App",
+//		structpages.WithWarnEmptyRoute(func(pn *PageNode) {
+//			log.Printf("Skipping empty page: %s", pn.Name)
+//		}),
+//	)
 //
 //	// Suppress warnings entirely
-//	sp := structpages.New(structpages.WithWarnEmptyRoute(func(*PageNode) {}))
+//	router := structpages.Mount(
+//		http.NewServeMux(), index{}, "/", "App",
+//		structpages.WithWarnEmptyRoute(func(*PageNode) {}),
+//	)
 func WithWarnEmptyRoute(warnFunc func(*PageNode)) func(*StructPages) {
 	if warnFunc == nil {
 		warnFunc = func(pn *PageNode) {
 			fmt.Printf("⚠️  Warning: page route has no children and no handler, skipping route registration: %s\n", pn.Name)
 		}
 	}
-	return func(sp *StructPages) {
-		sp.warnEmptyRoute = warnFunc
+	return func(r *StructPages) {
+		r.warnEmptyRoute = warnFunc
 	}
 }
 
-// MountPages registers the given page struct and all its nested pages with the router.
-// The page parameter should be a struct with fields tagged with route definitions.
-//
-// Parameters:
-//   - router: The Router instance to register routes with (e.g., structpages.NewRouter(http.NewServeMux()))
-//   - page: A struct instance with route-tagged fields
-//   - route: The base route path for this page tree (e.g., "/" or "/admin")
-//   - title: The title for the root page
-//   - args: Optional dependency injection arguments available to page methods
-//
-// The args parameter supports dependency injection. Any values passed here will be
-// available to page methods (Props, Middlewares, etc.) that declare matching parameter types.
-// Each type can only be registered once - attempting to register duplicate types will return an error.
-//
-// Example:
-//
-//	type pages struct {
-//	    home    `route:"/ Home"`
-//	    about   `route:"/about About Us"`
-//	}
-//
-//	err := sp.MountPages(router, pages{}, "/", "My App", dbConn, logger)
-func (sp *StructPages) MountPages(router Router, page any, route, title string, args ...any) error {
-	pc, err := parsePageTree(route, page, args...)
-	if err != nil {
-		return err
-	}
-	pc.root.Title = title
-	middlewares := append([]MiddlewareFunc{withPcCtx(pc), extractURLParams}, sp.middlewares...)
-	if err := sp.registerPageItem(router, pc, pc.root, middlewares); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *PageNode, mw []MiddlewareFunc) error {
+func (sp *StructPages) registerPageItem(mux Mux, pc *parseContext, page *PageNode, mw []MiddlewareFunc) error {
 	if page.Route == "" {
 		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
@@ -252,7 +393,7 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
 		for _, child := range page.Children {
-			if err := sp.registerPageItem(router, pc, child, mw); err != nil {
+			if err := sp.registerPageItem(mux, pc, child, mw); err != nil {
 				return err
 			}
 		}
@@ -269,13 +410,19 @@ func (sp *StructPages) registerPageItem(router Router, pc *parseContext, page *P
 	for _, middleware := range slices.Backward(mw) {
 		handler = middleware(handler, page)
 	}
-	router.HandleMethod(page.Method, page.FullRoute(), handler)
+	// If method is "ALL", register without method prefix (matches all methods)
+	// Otherwise, register with "METHOD /path" format
+	pattern := page.FullRoute()
+	if page.Method != methodAll {
+		pattern = page.Method + " " + pattern
+	}
+	mux.Handle(pattern, handler)
 	return nil
 }
 
 // handleRenderComponentError checks if the error is an errRenderComponent and handles it.
 // Returns true if it handled the error, false otherwise.
-func (sp *StructPages) handleRenderComponentError(
+func (router *StructPages) handleRenderComponentError(
 	w http.ResponseWriter, r *http.Request, err error, pc *parseContext, page *PageNode, props []reflect.Value,
 ) bool {
 	var renderErr *errRenderComponent
@@ -296,43 +443,43 @@ func (sp *StructPages) handleRenderComponentError(
 	// Extract method info from method expression
 	methodName := extractMethodName(renderErr.method)
 	if methodName == "" {
-		sp.onError(w, r, fmt.Errorf("failed to extract method name from method expression"))
+		router.onError(w, r, fmt.Errorf("failed to extract method name from method expression"))
 		return true
 	}
 
 	receiverType := extractReceiverType(renderErr.method)
 	if receiverType == nil {
-		sp.onError(w, r, fmt.Errorf("failed to extract receiver type from method expression"))
+		router.onError(w, r, fmt.Errorf("failed to extract receiver type from method expression"))
 		return true
 	}
 
 	// Find the page that owns this component
 	targetPage, err := pc.findPageNodeByType(receiverType)
 	if err != nil {
-		sp.onError(w, r, fmt.Errorf("cannot find page for method expression: %w", err))
+		router.onError(w, r, fmt.Errorf("cannot find page for method expression: %w", err))
 		return true
 	}
 
 	// Look up the component method
 	compMethod, ok := targetPage.Components[methodName]
 	if !ok {
-		sp.onError(w, r, fmt.Errorf("component %s not found in page %s", methodName, targetPage.Name))
+		router.onError(w, r, fmt.Errorf("component %s not found in page %s", methodName, targetPage.Name))
 		return true
 	}
 
 	// Execute the component with the args
 	comp, compErr := pc.callComponentMethod(targetPage, &compMethod, componentArgs...)
 	if compErr != nil {
-		sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", targetPage.Name, compMethod.Name, compErr))
+		router.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", targetPage.Name, compMethod.Name, compErr))
 		return true
 	}
 
-	sp.render(w, r, comp)
+	router.render(w, r, comp)
 	return true
 }
 
-func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
-	if h := sp.asHandler(pc, page); h != nil {
+func (router *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
+	if h := router.asHandler(pc, page); h != nil {
 		return h
 	}
 	if len(page.Components) == 0 {
@@ -341,14 +488,14 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. Determine which component to render (before calling Props)
-		compMethod, err := sp.findComponent(pc, page, r)
+		compMethod, err := router.findComponent(pc, page, r)
 		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error finding component for %s: %w", page.Name, err))
+			router.onError(w, r, fmt.Errorf("error finding component for %s: %w", page.Name, err))
 			return
 		}
 
 		if !compMethod.Func.IsValid() {
-			sp.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
+			router.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
 			return
 		}
 
@@ -358,35 +505,35 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 		}
 
 		// 3. Call Props with ComponentSelection available for injection
-		props, err := sp.execProps(pc, page, r, w, componentSelection)
+		props, err := router.execProps(pc, page, r, w, componentSelection)
 		if err != nil {
 			// Check if it's a render component error
-			if sp.handleRenderComponentError(w, r, err, pc, page, props) {
+			if router.handleRenderComponentError(w, r, err, pc, page, props) {
 				return
 			}
 
 			if errors.Is(err, ErrSkipPageRender) {
 				return
 			}
-			sp.onError(w, r, fmt.Errorf("error running props for %s: %w", page.Name, err))
+			router.onError(w, r, fmt.Errorf("error running props for %s: %w", page.Name, err))
 			return
 		}
 
 		// 4. Render the selected component with props
 		comp, err := pc.callComponentMethod(page, &compMethod, props...)
 		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
+			router.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
 		}
-		sp.render(w, r, comp)
+		router.render(w, r, comp)
 	})
 }
 
-func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comp component) {
+func (router *StructPages) render(w http.ResponseWriter, r *http.Request, comp component) {
 	buf := getBuffer()
 	defer releaseBuffer(buf)
 	if err := comp.Render(r.Context(), buf); err != nil {
-		sp.onError(w, r, err)
+		router.onError(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -426,7 +573,7 @@ func formatMethod(method *reflect.Method) string {
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
 
-func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
+func (router *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	v := pn.Value
 	st, pt := v.Type(), v.Type()
 	if st.Kind() == reflect.Pointer {
@@ -456,11 +603,11 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 				// Clear the buffer since we have an error
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+				if router.handleRenderComponentError(bw, r, err, pc, pn, nil) {
 					return
 				}
 				// Write error directly to the buffered writer
-				sp.onError(bw, r, err)
+				router.onError(bw, r, err)
 			}
 		})
 	}
@@ -481,9 +628,9 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			if err != nil {
 				if bw != nil {
 					bw.buf.Reset()
-					sp.onError(bw, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+					router.onError(bw, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				} else {
-					sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
+					router.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				}
 				return
 			}
@@ -492,13 +639,13 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 				if bw != nil {
 					bw.buf.Reset()
 					// Check if it's a render component error
-					if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+					if router.handleRenderComponentError(bw, r, err, pc, pn, nil) {
 						return
 					}
-					sp.onError(bw, r, err)
+					router.onError(bw, r, err)
 				} else {
 					// if bw is nil it means we didn't need to buffer, i.e. the handler doesn't return error
-					sp.onError(w, r, err)
+					router.onError(w, r, err)
 				}
 				return
 			}
@@ -508,10 +655,10 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	return nil
 }
 
-func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
+func (router *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
 	// Use default component selector if configured (e.g., for HTMX boost pattern)
-	if sp.defaultComponentSelector != nil {
-		name, err := sp.defaultComponentSelector(r, pn)
+	if router.defaultComponentSelector != nil {
+		name, err := router.defaultComponentSelector(r, pn)
 		if err != nil {
 			return reflect.Method{}, fmt.Errorf("error calling default component selector for %s: %w", pn.Name, err)
 		}
@@ -532,7 +679,7 @@ func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Req
 	return page, nil
 }
 
-func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
+func (router *StructPages) execProps(pc *parseContext, pn *PageNode,
 	r *http.Request, w http.ResponseWriter, componentSelection *ComponentSelection,
 ) ([]reflect.Value, error) {
 	// Look for Props method

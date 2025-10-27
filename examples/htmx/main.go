@@ -22,17 +22,17 @@ func PrintRoutes(sb *strings.Builder) structpages.MiddlewareFunc {
 
 func main() {
 	var routes strings.Builder
-	sp := structpages.New(
+	sp, err := structpages.Mount(nil, index{}, "/", "index",
 		structpages.WithErrorHandler(errorHandler),
 		structpages.WithMiddlewares(PrintRoutes(&routes)),
 	)
-	router := structpages.NewRouter(http.DefaultServeMux)
-	if err := sp.MountPages(router, index{}, "/", "index"); err != nil {
+	if err != nil {
 		log.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp // sp provides URLFor and IDFor methods
 	fmt.Println("Available routes:\n", routes.String())
 	log.Println("Starting server on :8080")
-	http.ListenAndServe(":8080", router)
+	http.ListenAndServe(":8080", nil) // nil uses http.DefaultServeMux
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {

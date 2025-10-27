@@ -47,16 +47,15 @@ func TestComponentPartialWriteDiscardedOnError(t *testing.T) {
 		http.Error(w, "Component Error: "+err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
-	router := NewRouter(http.NewServeMux())
-
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(errorHandler))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/partial-error", http.NoBody)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	// Check response
 	if rec.Code != http.StatusInternalServerError {
@@ -173,16 +172,15 @@ func TestComponentVariousPartialWriteScenarios(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 
-			sp := New(WithErrorHandler(errorHandler))
-			router := NewRouter(http.NewServeMux())
-
-			if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-				t.Fatalf("MountPages failed: %v", err)
+			mux := http.NewServeMux()
+			_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(errorHandler))
+			if err != nil {
+				t.Fatalf("Mount failed: %v", err)
 			}
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, http.NoBody)
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			// Check status
 			if rec.Code != tt.expectedStatus {

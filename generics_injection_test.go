@@ -239,15 +239,13 @@ func TestGenerics_BasicInjection(t *testing.T) {
 	floatCalc := &calculator[float64]{name: "float-calc"}
 	asyncProc := newAsyncProcessor[string]()
 
-	// Create StructPages and router with error handler for debugging
-	sp := New(WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		t.Logf("Error handling request %s: %v", r.URL.Path, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}))
-	router := NewRouter(http.NewServeMux())
-
-	// Mount pages with generic dependencies
-	err := sp.MountPages(router, genericTestPage{}, "/", "Generic Test",
+	// Create router with error handler for debugging and generic dependencies
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, genericTestPage{}, "/", "Generic Test",
+		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			t.Logf("Error handling request %s: %v", r.URL.Path, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}),
 		userStore,
 		productRepo, // Use concrete type
 		floatCalc,
@@ -256,12 +254,13 @@ func TestGenerics_BasicInjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp
 
 	// Test user list with generic store
 	t.Run("generic store injection", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/users", http.NoBody)
 		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", rec.Code)
@@ -277,7 +276,7 @@ func TestGenerics_BasicInjection(t *testing.T) {
 	t.Run("generic repository injection", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/products", http.NoBody)
 		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", rec.Code)
@@ -293,7 +292,7 @@ func TestGenerics_BasicInjection(t *testing.T) {
 	t.Run("generic with constraint injection", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/calc", http.NoBody)
 		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", rec.Code)
@@ -310,7 +309,7 @@ func TestGenerics_BasicInjection(t *testing.T) {
 	t.Run("nested generic types injection", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/nested", http.NoBody)
 		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", rec.Code)
@@ -328,10 +327,7 @@ func TestGenerics_DuplicateTypeError(t *testing.T) {
 	store1 := newGenericStore[string]()
 	store2 := newGenericStore[string]()
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
-	err := sp.MountPages(router, genericTestPage{}, "/", "Test",
+	_, err := Mount(nil, genericTestPage{}, "/", "Test",
 		store1,
 		store2, // Same type as store1
 	)
@@ -350,14 +346,12 @@ func TestGenerics_DifferentTypeParameters(t *testing.T) {
 	intStore := newGenericStore[int]()
 	floatStore := newGenericStore[float64]()
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// Create a minimal page struct for testing
 	testPage := testPageWithHandler{}
 
 	// This should work because they're different types
-	err := sp.MountPages(router, testPage, "/", "Test",
+	mux := http.NewServeMux()
+	_, err := Mount(mux, testPage, "/", "Test",
 		stringStore,
 		intStore,
 		floatStore,
@@ -385,8 +379,6 @@ func (c collectionPage) Page(info string) component {
 }
 
 func TestGenerics_SlicesAndMaps(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
 
 	intSlice := []int{1, 2, 3}
 	stringMap := map[string]string{"key": "value"}
@@ -395,7 +387,8 @@ func TestGenerics_SlicesAndMaps(t *testing.T) {
 		{data: map[string]string{"b": "2"}},
 	}
 
-	err := sp.MountPages(router, collectionPage{}, "/", "Test",
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, collectionPage{}, "/", "Test",
 		intSlice,
 		stringMap,
 		genericSlice,
@@ -403,10 +396,11 @@ func TestGenerics_SlicesAndMaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rec.Code)
@@ -427,21 +421,20 @@ func TestGenerics_TypeAlias(t *testing.T) {
 	store.data = make(map[string]string)
 	store.Set("key", "value")
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// Create a minimal page struct for testing
 	testPage := testPageWithHandler{}
 
 	// This should work
-	err := sp.MountPages(router, testPage, "/", "Test", &store)
+	mux1 := http.NewServeMux()
+	_, err := Mount(mux1, testPage, "/", "Test", &store)
 	if err != nil {
 		t.Errorf("Type alias should work, got error: %v", err)
 	}
 
 	// But adding the original type with same parameters should fail
 	originalStore := newGenericStore[string]()
-	err = sp.MountPages(router, testPage, "/", "Test", &store, originalStore)
+	mux2 := http.NewServeMux()
+	_, err = Mount(mux2, testPage, "/", "Test", &store, originalStore)
 	if err == nil {
 		t.Error("Expected error for duplicate type (alias and original), got nil")
 	}
@@ -485,21 +478,21 @@ func (f funcPage) Page(result string) component {
 }
 
 func TestGenerics_FunctionTypes(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
 
 	fs := &funcStore[string]{
 		transformer: strings.ToUpper,
 	}
 
-	err := sp.MountPages(router, funcPage{}, "/", "Test", fs)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, funcPage{}, "/", "Test", fs)
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rec.Code)
@@ -512,8 +505,6 @@ func TestGenerics_FunctionTypes(t *testing.T) {
 
 // Test error handling with nil generic types
 func TestGenerics_NilHandling(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
 
 	var nilStore *genericStore[string]
 
@@ -521,7 +512,8 @@ func TestGenerics_NilHandling(t *testing.T) {
 	testPage := testPageWithHandler{}
 
 	// Nil values should be ignored by argRegistry
-	err := sp.MountPages(router, testPage, "/", "Test", nilStore)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, testPage, "/", "Test", nilStore)
 	if err != nil {
 		t.Errorf("Nil generic values should be ignored, got error: %v", err)
 	}
@@ -546,14 +538,12 @@ func TestGenerics_ComplexConstraints(t *testing.T) {
 	stringSorter := &sortableStore[string]{items: []string{"c", "a", "b"}}
 	floatSorter := &sortableStore[float64]{items: []float64{3.14, 1.0, 2.5}}
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// Create a minimal page struct for testing
 	testPage := testPageWithHandler{}
 
 	// All three should be treated as different types
-	err := sp.MountPages(router, testPage, "/", "Test",
+	mux := http.NewServeMux()
+	_, err := Mount(mux, testPage, "/", "Test",
 		intSorter,
 		stringSorter,
 		floatSorter,
@@ -568,14 +558,12 @@ func TestGenerics_PointerSemantics(t *testing.T) {
 	store := newGenericStore[string]()                                // *genericStore[string]
 	valueStore := genericStore[string]{data: make(map[string]string)} // genericStore[string]
 
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// Create a minimal page struct for testing
 	testPage := testPageWithHandler{}
 
 	// Both pointer and value should be allowed, but they're different types
-	err := sp.MountPages(router, testPage, "/", "Test",
+	mux := http.NewServeMux()
+	_, err := Mount(mux, testPage, "/", "Test",
 		store,
 		valueStore,
 	)
@@ -603,19 +591,19 @@ func (m genericMethodPage) Page(val int) component {
 }
 
 func TestGenerics_MethodMatching(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
 
 	ms := &methodStore[int]{}
 
-	err := sp.MountPages(router, genericMethodPage{}, "/", "Test", ms)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, genericMethodPage{}, "/", "Test", ms)
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rec.Code)

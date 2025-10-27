@@ -235,17 +235,13 @@ func TestPropsWithHeaders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create StructPages instance
-			sp := New()
-
-			// Create router
+			// Create router and mount the test page
 			mux := http.NewServeMux()
-			router := NewRouter(mux)
-
-			// Mount the test page
-			err := sp.MountPages(router, tt.page, tt.route, "Test Page")
+			sp, err := Mount(mux, tt.page, tt.route, "Test Page")
 			if err != nil {
 				t.Fatalf("Failed to mount page: %v", err)
 			}
+			_ = sp
 
 			// Create request
 			req := httptest.NewRequest("GET", tt.route, http.NoBody)
@@ -287,15 +283,14 @@ func TestPropsWithHeaders(t *testing.T) {
 // Test to verify Props method arguments can be in any order
 func TestPropsArgumentOrder(t *testing.T) {
 	// Create the test page type
-	sp := New()
-	mux := http.NewServeMux()
-	router := NewRouter(mux)
 
 	// Mount the test page directly
-	err := sp.MountPages(router, flexiblePropsPage{}, "/flex", "Flex Page")
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, flexiblePropsPage{}, "/flex", "Flex Page")
 	if err != nil {
 		t.Fatalf("Failed to mount page: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest("GET", "/flex", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -338,15 +333,12 @@ func (p errorAfterHeadersPage) Page() component {
 
 // Test error handling when Props returns an error but already wrote headers
 func TestPropsHeadersWithError(t *testing.T) {
-
-	sp := New()
 	mux := http.NewServeMux()
-	router := NewRouter(mux)
-
-	err := sp.MountPages(router, errorAfterHeadersPage{}, "/error", "Error Page")
+	sp, err := Mount(mux, errorAfterHeadersPage{}, "/error", "Error Page")
 	if err != nil {
 		t.Fatalf("Failed to mount page: %v", err)
 	}
+	_ = sp
 
 	req := httptest.NewRequest("GET", "/error", http.NoBody)
 	rec := httptest.NewRecorder()

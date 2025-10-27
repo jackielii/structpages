@@ -40,16 +40,15 @@ func TestHttpHandler(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	r := NewRouter(mux)
-	sp := New()
-	if err := sp.MountPages(r, &topPage{}, "/", ""); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	_, err := Mount(mux, &topPage{}, "/", "")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	{
 		req := httptest.NewRequest(http.MethodGet, "/struct", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -61,7 +60,7 @@ func TestHttpHandler(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodPost, "/pointer", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -100,15 +99,15 @@ func TestMiddlewares(t *testing.T) {
 	type topPage struct {
 		middlewarePages `route:"/middleware Test middleware handler"`
 	}
-	r := NewRouter(http.NewServeMux())
-	sp := New()
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 	{
 		req := httptest.NewRequest(http.MethodGet, "/middleware", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -123,7 +122,7 @@ func TestMiddlewares(t *testing.T) {
 		// test child page also has the middleware applied
 		req := httptest.NewRequest(http.MethodGet, "/middleware/child", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -153,18 +152,18 @@ func (DefaultConfigPage) HxTarget() component {
 // }
 
 func TestPageConfig(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 	{
 		req := httptest.NewRequest(http.MethodGet, "/default", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -193,20 +192,20 @@ func (skipRenderPage) Props(r *http.Request, w http.ResponseWriter) error {
 }
 
 func TestErrSkipPageRender(t *testing.T) {
-	sp := New()
-	r := NewRouter(http.NewServeMux())
 	type topPage struct {
 		skipRenderPage `route:"/skip Test skip render"`
 	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &topPage{}, "/", "top page")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	// Test normal rendering (no skip)
 	{
 		req := httptest.NewRequest(http.MethodGet, "/skip", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -219,7 +218,7 @@ func TestErrSkipPageRender(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodGet, "/skip?skip=true", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNoContent {
 			t.Errorf("expected status %d, got %d", http.StatusNoContent, rec.Code)
 		}
@@ -254,24 +253,24 @@ func makeMiddleware(name string) MiddlewareFunc {
 }
 
 func TestMiddlewareOrder(t *testing.T) {
-	sp := New(
+	type topPage struct {
+		middlewareOrderPage `route:"/"`
+	}
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &topPage{}, "/", "top page",
 		WithMiddlewares(
 			makeMiddleware("global mw 1"),
 			makeMiddleware("global mw 2"),
 			makeMiddleware("global mw 3"),
 		),
 	)
-	r := NewRouter(http.NewServeMux())
-	type topPage struct {
-		middlewareOrderPage `route:"/"`
-	}
-	if err := sp.MountPages(r, &topPage{}, "/", "top page"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -389,20 +388,21 @@ func TestExtendedHandlers(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := New(WithErrorHandler(errorHandler))
-	r := NewRouter(http.NewServeMux())
+	mux := http.NewServeMux()
 	// Pass the typed arguments that the extended handlers expect
-	if err := sp.MountPages(r, &pages{}, "/", "Test Extended",
+	_, err := Mount(mux, &pages{}, "/", "Test Extended",
+		WithErrorHandler(errorHandler),
 		ExtendedHandlerArg("extra value"),
-		ExtendedErrHandlerArg("error extra")); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+		ExtendedErrHandlerArg("error extra"))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	// Test extended handler
 	{
 		req := httptest.NewRequest(http.MethodGet, "/extended", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -418,7 +418,7 @@ func TestExtendedHandlers(t *testing.T) {
 	{
 		req := httptest.NewRequest(http.MethodGet, "/exterr", http.NoBody)
 		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
+		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 		}
@@ -456,7 +456,9 @@ func TestWithErrorHandler(t *testing.T) {
 		_, _ = w.Write([]byte("Custom error: " + err.Error()))
 	}
 
-	sp := New(WithErrorHandler(customErrorHandler))
+	sp := &StructPages{
+		onError: customErrorHandler,
+	}
 	pc := &parseContext{}
 	pc.root = &PageNode{}
 
@@ -543,7 +545,11 @@ func TestAsHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sp := New()
+			sp := &StructPages{
+				onError: func(w http.ResponseWriter, r *http.Request, err error) {
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				},
+			}
 			pc := tt.setupContext()
 			handler := sp.asHandler(pc, tt.pageNode)
 
@@ -584,8 +590,12 @@ type badPageForRegisterError struct {
 
 // Test MountPages registerPageItem error path
 func TestStructPages_MountPages_registerError(t *testing.T) {
-	sp := New()
-	router := NewRouter(nil)
+	sp := &StructPages{
+		onError: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		},
+	}
+	mux := http.NewServeMux()
 
 	// Create a page with manually constructed PageNode that has empty route
 	// This simulates what would happen if parsing produced a page with empty route
@@ -595,7 +605,7 @@ func TestStructPages_MountPages_registerError(t *testing.T) {
 		Route: "", // This will trigger the "page item route is empty" error
 	}
 
-	err := sp.registerPageItem(router, pc, pageNode, nil)
+	err := sp.registerPageItem(mux, pc, pageNode, nil)
 	if err == nil {
 		t.Error("Expected error from registerPageItem with empty route")
 	}
@@ -606,11 +616,9 @@ func TestStructPages_MountPages_registerError(t *testing.T) {
 
 // Test MountPages error cases
 func TestStructPages_MountPages_parseError(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	// This should cause a parse error due to duplicate args
-	err := sp.MountPages(router, struct{}{}, "/", "Test", "arg1", "arg1")
+	mux := http.NewServeMux()
+	_, err := Mount(mux, struct{}{}, "/", "Test", "arg1", "arg1")
 	if err == nil {
 		t.Error("Expected error from MountPages with duplicate args")
 	}
@@ -625,7 +633,11 @@ func (p *pageWithErrorProps) Props(r *http.Request) (string, error) {
 
 // Test execProps with error from props method
 func TestStructPages_execProps_methodError(t *testing.T) {
-	sp := New()
+	sp := &StructPages{
+		onError: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		},
+	}
 	pc := &parseContext{args: make(argRegistry)}
 
 	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
@@ -688,16 +700,16 @@ func (p renderComponentPage) Props(r *http.Request) (string, error) {
 // Test RenderComponent functionality
 func TestRenderComponent(t *testing.T) {
 	var capturedError error
-	sp := New(WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedError = err
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}))
-	r := NewRouter(http.NewServeMux())
 	type pages struct {
 		renderComponentPage `route:"/render Test Render Component"`
 	}
-	if err := sp.MountPages(r, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedError = err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	tests := []struct {
@@ -732,7 +744,7 @@ func TestRenderComponent(t *testing.T) {
 			capturedError = nil
 			req := httptest.NewRequest(http.MethodGet, "/render"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -771,17 +783,15 @@ func TestWithWarnEmptyRoute(t *testing.T) {
 		warnMessages = append(warnMessages, fmt.Sprintf("Warning: %s has no handler or children", pn.Name))
 	}
 
-	sp := New(WithWarnEmptyRoute(customWarn))
-	r := NewRouter(http.NewServeMux())
-
 	type pages struct {
 		EmptyPage       emptyPage       `route:"/empty Empty"`
 		PageWithHandler pageWithHandler `route:"/handler Handler"`
 	}
 
-	err := sp.MountPages(r, &pages{}, "/", "Test")
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithWarnEmptyRoute(customWarn))
 	if err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	// Should have one warning for the empty page
@@ -797,7 +807,7 @@ func TestWithWarnEmptyRoute(t *testing.T) {
 	// Test that page with handler doesn't trigger warning
 	req := httptest.NewRequest(http.MethodGet, "/handler", http.NoBody)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rec.Code)
@@ -810,7 +820,7 @@ func TestWithWarnEmptyRoute(t *testing.T) {
 	// Test that empty page returns 404
 	req = httptest.NewRequest(http.MethodGet, "/empty", http.NoBody)
 	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404 for empty page, got %d", rec.Code)
@@ -833,16 +843,14 @@ func TestWithWarnEmptyRoute_DefaultWarning(t *testing.T) {
 		done <- true
 	}()
 
-	sp := New(WithWarnEmptyRoute(nil)) // nil should use default warning
-	router := NewRouter(http.NewServeMux())
-
 	type pages struct {
 		EmptyPage emptyPage `route:"/empty Empty"`
 	}
 
-	err := sp.MountPages(router, &pages{}, "/", "Test")
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithWarnEmptyRoute(nil))
 	if err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	// Restore stdout and wait for output

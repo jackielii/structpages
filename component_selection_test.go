@@ -44,16 +44,16 @@ func (anotherPage) TodoList() component {
 }
 
 func TestComponentSelection_Selected(t *testing.T) {
-	sp := New()
-	router := NewRouter(http.NewServeMux())
-
 	type pages struct {
 		selectionTestPage `route:"/ SelectionTest"`
 	}
 
-	if err := sp.MountPages(router, &pages{}, "/", "Test"); err != nil {
-		t.Fatalf("MountPages failed: %v", err)
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
+	_ = sp
 
 	tests := []struct {
 		name         string
@@ -95,7 +95,7 @@ func TestComponentSelection_Selected(t *testing.T) {
 			}
 
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected status 200, got %d", rec.Code)
