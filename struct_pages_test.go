@@ -145,12 +145,6 @@ func (DefaultConfigPage) HxTarget() component {
 	return testComponent{content: "hx target defaultConfigPage"}
 }
 
-// type ConfiTestPage struct{}
-//
-// func (ConfiTestPage) PageConfig(r *http.Request) (string, error) {
-// 	return "DefaultConfigPage", nil
-// }
-
 func TestPageConfig(t *testing.T) {
 	type topPage struct {
 		DefaultConfigPage `route:"/default Default config page"`
@@ -172,9 +166,6 @@ func TestPageConfig(t *testing.T) {
 		}
 	}
 }
-
-// Note: TestCustomPageConfig and TestHTMXPageConfig removed - PageConfig method support has been removed
-// in favor of simpler Props + RenderComponent pattern. HTMX functionality has been moved to examples.
 
 type skipRenderPage struct{}
 
@@ -758,13 +749,6 @@ func TestRenderComponent(t *testing.T) {
 		})
 	}
 }
-
-// Note: Test for "non-existent component" removed - with method expressions,
-// referencing a non-existent component is now a compile-time error, not a runtime error.
-// This is intentional and provides better type safety.
-
-// Note: Test for "RenderComponent overrides PageConfig" removed - PageConfig
-// method support has been removed in favor of simpler Props + RenderComponent pattern.
 
 // Test types for WithWarnEmptyRoute
 type emptyPage struct{}
