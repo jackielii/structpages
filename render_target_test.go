@@ -80,7 +80,7 @@ func TestRenderTarget_Selected(t *testing.T) {
 			name: "HTMX request with IDFor-style target selects TodoList",
 			headers: map[string]string{
 				"HX-Request": "true",
-				"HX-Target":  "selection-test-todo-list",
+				"HX-Target":  "selection-test-page-todo-list",
 			},
 			expectedBody: "TodoList",
 			expectedData: "todo data",
