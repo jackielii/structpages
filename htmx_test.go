@@ -29,7 +29,7 @@ func TestKebabToPascal(t *testing.T) {
 	}
 }
 
-func TestExtractComponentName(t *testing.T) {
+func TestMatchComponentByTarget(t *testing.T) {
 	tests := []struct {
 		name     string
 		target   string
@@ -37,55 +37,204 @@ func TestExtractComponentName(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "simple component name",
-			target:   "content",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "simple component name",
+			target: "content",
+			pageNode: &PageNode{
+				Name:  "Index",
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"Content": {},
+				},
+			},
 			expected: "Content",
 		},
 		{
-			name:     "with # prefix",
-			target:   "#content",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "with # prefix",
+			target: "#content",
+			pageNode: &PageNode{
+				Name:  "Index",
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"Content": {},
+				},
+			},
 			expected: "Content",
 		},
 		{
-			name:     "IDFor format - strips page prefix",
-			target:   "index-todo-list",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "IDFor format - matches with page prefix",
+			target: "index-todo-list",
+			pageNode: &PageNode{
+				Name:  "Index",
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"TodoList": {},
+				},
+			},
 			expected: "TodoList",
 		},
 		{
-			name:     "IDFor format with # - strips page prefix",
-			target:   "#index-todo-list",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "IDFor format with # - matches with page prefix",
+			target: "#index-todo-list",
+			pageNode: &PageNode{
+				Name:  "Index",
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"TodoList": {},
+				},
+			},
 			expected: "TodoList",
 		},
 		{
-			name:     "multi-word page prefix",
-			target:   "user-profile-settings-form",
-			pageNode: &PageNode{Title: "UserProfile"},
+			name:   "multi-word page prefix",
+			target: "user-profile-settings-form",
+			pageNode: &PageNode{
+				Name:  "UserProfile",
+				Title: "User Profile",
+				Components: map[string]reflect.Method{
+					"SettingsForm": {},
+				},
+			},
 			expected: "SettingsForm",
 		},
 		{
-			name:     "empty target",
-			target:   "",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "Name and Title differ - matches using Name",
+			target: "index-page-event-list-load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"EventListLoadMore": {},
+				},
+			},
+			expected: "EventListLoadMore",
+		},
+		{
+			name:   "LoadMore suffix match with page prefix",
+			target: "index-page-event-list-load-more",
+			pageNode: &PageNode{
+				Name: "IndexPage",
+				Components: map[string]reflect.Method{
+					"LoadMore": {},
+				},
+			},
+			expected: "LoadMore",
+		},
+		{
+			name:   "match without page prefix",
+			target: "event-list-load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"EventListLoadMore": {},
+				},
+			},
+			expected: "EventListLoadMore",
+		},
+		{
+			name:   "no matching component",
+			target: "nonexistent",
+			pageNode: &PageNode{
+				Name:  "Index",
+				Title: "Index",
+				Components: map[string]reflect.Method{
+					"TodoList": {},
+				},
+			},
 			expected: "",
 		},
 		{
-			name:     "target with spaces (invalid)",
-			target:   "todo list",
-			pageNode: &PageNode{Title: "Index"},
+			name:   "empty target",
+			target: "",
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{},
+			},
 			expected: "",
+		},
+		{
+			name:   "target with spaces (invalid)",
+			target: "todo list",
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{},
+			},
+			expected: "",
+		},
+		{
+			name:   "exact match preferred over suffix match",
+			target: "load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"EventListLoadMore": {}, // Would match as suffix
+					"LoadMore":          {}, // Matches exactly
+				},
+			},
+			// Should prefer exact match "LoadMore" over suffix match "EventListLoadMore"
+			expected: "LoadMore",
+		},
+		{
+			name:   "suffix match - only one component",
+			target: "list-load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"EventListLoadMore": {},
+				},
+			},
+			expected: "EventListLoadMore",
+		},
+		{
+			name:   "suffix match with full ID",
+			target: "page-event-list-load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"EventListLoadMore": {},
+				},
+			},
+			expected: "EventListLoadMore",
+		},
+		{
+			name:   "does NOT match by Title - uses Name instead",
+			target: "home-content",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home", // Title is "Home" but we match by Name
+				Components: map[string]reflect.Method{
+					"Content": {},
+				},
+			},
+			// "home-content" doesn't match because Name is "IndexPage", not "Home"
+			expected: "",
+		},
+		{
+			name:   "matches by Name not Title",
+			target: "index-page-content",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home", // Title differs from Name
+				Components: map[string]reflect.Method{
+					"Content": {},
+				},
+			},
+			// Should match because Name is "IndexPage"
+			expected: "Content",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractComponentName(tt.target, tt.pageNode)
+			result := matchComponentByTarget(tt.target, tt.pageNode)
 			if result != tt.expected {
-				t.Errorf("extractComponentName(%q, %v) = %q, want %q",
-					tt.target, tt.pageNode.Title, result, tt.expected)
+				t.Errorf("matchComponentByTarget(%q) = %q, want %q",
+					tt.target, result, tt.expected)
 			}
 		})
 	}
@@ -100,9 +249,13 @@ func TestHTMXPageConfig(t *testing.T) {
 		shouldFail bool
 	}{
 		{
-			name:     "non-HTMX request returns Page",
-			headers:  map[string]string{},
-			pageNode: &PageNode{Title: "Index", Components: map[string]reflect.Method{}},
+			name:    "non-HTMX request returns Page",
+			headers: map[string]string{},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{},
+			},
 			expected: "Page",
 		},
 		{
@@ -110,7 +263,11 @@ func TestHTMXPageConfig(t *testing.T) {
 			headers: map[string]string{
 				"HX-Request": "true",
 			},
-			pageNode: &PageNode{Title: "Index", Components: map[string]reflect.Method{}},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{},
+			},
 			expected: "Page",
 		},
 		{
@@ -120,6 +277,7 @@ func TestHTMXPageConfig(t *testing.T) {
 				"HX-Target":  "content",
 			},
 			pageNode: &PageNode{
+				Name:  "Index",
 				Title: "Index",
 				Components: map[string]reflect.Method{
 					"Content": {},
@@ -134,6 +292,7 @@ func TestHTMXPageConfig(t *testing.T) {
 				"HX-Target":  "index-todo-list",
 			},
 			pageNode: &PageNode{
+				Name:  "Index",
 				Title: "Index",
 				Components: map[string]reflect.Method{
 					"TodoList": {},
@@ -148,6 +307,7 @@ func TestHTMXPageConfig(t *testing.T) {
 				"HX-Target":  "#index-todo-list",
 			},
 			pageNode: &PageNode{
+				Name:  "Index",
 				Title: "Index",
 				Components: map[string]reflect.Method{
 					"TodoList": {},
@@ -162,6 +322,7 @@ func TestHTMXPageConfig(t *testing.T) {
 				"HX-Target":  "index-nonexistent",
 			},
 			pageNode: &PageNode{
+				Name:       "Index",
 				Title:      "Index",
 				Components: map[string]reflect.Method{},
 			},
