@@ -40,7 +40,7 @@ templ generate -include-version=false
 go run main.go
 
 # Watch mode for Templ files during development
-templ generate --watch
+templ generate -include-version=false --watch
 ```
 
 ### Required Tools
@@ -68,6 +68,7 @@ templ generate --watch
 3. **HTMX Support**: Built-in support for partial rendering
    - `htmx.go`: HTMX-specific functionality
    - Allows returning partial components for HTMX requests
+   - `id_for.go`: Generates component method IDs for hx-target
 
 4. **URL Generation**: Type-safe URL generation
    - `url_for.go`: Provides `UrlFor` functionality to generate URLs from struct references
