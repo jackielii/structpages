@@ -81,7 +81,7 @@ func matchComponentByTarget(target string, pn *PageNode) string {
 		}
 
 		// Check if target ends with fullID
-		// e.g., target="index-page-event-list-load-more" ends with fullID="index-page-load-more"
+		// e.g., target="wrapper-index-page-load-more" ends with fullID="index-page-load-more"
 		if strings.HasSuffix(target, fullID) && len(fullID) > bestMatchLen {
 			bestMatch = componentName
 			bestMatchLen = len(fullID)
