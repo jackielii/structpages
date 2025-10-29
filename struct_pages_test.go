@@ -466,7 +466,7 @@ func TestWithErrorHandler(t *testing.T) {
 		Value: reflect.ValueOf(errHandler{}),
 	}
 
-	handler := sp.asHandler(pc, pn)
+	handler := sp.asHandler(pn)
 
 	req := httptest.NewRequest(http.MethodGet, "/error", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -550,7 +550,8 @@ func TestAsHandler(t *testing.T) {
 				},
 			}
 			pc := tt.setupContext()
-			handler := sp.asHandler(pc, tt.pageNode)
+			sp.pc = pc // Set the pc on the StructPages instance
+			handler := sp.asHandler(tt.pageNode)
 
 			if tt.hasHandler && handler == nil {
 				t.Errorf("expected handler, got nil")
@@ -598,13 +599,12 @@ func TestStructPages_MountPages_registerError(t *testing.T) {
 
 	// Create a page with manually constructed PageNode that has empty route
 	// This simulates what would happen if parsing produced a page with empty route
-	pc := &parseContext{}
 	pageNode := &PageNode{
 		Name:  "testPage",
 		Route: "", // This will trigger the "page item route is empty" error
 	}
 
-	err := sp.registerPageItem(mux, pc, pageNode, nil)
+	err := sp.registerPageItem(mux, pageNode, nil)
 	if err == nil {
 		t.Error("Expected error from registerPageItem with empty route")
 	}
@@ -636,8 +636,8 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
+		pc: &parseContext{args: make(argRegistry)},
 	}
-	pc := &parseContext{args: make(argRegistry)}
 
 	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
 	pn := &PageNode{
@@ -653,7 +653,7 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 	// Create a dummy reflect.Method for RenderTarget
 	dummyMethod := reflect.Method{Name: "Page"}
 	compSel := &RenderTarget{selectedMethod: dummyMethod}
-	_, err := sp.execProps(pc, pn, req, nil, compSel)
+	_, err := sp.execProps(pn, req, nil, compSel)
 	if err == nil {
 		t.Error("Expected error from execProps")
 	}
@@ -1144,7 +1144,7 @@ func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
 
 	// Trigger handleRenderComponentError with invalid method expression
 	err = RenderComponent("not a function") // Not a function, should fail
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1180,7 +1180,7 @@ func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	noReceiverFunc := func() component { return testComponent{"test"} }
 
 	err = RenderComponent(noReceiverFunc)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1214,7 +1214,7 @@ func TestHandleRenderComponentError_PageNotFound(t *testing.T) {
 
 	// Try to render component from unregistered page
 	err = RenderComponent(unregisteredPage.SomeComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1248,7 +1248,7 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 
 	// Trigger component render error
 	err = RenderComponent(errorComponentPage.ErrorComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1274,7 +1274,7 @@ func TestHandleRenderComponentError_WithArgs(t *testing.T) {
 
 	// Trigger component render with args
 	err = RenderComponent(argsComponentTestPage.ComponentWithArgs, "arg1", 42)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")

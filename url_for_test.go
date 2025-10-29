@@ -1260,6 +1260,12 @@ func TestURLFor_withQueryStringComposition(t *testing.T) {
 			args:     []any{"v1", "123", "json", "details"},
 			expected: "/api/v1/users/123?format=json#details",
 		},
+		{
+			name:     "empty string value for placeholder",
+			parts:    []any{"/search?type={type}&q={q}&page={page}"},
+			args:     []any{"type", "well", "q", "", "page", "1"},
+			expected: "/search?type=well&q=&page=1",
+		},
 	}
 
 	for _, tt := range tests {

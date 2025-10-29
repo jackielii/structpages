@@ -207,7 +207,7 @@ func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages
 
 	// Register all pages
 	middlewares := append([]MiddlewareFunc{withPcCtx(pc), extractURLParams}, sp.middlewares...)
-	if err := sp.registerPageItem(mux, pc, pc.root, middlewares); err != nil {
+	if err := sp.registerPageItem(mux, pc.root, middlewares); err != nil {
 		return nil, err
 	}
 
@@ -349,13 +349,13 @@ func WithWarnEmptyRoute(warnFunc func(*PageNode)) func(*StructPages) {
 	}
 }
 
-func (sp *StructPages) registerPageItem(mux Mux, pc *parseContext, page *PageNode, mw []MiddlewareFunc) error {
+func (sp *StructPages) registerPageItem(mux Mux, page *PageNode, mw []MiddlewareFunc) error {
 	if page.Route == "" {
 		return fmt.Errorf("page item route is empty: %s", page.Name)
 	}
 
 	if page.Middlewares != nil {
-		res, err := pc.callMethod(page, page.Middlewares)
+		res, err := sp.pc.callMethod(page, page.Middlewares)
 		if err != nil {
 			return fmt.Errorf("error calling Middlewares method on %s: %w", page.Name, err)
 		}
@@ -371,12 +371,12 @@ func (sp *StructPages) registerPageItem(mux Mux, pc *parseContext, page *PageNod
 	if page.Children != nil {
 		// nested pages has to be registered first to avoid conflicts with the parent route
 		for _, child := range page.Children {
-			if err := sp.registerPageItem(mux, pc, child, mw); err != nil {
+			if err := sp.registerPageItem(mux, child, mw); err != nil {
 				return err
 			}
 		}
 	}
-	handler := sp.buildHandler(page, pc)
+	handler := sp.buildHandler(page)
 	if handler == nil && len(page.Children) == 0 {
 		if sp.warnEmptyRoute != nil {
 			sp.warnEmptyRoute(page)
@@ -401,7 +401,7 @@ func (sp *StructPages) registerPageItem(mux Mux, pc *parseContext, page *PageNod
 // handleRenderComponentError checks if the error is an errRenderComponent and handles it.
 // Returns true if it handled the error, false otherwise.
 func (sp *StructPages) handleRenderComponentError(
-	w http.ResponseWriter, r *http.Request, err error, pc *parseContext, page *PageNode, props []reflect.Value,
+	w http.ResponseWriter, r *http.Request, err error, page *PageNode, props []reflect.Value,
 ) bool {
 	var renderErr *errRenderComponent
 	if !errors.As(err, &renderErr) {
@@ -432,7 +432,7 @@ func (sp *StructPages) handleRenderComponentError(
 	}
 
 	// Find the page that owns this component
-	targetPage, err := pc.findPageNodeByType(receiverType)
+	targetPage, err := sp.pc.findPageNodeByType(receiverType)
 	if err != nil {
 		sp.onError(w, r, fmt.Errorf("cannot find page for method expression: %w", err))
 		return true
@@ -446,7 +446,7 @@ func (sp *StructPages) handleRenderComponentError(
 	}
 
 	// Execute the component with the args
-	comp, compErr := pc.callComponentMethod(targetPage, &compMethod, componentArgs...)
+	comp, compErr := sp.pc.callComponentMethod(targetPage, &compMethod, componentArgs...)
 	if compErr != nil {
 		sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", targetPage.Name, compMethod.Name, compErr))
 		return true
@@ -456,8 +456,8 @@ func (sp *StructPages) handleRenderComponentError(
 	return true
 }
 
-func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handler {
-	if h := sp.asHandler(pc, page); h != nil {
+func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
+	if h := sp.asHandler(page); h != nil {
 		return h
 	}
 	if len(page.Components) == 0 {
@@ -494,10 +494,10 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 		}
 
 		// 3. Call Props with RenderTarget available for injection
-		props, err := sp.execProps(pc, page, r, w, renderTarget)
+		props, err := sp.execProps(page, r, w, renderTarget)
 		if err != nil {
 			// Check if it's a render component error
-			if sp.handleRenderComponentError(w, r, err, pc, page, props) {
+			if sp.handleRenderComponentError(w, r, err, page, props) {
 				return
 			}
 
@@ -515,7 +515,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 		}
 
 		// 5. Render the selected component with props
-		comp, err := pc.callComponentMethod(page, &compMethod, props...)
+		comp, err := sp.pc.callComponentMethod(page, &compMethod, props...)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
 			return
@@ -568,7 +568,7 @@ func formatMethod(method *reflect.Method) string {
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
 
-func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
+func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 	v := pn.Value
 	st, pt := v.Type(), v.Type()
 	if st.Kind() == reflect.Pointer {
@@ -598,7 +598,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 				// Clear the buffer since we have an error
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+				if sp.handleRenderComponentError(bw, r, err, pn, nil) {
 					return
 				}
 				// Write error directly to the buffered writer
@@ -632,7 +632,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			// Make RenderTarget available for dependency injection
 			additionalArgs := []reflect.Value{wv, reflect.ValueOf(r), reflect.ValueOf(renderTarget)}
 
-			results, err := pc.callMethod(pn, &method, additionalArgs...)
+			results, err := sp.pc.callMethod(pn, &method, additionalArgs...)
 			if err != nil {
 				if bw != nil {
 					bw.buf.Reset()
@@ -650,7 +650,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 				// - therefore this branch is only reachable when bw != nil
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pc, pn, nil) {
+				if sp.handleRenderComponentError(bw, r, err, pn, nil) {
 					return
 				}
 				sp.onError(bw, r, err)
@@ -686,7 +686,7 @@ func (sp *StructPages) findComponent(pn *PageNode, r *http.Request) (reflect.Met
 	return page, nil
 }
 
-func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
+func (sp *StructPages) execProps(pn *PageNode,
 	r *http.Request, w http.ResponseWriter, renderTarget *RenderTarget,
 ) ([]reflect.Value, error) {
 	// Look for Props method
@@ -700,7 +700,7 @@ func (sp *StructPages) execProps(pc *parseContext, pn *PageNode,
 	}
 
 	// Make RenderTarget available for injection along with r and w
-	props, err := pc.callMethod(
+	props, err := sp.pc.callMethod(
 		pn, &propMethod,
 		reflect.ValueOf(r), reflect.ValueOf(w), reflect.ValueOf(renderTarget))
 	if err != nil {
