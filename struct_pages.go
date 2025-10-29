@@ -466,7 +466,7 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. Determine which component to render (before calling Props)
-		compMethod, err := sp.findComponent(pc, page, r)
+		compMethod, err := sp.findComponent(page, r)
 		hasProps := len(page.Props) > 0
 
 		// Handle error finding component
@@ -624,7 +624,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			// If components exist and one is selected, populate it; otherwise leave empty
 			renderTarget := &RenderTarget{}
 			if len(pn.Components) > 0 {
-				if compMethod, err := sp.findComponent(pc, pn, r); err == nil && compMethod.Func.IsValid() {
+				if compMethod, err := sp.findComponent(pn, r); err == nil && compMethod.Func.IsValid() {
 					renderTarget.selectedMethod = compMethod
 				}
 			}
@@ -662,7 +662,7 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 	return nil
 }
 
-func (sp *StructPages) findComponent(pc *parseContext, pn *PageNode, r *http.Request) (reflect.Method, error) {
+func (sp *StructPages) findComponent(pn *PageNode, r *http.Request) (reflect.Method, error) {
 	// Use default component selector if configured (e.g., for HTMX boost pattern)
 	if sp.defaultComponentSelector != nil {
 		name, err := sp.defaultComponentSelector(r, pn)

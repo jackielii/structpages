@@ -250,7 +250,6 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 // Test findComponent edge cases
 func TestFindComponent_NoPageComponent(t *testing.T) {
 	sp := &StructPages{}
-	pc := &parseContext{args: make(argRegistry)}
 
 	// Create a PageNode without Page component manually
 	pn := &PageNode{
@@ -264,7 +263,7 @@ func TestFindComponent_NoPageComponent(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	_, err := sp.findComponent(pc, pn, req)
+	_, err := sp.findComponent(pn, req)
 	if err == nil {
 		t.Errorf("expected error for no Page component")
 	} else if !contains(err.Error(), "no Page component found") &&
