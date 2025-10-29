@@ -74,6 +74,11 @@ type RenderTarget struct {
 //	    // TodoList component will be rendered
 //	}
 func (rt *RenderTarget) Is(method any) bool {
+	// If no component is selected yet (Props-only pattern), return false
+	if rt == nil || !rt.selectedMethod.Func.IsValid() || rt.selectedMethod.Type == nil {
+		return false
+	}
+
 	methodName := extractMethodName(method)
 	if methodName == "" {
 		return false
@@ -462,14 +467,25 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. Determine which component to render (before calling Props)
 		compMethod, err := sp.findComponent(pc, page, r)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("error finding component for %s: %w", page.Name, err))
-			return
-		}
+		hasProps := len(page.Props) > 0
 
-		if !compMethod.Func.IsValid() {
-			sp.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
-			return
+		// Handle error finding component
+		if err != nil {
+			if !hasProps {
+				// No component and no Props to select one
+				sp.onError(w, r, fmt.Errorf("error finding component for %s: %w", page.Name, err))
+				return
+			}
+			// Allow Props to select component via RenderComponent
+			compMethod = reflect.Method{} // Empty method - Props must use RenderComponent
+		} else if !compMethod.Func.IsValid() {
+			// Component found but Func is invalid
+			if !hasProps {
+				sp.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
+				return
+			}
+			// Allow Props to select component via RenderComponent
+			compMethod = reflect.Method{} // Empty method - Props must use RenderComponent
 		}
 
 		// 2. Create RenderTarget with the selected component info
@@ -492,7 +508,13 @@ func (sp *StructPages) buildHandler(page *PageNode, pc *parseContext) http.Handl
 			return
 		}
 
-		// 4. Render the selected component with props
+		// 4. If we still don't have a valid component, Props must have forgotten to use RenderComponent
+		if !compMethod.Func.IsValid() {
+			sp.onError(w, r, fmt.Errorf("page %s: no component found and Props did not use RenderComponent", page.Name))
+			return
+		}
+
+		// 5. Render the selected component with props
 		comp, err := pc.callComponentMethod(page, &compMethod, props...)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, compMethod.Name, err))
@@ -597,7 +619,20 @@ func (sp *StructPages) asHandler(pc *parseContext, pn *PageNode) http.Handler {
 			} else {
 				wv = reflect.ValueOf(w)
 			}
-			results, err := pc.callMethod(pn, &method, wv, reflect.ValueOf(r))
+
+			// Create RenderTarget for dependency injection
+			// If components exist and one is selected, populate it; otherwise leave empty
+			renderTarget := &RenderTarget{}
+			if len(pn.Components) > 0 {
+				if compMethod, err := sp.findComponent(pc, pn, r); err == nil && compMethod.Func.IsValid() {
+					renderTarget.selectedMethod = compMethod
+				}
+			}
+
+			// Make RenderTarget available for dependency injection
+			additionalArgs := []reflect.Value{wv, reflect.ValueOf(r), reflect.ValueOf(renderTarget)}
+
+			results, err := pc.callMethod(pn, &method, additionalArgs...)
 			if err != nil {
 				if bw != nil {
 					bw.buf.Reset()

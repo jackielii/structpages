@@ -1500,3 +1500,378 @@ func TestFindPageNode_PredicateNoMatch(t *testing.T) {
 		t.Errorf("Test failed: %s", rec.Body.String())
 	}
 }
+
+// Test page that uses only Props without a Page component
+// This pattern is useful for complex pages where different views are conditionally rendered
+type propsOnlyPage struct{}
+
+type CardViewProps struct {
+	ViewMode string
+}
+
+type TableViewProps struct {
+	ViewMode string
+}
+
+func (propsOnlyPage) CardView(props CardViewProps) component {
+	return testComponent{content: "Card View: " + props.ViewMode}
+}
+
+func (propsOnlyPage) TableView(props TableViewProps) component {
+	return testComponent{content: "Table View: " + props.ViewMode}
+}
+
+func (p propsOnlyPage) Props(r *http.Request) error {
+	switch r.FormValue("view") {
+	case "card":
+		return RenderComponent(propsOnlyPage.CardView, CardViewProps{ViewMode: "card"})
+	case "table":
+		return RenderComponent(propsOnlyPage.TableView, TableViewProps{ViewMode: "table"})
+	default:
+		// Unknown view - return nil to trigger error
+		return nil
+	}
+}
+
+// Test page that uses RenderTarget.Is() in Props (Props-only pattern)
+type propsOnlyPageWithTarget struct{}
+
+func (propsOnlyPageWithTarget) CardView(props CardViewProps) component {
+	return testComponent{content: "Card View: " + props.ViewMode}
+}
+
+func (propsOnlyPageWithTarget) TableView(props TableViewProps) component {
+	return testComponent{content: "Table View: " + props.ViewMode}
+}
+
+func (p propsOnlyPageWithTarget) Props(r *http.Request, target *RenderTarget) error {
+	// This should not panic even though no component is selected yet
+	if target.Is(propsOnlyPageWithTarget.CardView) {
+		// This branch should not execute since no component is selected
+		return RenderComponent(propsOnlyPageWithTarget.TableView, TableViewProps{ViewMode: "unexpected"})
+	}
+
+	// Select component based on query parameter
+	switch r.FormValue("view") {
+	case "card":
+		return RenderComponent(propsOnlyPageWithTarget.CardView, CardViewProps{ViewMode: "card"})
+	default:
+		return RenderComponent(propsOnlyPageWithTarget.TableView, TableViewProps{ViewMode: "table"})
+	}
+}
+
+func TestPropsOnlyPage(t *testing.T) {
+	type pages struct {
+		propsOnlyPage `route:"/ Index"`
+	}
+
+	var capturedError error
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedError = err
+		t.Logf("Error occurred: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test table view
+	{
+		capturedError = nil
+		req := httptest.NewRequest(http.MethodGet, "/?view=table", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			if capturedError != nil {
+				t.Logf("Captured error: %v", capturedError)
+			}
+		}
+		if rec.Body.String() != "Table View: table" {
+			t.Errorf("expected body %q, got %q", "Table View: table", rec.Body.String())
+		}
+	}
+
+	// Test card view
+	{
+		capturedError = nil
+		req := httptest.NewRequest(http.MethodGet, "/?view=card", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			if capturedError != nil {
+				t.Logf("Captured error: %v", capturedError)
+			}
+		}
+		if rec.Body.String() != "Card View: card" {
+			t.Errorf("expected body %q, got %q", "Card View: card", rec.Body.String())
+		}
+	}
+
+	// Test edge case: Props returns nil without calling RenderComponent
+	{
+		capturedError = nil
+		req := httptest.NewRequest(http.MethodGet, "/?view=unknown", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
+		}
+		if capturedError == nil {
+			t.Error("expected error when Props returns nil without RenderComponent")
+		}
+		expectedErr := "no component found and Props did not use RenderComponent"
+		if capturedError != nil && !strings.Contains(capturedError.Error(), expectedErr) {
+			t.Errorf("expected '%s' error, got: %v", expectedErr, capturedError)
+		}
+	}
+}
+
+// Test page that uses ServeHTTP with RenderTarget injection
+type serveHTTPWithRenderTarget struct{}
+
+func (serveHTTPWithRenderTarget) Page() component {
+	return testComponent{content: "Page"}
+}
+
+func (serveHTTPWithRenderTarget) Content() component {
+	return testComponent{content: "Content"}
+}
+
+func (p serveHTTPWithRenderTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target *RenderTarget) {
+	// Check which component is selected
+	if target.Is(serveHTTPWithRenderTarget.Content) {
+		_, _ = w.Write([]byte("ServeHTTP: Content selected"))
+	} else if target.Is(serveHTTPWithRenderTarget.Page) {
+		_, _ = w.Write([]byte("ServeHTTP: Page selected"))
+	} else {
+		_, _ = w.Write([]byte("ServeHTTP: Unknown component"))
+	}
+}
+
+// Test page that uses ServeHTTP with custom dependency and RenderTarget
+type AppContext struct {
+	UserID string
+}
+
+type serveHTTPWithCustomDepsAndTarget struct{}
+
+func (serveHTTPWithCustomDepsAndTarget) Page() component {
+	return testComponent{content: "Page"}
+}
+
+func (serveHTTPWithCustomDepsAndTarget) Content() component {
+	return testComponent{content: "Content"}
+}
+
+func (p serveHTTPWithCustomDepsAndTarget) ServeHTTP(
+	w http.ResponseWriter, r *http.Request, appCtx *AppContext, target *RenderTarget,
+) error {
+	// This mimics the real-world usage where ServeHTTP needs both custom deps and RenderTarget
+	if target.Is(serveHTTPWithCustomDepsAndTarget.Content) {
+		_, _ = w.Write([]byte("ServeHTTP: Content selected, user: " + appCtx.UserID))
+	} else if target.Is(serveHTTPWithCustomDepsAndTarget.Page) {
+		_, _ = w.Write([]byte("ServeHTTP: Page selected, user: " + appCtx.UserID))
+	} else {
+		_, _ = w.Write([]byte("ServeHTTP: Unknown component"))
+	}
+	return nil
+}
+
+func TestServeHTTPWithCustomDepsAndRenderTarget(t *testing.T) {
+	type pages struct {
+		serveHTTPWithCustomDepsAndTarget `route:"/ Index"`
+	}
+
+	// Custom selector that returns Content for HTMX requests
+	selector := func(r *http.Request, pn *PageNode) (string, error) {
+		if r.Header.Get("HX-Request") == "true" {
+			return "Content", nil
+		}
+		return "Page", nil
+	}
+
+	appCtx := &AppContext{UserID: "user123"}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector), appCtx)
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test Page component selection
+	{
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		expected := "ServeHTTP: Page selected, user: user123"
+		if rec.Body.String() != expected {
+			t.Errorf("expected body %q, got %q", expected, rec.Body.String())
+		}
+	}
+
+	// Test Content component selection (HTMX request)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		expected := "ServeHTTP: Content selected, user: user123"
+		if rec.Body.String() != expected {
+			t.Errorf("expected body %q, got %q", expected, rec.Body.String())
+		}
+	}
+}
+
+// Test page that uses ServeHTTP with RenderTarget but no components
+type serveHTTPNoComponentsWithTarget struct{}
+
+func (p serveHTTPNoComponentsWithTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target *RenderTarget) error {
+	// RenderTarget should be available even with no components (will be empty)
+	if target == nil {
+		_, _ = w.Write([]byte("ERROR: target is nil"))
+		return nil
+	}
+	// target.Is() should return false for everything since no components
+	_, _ = w.Write([]byte("ServeHTTP: RenderTarget available, no components"))
+	return nil
+}
+
+func TestServeHTTPWithRenderTargetNoComponents(t *testing.T) {
+	type pages struct {
+		serveHTTPNoComponentsWithTarget `route:"/ Index"`
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+	expected := "ServeHTTP: RenderTarget available, no components"
+	if rec.Body.String() != expected {
+		t.Errorf("expected body %q, got %q", expected, rec.Body.String())
+	}
+}
+
+func TestServeHTTPWithRenderTarget(t *testing.T) {
+	type pages struct {
+		serveHTTPWithRenderTarget `route:"/ Index"`
+	}
+
+	// Custom selector that returns Content for HTMX requests
+	selector := func(r *http.Request, pn *PageNode) (string, error) {
+		if r.Header.Get("HX-Request") == "true" {
+			return "Content", nil
+		}
+		return "Page", nil
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test Page component selection
+	{
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "ServeHTTP: Page selected" {
+			t.Errorf("expected body %q, got %q", "ServeHTTP: Page selected", rec.Body.String())
+		}
+	}
+
+	// Test Content component selection (HTMX request)
+	{
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "ServeHTTP: Content selected" {
+			t.Errorf("expected body %q, got %q", "ServeHTTP: Content selected", rec.Body.String())
+		}
+	}
+}
+
+func TestPropsOnlyPageWithRenderTarget(t *testing.T) {
+	type pages struct {
+		propsOnlyPageWithTarget `route:"/ Index"`
+	}
+
+	var capturedError error
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedError = err
+		t.Logf("Error occurred: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test that target.Is() doesn't panic when no component is selected (table view)
+	{
+		capturedError = nil
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			if capturedError != nil {
+				t.Logf("Captured error: %v", capturedError)
+			}
+		}
+		if rec.Body.String() != "Table View: table" {
+			t.Errorf("expected body %q, got %q", "Table View: table", rec.Body.String())
+		}
+	}
+
+	// Test card view with target.Is() check
+	{
+		capturedError = nil
+		req := httptest.NewRequest(http.MethodGet, "/?view=card", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+			if capturedError != nil {
+				t.Logf("Captured error: %v", capturedError)
+			}
+		}
+		if rec.Body.String() != "Card View: card" {
+			t.Errorf("expected body %q, got %q", "Card View: card", rec.Body.String())
+		}
+	}
+}
