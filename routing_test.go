@@ -148,11 +148,12 @@ func TestRegisterPageItem_ErrorScenarios(t *testing.T) {
 				t.Fatalf("parsePageTree failed unexpectedly: %v", err)
 			}
 
+			sp.pc = pc // Set the pc on the StructPages instance
 			if tt.setupPage != nil {
 				tt.setupPage(pc.root)
 			}
 
-			err = sp.registerPageItem(mux, pc, pc.root, tt.middlewares)
+			err = sp.registerPageItem(mux, pc.root, tt.middlewares)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.wantErr)
@@ -290,8 +291,8 @@ func TestAsHandler_ExtendedHandlerErrors(t *testing.T) {
 
 	sp := &StructPages{
 		onError: errorHandler,
+		pc:      &parseContext{args: make(argRegistry)},
 	}
-	pc := &parseContext{args: make(argRegistry)}
 
 	// Don't provide the required string argument
 	pn := &PageNode{
@@ -299,7 +300,7 @@ func TestAsHandler_ExtendedHandlerErrors(t *testing.T) {
 		Name:  "extendedNoReturnHandler",
 	}
 
-	handler := sp.asHandler(pc, pn)
+	handler := sp.asHandler(pn)
 	if handler == nil {
 		t.Fatal("expected handler, got nil")
 	}
@@ -331,8 +332,8 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 
 	sp := &StructPages{
 		onError: errorHandler,
+		pc:      &parseContext{args: make(argRegistry)},
 	}
-	pc := &parseContext{args: make(argRegistry)}
 
 	// Create a page node with an invalid component method
 	pn := &PageNode{
@@ -347,7 +348,7 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 		},
 	}
 
-	handler := sp.buildHandler(pn, pc)
+	handler := sp.buildHandler(pn)
 	if handler == nil {
 		t.Fatal("expected handler, got nil")
 	}

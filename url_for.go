@@ -1,7 +1,6 @@
 package structpages
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -144,12 +143,13 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				name := segments[idx].name
 				if value, ok := params[name]; ok {
 					segments[idx].value = value
+					segments[idx].filled = true
 				}
 			}
 			// Check if all required params are filled
 			allFilled := true
 			for _, idx := range indicies {
-				if segments[idx].value == "" {
+				if !segments[idx].filled {
 					allFilled = false
 					break
 				}
@@ -157,7 +157,11 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			if allFilled {
 				s := ""
 				for _, segment := range segments {
-					s += cmp.Or(segment.value, segment.name)
+					if segment.param {
+						s += segment.value
+					} else {
+						s += segment.name
+					}
 				}
 				return s, nil
 			}
@@ -171,6 +175,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			name := segments[idx].name
 			if value, ok := params[name]; ok {
 				segments[idx].value = value
+				segments[idx].filled = true
 			}
 		}
 	}
@@ -180,12 +185,13 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			name := segments[idx].name
 			if value, ok := arg[name]; ok {
 				segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
+				segments[idx].filled = true
 			}
 			// If value not in args map, it should keep the pre-filled value from context
 		}
 		// Check if all params are filled
 		for _, idx := range indicies {
-			if segments[idx].value == "" {
+			if !segments[idx].filled {
 				return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v",
 					pattern, segments[idx].name, args)
 			}
@@ -196,6 +202,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			for i, idx := range indicies {
 				// Always override with provided args when count matches exactly
 				segments[idx].value = encodePathSegment(args[i], segments[idx].wildcard)
+				segments[idx].filled = true
 			}
 		case len(args)%2 == 0 && len(args) >= 2:
 			// Check if all even-indexed args are strings AND at least one matches a parameter name
@@ -229,7 +236,8 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 					name := segments[idx].name
 					if value, ok := m[name]; ok {
 						segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
-					} else if segments[idx].value == "" {
+						segments[idx].filled = true
+					} else if !segments[idx].filled {
 						// Only error if no value from context either
 						return pattern, fmt.Errorf("pattern %s: argument %s not found in provided args: %v", pattern, name, args)
 					}
@@ -242,7 +250,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			// Check if we have enough args considering pre-filled values
 			unfilled := 0
 			for _, idx := range indicies {
-				if segments[idx].value == "" {
+				if !segments[idx].filled {
 					unfilled++
 				}
 			}
@@ -252,8 +260,9 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			// Fill remaining unfilled params
 			argIdx := 0
 			for _, idx := range indicies {
-				if segments[idx].value == "" && argIdx < len(args) {
+				if !segments[idx].filled && argIdx < len(args) {
 					segments[idx].value = encodePathSegment(args[argIdx], segments[idx].wildcard)
+					segments[idx].filled = true
 					argIdx++
 				}
 			}
@@ -262,7 +271,11 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 
 	s := ""
 	for _, segment := range segments {
-		s += cmp.Or(segment.value, segment.name)
+		if segment.param {
+			s += segment.value
+		} else {
+			s += segment.name
+		}
 	}
 
 	return s, nil
@@ -273,6 +286,7 @@ type segment struct {
 	param    bool
 	wildcard bool
 	value    string
+	filled   bool // true if value has been explicitly set (even to empty string)
 }
 
 func parseSegments(pattern string) (segments []segment, err error) {
