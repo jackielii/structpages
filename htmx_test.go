@@ -227,6 +227,33 @@ func TestMatchComponentByTarget(t *testing.T) {
 			// Should match because Name is "IndexPage"
 			expected: "Content",
 		},
+		{
+			name:   "target ends with fullID - wrapper prefix case",
+			target: "wrapper-index-page-load-more",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"LoadMore": {}, // fullID = "index-page-load-more"
+				},
+			},
+			// target "wrapper-index-page-load-more" ends with fullID "index-page-load-more"
+			expected: "LoadMore",
+		},
+		{
+			name:   "target ends with fullID - prefers longer match",
+			target: "custom-prefix-index-page-settings-form",
+			pageNode: &PageNode{
+				Name:  "IndexPage",
+				Title: "Home",
+				Components: map[string]reflect.Method{
+					"SettingsForm": {}, // fullID = "index-page-settings-form"
+					"Form":         {}, // fullID = "index-page-form"
+				},
+			},
+			// Both match as suffix, but "index-page-settings-form" is longer
+			expected: "SettingsForm",
+		},
 	}
 
 	for _, tt := range tests {
