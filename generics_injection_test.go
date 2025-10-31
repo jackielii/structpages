@@ -246,10 +246,12 @@ func TestGenerics_BasicInjection(t *testing.T) {
 			t.Logf("Error handling request %s: %v", r.URL.Path, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}),
-		userStore,
-		productRepo, // Use concrete type
-		floatCalc,
-		asyncProc,
+		WithArgs(
+			userStore,
+			productRepo, // Use concrete type
+			floatCalc,
+			asyncProc,
+		),
 	)
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
@@ -328,8 +330,10 @@ func TestGenerics_DuplicateTypeError(t *testing.T) {
 	store2 := newGenericStore[string]()
 
 	_, err := Mount(nil, genericTestPage{}, "/", "Test",
-		store1,
-		store2, // Same type as store1
+		WithArgs(
+			store1,
+			store2, // Same type as store1
+		),
 	)
 
 	if err == nil {
@@ -352,9 +356,11 @@ func TestGenerics_DifferentTypeParameters(t *testing.T) {
 	// This should work because they're different types
 	mux := http.NewServeMux()
 	_, err := Mount(mux, testPage, "/", "Test",
-		stringStore,
-		intStore,
-		floatStore,
+		WithArgs(
+			stringStore,
+			intStore,
+			floatStore,
+		),
 	)
 	if err != nil {
 		t.Errorf("Different type parameters should create different types, got error: %v", err)
@@ -379,7 +385,6 @@ func (c collectionPage) Page(info string) component {
 }
 
 func TestGenerics_SlicesAndMaps(t *testing.T) {
-
 	intSlice := []int{1, 2, 3}
 	stringMap := map[string]string{"key": "value"}
 	genericSlice := []genericStore[string]{
@@ -389,9 +394,11 @@ func TestGenerics_SlicesAndMaps(t *testing.T) {
 
 	mux := http.NewServeMux()
 	sp, err := Mount(mux, collectionPage{}, "/", "Test",
-		intSlice,
-		stringMap,
-		genericSlice,
+		WithArgs(
+			intSlice,
+			stringMap,
+			genericSlice,
+		),
 	)
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
@@ -426,7 +433,7 @@ func TestGenerics_TypeAlias(t *testing.T) {
 
 	// This should work
 	mux1 := http.NewServeMux()
-	_, err := Mount(mux1, testPage, "/", "Test", &store)
+	_, err := Mount(mux1, testPage, "/", "Test", WithArgs(&store))
 	if err != nil {
 		t.Errorf("Type alias should work, got error: %v", err)
 	}
@@ -434,7 +441,7 @@ func TestGenerics_TypeAlias(t *testing.T) {
 	// But adding the original type with same parameters should fail
 	originalStore := newGenericStore[string]()
 	mux2 := http.NewServeMux()
-	_, err = Mount(mux2, testPage, "/", "Test", &store, originalStore)
+	_, err = Mount(mux2, testPage, "/", "Test", WithArgs(&store, originalStore))
 	if err == nil {
 		t.Error("Expected error for duplicate type (alias and original), got nil")
 	}
@@ -478,13 +485,12 @@ func (f funcPage) Page(result string) component {
 }
 
 func TestGenerics_FunctionTypes(t *testing.T) {
-
 	fs := &funcStore[string]{
 		transformer: strings.ToUpper,
 	}
 
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, funcPage{}, "/", "Test", fs)
+	sp, err := Mount(mux, funcPage{}, "/", "Test", WithArgs(fs))
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}
@@ -505,7 +511,6 @@ func TestGenerics_FunctionTypes(t *testing.T) {
 
 // Test error handling with nil generic types
 func TestGenerics_NilHandling(t *testing.T) {
-
 	var nilStore *genericStore[string]
 
 	// Create a minimal page struct for testing
@@ -513,7 +518,7 @@ func TestGenerics_NilHandling(t *testing.T) {
 
 	// Nil values should be ignored by argRegistry
 	mux := http.NewServeMux()
-	_, err := Mount(mux, testPage, "/", "Test", nilStore)
+	_, err := Mount(mux, testPage, "/", "Test", WithArgs(nilStore))
 	if err != nil {
 		t.Errorf("Nil generic values should be ignored, got error: %v", err)
 	}
@@ -544,9 +549,11 @@ func TestGenerics_ComplexConstraints(t *testing.T) {
 	// All three should be treated as different types
 	mux := http.NewServeMux()
 	_, err := Mount(mux, testPage, "/", "Test",
-		intSorter,
-		stringSorter,
-		floatSorter,
+		WithArgs(
+			intSorter,
+			stringSorter,
+			floatSorter,
+		),
 	)
 	if err != nil {
 		t.Errorf("Different constrained types should work, got error: %v", err)
@@ -564,8 +571,10 @@ func TestGenerics_PointerSemantics(t *testing.T) {
 	// Both pointer and value should be allowed, but they're different types
 	mux := http.NewServeMux()
 	_, err := Mount(mux, testPage, "/", "Test",
-		store,
-		valueStore,
+		WithArgs(
+			store,
+			valueStore,
+		),
 	)
 	if err != nil {
 		t.Errorf("Pointer and value of generic type should both work, got error: %v", err)
@@ -591,11 +600,10 @@ func (m genericMethodPage) Page(val int) component {
 }
 
 func TestGenerics_MethodMatching(t *testing.T) {
-
 	ms := &methodStore[int]{}
 
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, genericMethodPage{}, "/", "Test", ms)
+	sp, err := Mount(mux, genericMethodPage{}, "/", "Test", WithArgs(ms))
 	if err != nil {
 		t.Fatalf("Failed to mount pages: %v", err)
 	}

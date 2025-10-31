@@ -480,7 +480,7 @@ func TestRenderPageComponent_FromExtendedServeHTTP(t *testing.T) {
 	// Provide logger arg for dependency injection
 	logger := "test-logger"
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", logger)
+	_, err := Mount(mux, &pages{}, "/", "Test", WithArgs(logger))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}

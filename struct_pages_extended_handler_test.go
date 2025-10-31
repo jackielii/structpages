@@ -117,7 +117,7 @@ func TestExtendedServeHTTPWithExtraArgs(t *testing.T) {
 			}
 
 			mux := http.NewServeMux()
-			opts := append([]any{WithErrorHandler(errorHandler)}, tt.args...)
+			opts := append([]Option{WithErrorHandler(errorHandler)}, WithArgs(tt.args...))
 			_, err := Mount(mux, p, "/", "Test Extended", opts...)
 			if err != nil {
 				t.Fatalf("Mount failed: %v", err)

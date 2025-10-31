@@ -150,7 +150,11 @@ type StructPages struct {
 	middlewares              []MiddlewareFunc
 	defaultComponentSelector func(r *http.Request, pn *PageNode) (string, error)
 	warnEmptyRoute           func(*PageNode)
+	args                     []any
 }
+
+// Option represents a configuration option for StructPages.
+type Option func(*StructPages)
 
 // Mount parses the page tree and registers all routes onto the provided mux.
 // If mux is nil, routes are registered on http.DefaultServeMux.
@@ -175,7 +179,7 @@ type StructPages struct {
 //
 //	sp, err := structpages.Mount(nil, index{}, "/", "My App")
 //	http.ListenAndServe(":8080", nil)
-func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages, error) {
+func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPages, error) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
@@ -187,18 +191,12 @@ func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages
 		defaultComponentSelector: HTMXPageConfig,
 	}
 
-	// Separate options from dependency injection args
-	var args []any
 	for _, opt := range options {
-		if fn, ok := opt.(func(*StructPages)); ok {
-			fn(sp)
-		} else {
-			args = append(args, opt)
-		}
+		opt(sp)
 	}
 
 	// Parse page tree
-	pc, err := parsePageTree(route, page, args...)
+	pc, err := parsePageTree(route, page, sp.args...)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +268,14 @@ func (sp *StructPages) IDFor(v any) (string, error) {
 	// Create a context with parseContext and call the context-based IDFor
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)
 	return IDFor(ctx, v)
+}
+
+// WithArgs adds global dependency injection arguments that will be
+// available to all page methods (Props, Middlewares, ServeHTTP etc.).
+func WithArgs(args ...any) func(*StructPages) {
+	return func(r *StructPages) {
+		r.args = append(r.args, args...)
+	}
 }
 
 // WithDefaultComponentSelector sets a global component selector function that determines

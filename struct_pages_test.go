@@ -391,8 +391,11 @@ func TestExtendedHandlers(t *testing.T) {
 	// Pass the typed arguments that the extended handlers expect
 	_, err := Mount(mux, &pages{}, "/", "Test Extended",
 		WithErrorHandler(errorHandler),
-		ExtendedHandlerArg("extra value"),
-		ExtendedErrHandlerArg("error extra"))
+		WithArgs(
+			ExtendedHandlerArg("extra value"),
+			ExtendedErrHandlerArg("error extra"),
+		),
+	)
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -617,7 +620,7 @@ func TestStructPages_MountPages_registerError(t *testing.T) {
 func TestStructPages_MountPages_parseError(t *testing.T) {
 	// This should cause a parse error due to duplicate args
 	mux := http.NewServeMux()
-	_, err := Mount(mux, struct{}{}, "/", "Test", "arg1", "arg1")
+	_, err := Mount(mux, struct{}{}, "/", "Test", WithArgs("arg1", "arg1"))
 	if err == nil {
 		t.Error("Expected error from MountPages with duplicate args")
 	}
@@ -1699,7 +1702,7 @@ func TestServeHTTPWithCustomDepsAndRenderTarget(t *testing.T) {
 	appCtx := &AppContext{UserID: "user123"}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector), appCtx)
+	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector), WithArgs(appCtx))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
