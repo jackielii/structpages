@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -327,6 +328,13 @@ func TestMethodRenderTarget_Is_EdgeCases(t *testing.T) {
 	}
 }
 
+// Type with pointer receiver method for testing Is()
+type ptrReceiverTestPage struct{}
+
+func (*ptrReceiverTestPage) PointerMethod() component {
+	return testComponent{content: "pointer method"}
+}
+
 // Test methodRenderTarget.Is() with actual bound methods
 func TestMethodRenderTarget_Is_BoundMethods(t *testing.T) {
 	// Create a methodRenderTarget for selectionTestPage.TodoList
@@ -351,5 +359,127 @@ func TestMethodRenderTarget_Is_BoundMethods(t *testing.T) {
 	anotherBoundMethod := anotherInstance.TodoList
 	if mrt.Is(anotherBoundMethod) {
 		t.Error("Should NOT match bound method from different type")
+	}
+}
+
+// Test methodRenderTarget.Is() with pointer receiver methods (unbound)
+func TestMethodRenderTarget_Is_PointerReceiverUnbound(t *testing.T) {
+	// Create a methodRenderTarget for a pointer receiver method
+	pageType := reflect.TypeOf(&ptrReceiverTestPage{})
+	method, ok := pageType.MethodByName("PointerMethod")
+	if !ok {
+		t.Fatal("PointerMethod not found")
+	}
+
+	mrt := &methodRenderTarget{
+		name:   "PointerMethod",
+		method: method,
+	}
+
+	// Test with unbound pointer receiver method expression
+	// This should trigger the pointer unwrapping path (lines 118-120)
+	unboundPointerMethod := (*ptrReceiverTestPage).PointerMethod
+	if !mrt.Is(unboundPointerMethod) {
+		t.Error("Should match unbound pointer receiver method")
+	}
+}
+
+// Page with Props that doesn't handle function targets
+type forgotRenderComponentPage struct{}
+
+func (forgotRenderComponentPage) Page(data string) component {
+	return testComponent{content: "Page: " + data}
+}
+
+func (p forgotRenderComponentPage) Props(r *http.Request, target RenderTarget) (string, error) {
+	// Intentionally doesn't call RenderComponent for function targets
+	// This should trigger the error on line 348
+	return "data", nil
+}
+
+// Test error when Props doesn't use RenderComponent for function target
+func TestRenderTarget_PropsForgetRenderComponent(t *testing.T) {
+	type pages struct {
+		forgotRenderComponentPage `route:"/ ForgotPage"`
+	}
+
+	mux := http.NewServeMux()
+	var capturedErr error
+	sp, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+	_ = sp
+
+	// Make HTMX request targeting a standalone function
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "standalone-widget") // This will create a functionRenderTarget
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Should get error because Props didn't call RenderComponent
+	if capturedErr == nil {
+		t.Error("Expected error when Props doesn't use RenderComponent for function target")
+	}
+	if capturedErr != nil &&
+		!strings.Contains(capturedErr.Error(), "target is not a method and Props did not use RenderComponent") {
+		t.Errorf("Expected 'target is not a method' error, got: %v", capturedErr)
+	}
+}
+
+// Page that uses RenderComponent with method target
+type methodTargetPage struct{}
+
+func (methodTargetPage) Page(data string) component {
+	return testComponent{content: "Page: " + data}
+}
+
+func (methodTargetPage) CustomComponent(data string) component {
+	return testComponent{content: "Custom: " + data}
+}
+
+func (p methodTargetPage) Props(r *http.Request, target RenderTarget) (string, error) {
+	// Check if target is CustomComponent and use RenderComponent with it
+	if target.Is(methodTargetPage.CustomComponent) {
+		// This will hit renderOpFromTarget with methodRenderTarget
+		return "", RenderComponent(target, "method target data")
+	}
+	return "page data", nil
+}
+
+// Test RenderComponent with method target from Props
+func TestRenderComponent_MethodTargetFromProps(t *testing.T) {
+	type pages struct {
+		methodTargetPage `route:"/ MethodTargetPage"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+	_ = sp
+
+	// Make HTMX request targeting CustomComponent
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "custom-component")
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	body := rec.Body.String()
+	if body != "Custom: method target data" {
+		t.Errorf("Expected 'Custom: method target data', got %q", body)
 	}
 }
