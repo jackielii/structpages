@@ -5,16 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 	"strings"
 )
 
 // IDParams provides advanced configuration for ID generation.
-// Use this when you need suffixes or raw IDs without the CSS selector prefix.
+// Use this when you need raw IDs without the CSS selector prefix.
 type IDParams struct {
-	Method   any      // The method expression (required)
-	Suffixes []string // Optional suffixes like "container", "input"
-	RawID    bool     // If true, returns "user-list" instead of "#user-list"
+	Method any  // The method expression (required)
+	RawID  bool // If true, returns "user-list" instead of "#user-list"
 }
 
 // IDFor generates a consistent HTML ID or CSS selector for a component method.
@@ -40,31 +38,6 @@ type IDParams struct {
 //	})
 //	// → "team-management-view-user-list"
 //
-//	// With suffixes for compound IDs
-//	IDFor(ctx, IDParams{
-//	    Method: p.UserModal,
-//	    Suffixes: []string{"container"},
-//	})
-//	// → "#team-management-view-user-modal-container"
-//
-//	// Raw ID with suffixes
-//	IDFor(ctx, IDParams{
-//	    Method: p.GroupSearch,
-//	    Suffixes: []string{"input", "field"},
-//	    RawID: true,
-//	})
-//	// → "team-management-view-group-search-input-field"
-//
-// The function automatically prevents ID conflicts by prefixing with the page name:
-//
-//	type UserManagement struct{}
-//	func (UserManagement) UserList() component { ... }
-//	// → "#user-management-user-list"
-//
-//	type AdminManagement struct{}
-//	func (AdminManagement) UserList() component { ... }
-//	// → "#admin-management-user-list"
-//
 // Returns an error if parseContext is not found in the provided context.
 // This ensures IDFor is only used within the intended scope (page handlers/templates).
 func IDFor(ctx context.Context, v any) (string, error) {
@@ -74,14 +47,17 @@ func IDFor(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - IDFor must be called within a page handler or template")
 	}
 
+	return idFor(pc, v)
+}
+
+// idFor generates the ID string based on the provided value (method expression or IDParams).
+func idFor(pc *parseContext, v any) (string, error) {
 	// Handle IDParams pattern
 	var methodExpr any
-	var suffixes []string
 	rawID := false
 
 	if params, ok := v.(IDParams); ok {
 		methodExpr = params.Method
-		suffixes = params.Suffixes
 		rawID = params.RawID
 	} else {
 		methodExpr = v
@@ -89,29 +65,54 @@ func IDFor(ctx context.Context, v any) (string, error) {
 
 	// Handle Ref type for dynamic method references
 	if ref, ok := methodExpr.(Ref); ok {
-		return idForRef(pc, string(ref), suffixes, rawID)
+		return idForRef(pc, string(ref), rawID)
 	}
 
-	// Extract method and receiver info
-	methodName := extractMethodName(methodExpr)
-	if methodName == "" {
-		return "", errors.New("failed to extract method name from expression")
+	// Extract all method info (handles both bound and unbound methods)
+	info, err := extractMethodInfo(methodExpr)
+	if err != nil {
+		return "", err
 	}
 
-	receiverType := extractReceiverType(methodExpr)
-	if receiverType == nil {
-		return "", errors.New("failed to extract receiver type from method expression")
-	}
-
-	// Find page node - this gives us the page name
-	pn, err := pc.findPageNodeByType(receiverType)
+	// Find the page node
+	pn, err := pc.findPageNodeForMethod(info)
 	if err != nil {
 		return "", fmt.Errorf("cannot find page for method expression: %w", err)
 	}
 
 	// Build ID
-	id := buildID(pn.Name, methodName, suffixes, rawID)
+	id := buildID(pn.Name, info.methodName, rawID)
 	return id, nil
+}
+
+// findPageNodeForMethod finds a page node using the method info
+func (p *parseContext) findPageNodeForMethod(info *methodInfo) (*PageNode, error) {
+	if info.isBound {
+		// Find by type name string
+		return p.findPageNodeByTypeName(info.receiverTypeName, info.methodName)
+	}
+	// Find by reflect.Type
+	return p.findPageNodeByType(info.receiverType)
+}
+
+// findPageNodeByTypeName finds a PageNode by matching its type name.
+// Also verifies that the method exists on the page.
+func (p *parseContext) findPageNodeByTypeName(typeName, methodName string) (*PageNode, error) {
+	for node := range p.root.All() {
+		nodeType := node.Value.Type()
+		nodeTypeName := nodeType.Name()
+		if nodeType.Kind() == reflect.Pointer {
+			nodeTypeName = nodeType.Elem().Name()
+		}
+		if nodeTypeName == typeName {
+			// Verify the method exists
+			if _, found := nodeType.MethodByName(methodName); !found {
+				return nil, fmt.Errorf("method %q not found on page %q", methodName, node.Name)
+			}
+			return node, nil
+		}
+	}
+	return nil, fmt.Errorf("no page node found with type name %q", typeName)
 }
 
 // findPageNodeByType finds a PageNode by its receiver type.
@@ -128,71 +129,9 @@ func (p *parseContext) findPageNodeByType(receiverType reflect.Type) (*PageNode,
 	return nil, fmt.Errorf("no page node found for type %s", targetType.String())
 }
 
-// extractMethodName extracts the method name from a method expression using reflection.
-// It handles method values and returns the short method name without package or receiver.
-func extractMethodName(methodExpr any) string {
-	// Get the function value
-	v := reflect.ValueOf(methodExpr)
-	if v.Kind() != reflect.Func {
-		// If not a function, return empty string
-		return ""
-	}
-
-	// Get the function's PC (program counter)
-	pc := v.Pointer()
-	fn := runtime.FuncForPC(pc)
-	if fn == nil {
-		return ""
-	}
-
-	// Get the full function name (e.g., "github.com/user/pkg.(*Type).Method")
-	fullName := fn.Name()
-
-	// Extract just the method name from the full path
-	// Format: "package.(*Type).Method" or "package.Type.Method"
-	lastDot := strings.LastIndex(fullName, ".")
-	if lastDot == -1 {
-		return fullName
-	}
-
-	methodName := fullName[lastDot+1:]
-
-	// Remove any suffix like "-fm" that Go adds for method values
-	if idx := strings.Index(methodName, "-fm"); idx != -1 {
-		methodName = methodName[:idx]
-	}
-
-	return methodName
-}
-
-// extractReceiverType extracts the receiver type from a method expression.
-// Returns the receiver type (as a non-pointer type for consistency) or nil if extraction fails.
-func extractReceiverType(methodExpr any) reflect.Type {
-	v := reflect.ValueOf(methodExpr)
-	if v.Kind() != reflect.Func {
-		return nil
-	}
-
-	// Get the function type
-	funcType := v.Type()
-	if funcType.NumIn() == 0 {
-		return nil
-	}
-
-	// First parameter is the receiver
-	receiverType := funcType.In(0)
-
-	// Normalize to non-pointer type
-	if receiverType.Kind() == reflect.Pointer {
-		receiverType = receiverType.Elem()
-	}
-
-	return receiverType
-}
-
 // idForRef handles dynamic method references using the Ref type.
 // It supports both qualified references (PageName.MethodName) and simple method names.
-func idForRef(pc *parseContext, ref string, suffixes []string, rawID bool) (string, error) {
+func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 	var pageName, methodName string
 
 	// Check if qualified reference (PageName.MethodName)
@@ -237,7 +176,7 @@ func idForRef(pc *parseContext, ref string, suffixes []string, rawID bool) (stri
 	}
 
 	// Build ID
-	return buildID(pn.Name, methodName, suffixes, rawID), nil
+	return buildID(pn.Name, methodName, rawID), nil
 }
 
 // findPagesWithMethod finds all pages that have a method with the given name.
@@ -251,12 +190,9 @@ func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
 	return matches
 }
 
-// buildID constructs the HTML ID string from page name, method name, and optional suffixes.
-func buildID(pageName, methodName string, suffixes []string, rawID bool) string {
+// buildID constructs the HTML ID string from page name and method name.
+func buildID(pageName, methodName string, rawID bool) string {
 	id := camelToKebab(pageName) + "-" + camelToKebab(methodName)
-	for _, suffix := range suffixes {
-		id += "-" + camelToKebab(suffix)
-	}
 	if !rawID {
 		id = "#" + id
 	}

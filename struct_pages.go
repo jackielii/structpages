@@ -257,17 +257,8 @@ func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
 //	    RawID: true,
 //	})
 //	// → "team-management-view-user-list"
-//
-//	// With suffixes for compound IDs
-//	sp.IDFor(IDParams{
-//	    Method: p.UserModal,
-//	    Suffixes: []string{"container"},
-//	})
-//	// → "#team-management-view-user-modal-container"
 func (sp *StructPages) IDFor(v any) (string, error) {
-	// Create a context with parseContext and call the context-based IDFor
-	ctx := pcCtx.WithValue(context.Background(), sp.pc)
-	return IDFor(ctx, v)
+	return idFor(sp.pc, v)
 }
 
 // WithArgs adds global dependency injection arguments that will be
@@ -546,33 +537,9 @@ type httpErrHandler interface {
 }
 
 var (
-	errorType      = reflect.TypeOf((*error)(nil)).Elem()
 	handlerType    = reflect.TypeOf((*http.Handler)(nil)).Elem()
 	errHandlerType = reflect.TypeOf((*httpErrHandler)(nil)).Elem()
 )
-
-func extractError(args []reflect.Value) ([]reflect.Value, error) {
-	if len(args) >= 1 && args[len(args)-1].Type().AssignableTo(errorType) {
-		i := args[len(args)-1].Interface()
-		args = args[:len(args)-1]
-		if i == nil {
-			return args, nil
-		}
-		return args, i.(error)
-	}
-	return args, nil
-}
-
-func formatMethod(method *reflect.Method) string {
-	if method == nil || !method.Func.IsValid() {
-		return "<nil>"
-	}
-	receiver := method.Type.In(0)
-	if receiver.Kind() == reflect.Pointer {
-		receiver = receiver.Elem()
-	}
-	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
-}
 
 func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 	v := pn.Value
