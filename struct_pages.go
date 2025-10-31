@@ -310,7 +310,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 		props, err := sp.execProps(page, r, w, target)
 		if err != nil {
 			// Check if it's a render component error
-			if sp.handleRenderComponentError(w, r, err, page, props) {
+			if sp.handleRenderComponentError(w, r, err, page) {
 				return
 			}
 
@@ -399,7 +399,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				// Clear the buffer since we have an error
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pn, nil) {
+				if sp.handleRenderComponentError(bw, r, err, pn) {
 					return
 				}
 				// Write error directly to the buffered writer
@@ -448,7 +448,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				// - therefore this branch is only reachable when bw != nil
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pn, nil) {
+				if sp.handleRenderComponentError(bw, r, err, pn) {
 					return
 				}
 				sp.onError(bw, r, err)
