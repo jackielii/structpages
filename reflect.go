@@ -272,3 +272,18 @@ func formatMethod(method *reflect.Method) string {
 	}
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
+
+// formatCallable returns a human-readable name for a callable reflect.Value.
+func formatCallable(callable reflect.Value) string {
+	if !callable.IsValid() || callable.Kind() != reflect.Func {
+		return "<invalid>"
+	}
+
+	funcPC := callable.Pointer()
+	fn := runtime.FuncForPC(funcPC)
+	if fn == nil {
+		return callable.Type().String()
+	}
+
+	return fn.Name()
+}
