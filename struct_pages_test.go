@@ -1345,6 +1345,100 @@ func standaloneComponentFunc(s string, i int) component {
 	return testComponent{fmt.Sprintf("standalone: %s, %d", s, i)}
 }
 
+// Standalone function with different params than page
+func StandaloneWidgetFunc(title string, count int) component {
+	return testComponent{fmt.Sprintf("StandaloneWidget: %s (%d)", title, count)}
+}
+
+// Page that doesn't handle standalone function targeting properly
+type pageWithStandaloneFunc struct{}
+
+type pageWithStandaloneFuncProps struct {
+	Message string
+}
+
+func (p pageWithStandaloneFunc) Page(props pageWithStandaloneFuncProps) component {
+	return testComponent{fmt.Sprintf("Page: %s", props.Message)}
+}
+
+func (p pageWithStandaloneFunc) Props(r *http.Request) (pageWithStandaloneFuncProps, error) {
+	// BUG: Not checking target.Is(StandaloneWidgetFunc)
+	// Just returns default props
+	return pageWithStandaloneFuncProps{Message: "default message"}, nil
+}
+
+// TestStandaloneFunctionHTMXTarget_NoTargetIsCheck tests what happens when:
+// 1. HTMX request targets a standalone function using IDFor
+// 2. The standalone function requires different parameters (title, count)
+// 3. Props method doesn't check target.Is() for the standalone function
+// 4. Framework tries to call the function but doesn't have the right args
+func TestStandaloneFunctionHTMXTarget_NoTargetIsCheck(t *testing.T) {
+	var capturedErr error
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pageWithStandaloneFunc{}, "/test", "Test",
+		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			capturedErr = err
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Generate ID for the standalone function
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	funcID, err := ID(ctx, StandaloneWidgetFunc)
+	if err != nil {
+		t.Fatalf("Failed to get ID for standalone function: %v", err)
+	}
+	t.Logf("Standalone function ID: %s", funcID)
+
+	// Make HTMX request targeting the standalone function
+	req := httptest.NewRequest("GET", "/test", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", funcID)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	// Should return 500 with helpful error message
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Expected 500 status, got %d", rec.Code)
+	}
+
+	// Verify error was captured and provides helpful guidance
+	if capturedErr == nil {
+		t.Fatal("Expected error to be captured")
+	}
+
+	errMsg := capturedErr.Error()
+	t.Logf("Error message: %s", errMsg)
+
+	// Check that error message:
+	// 1. Mentions "Component function"
+	// 2. Uses the actual function name (StandaloneWidgetFunc) not kebab-case
+	// 3. Provides the exact code to check: target.Is(StandaloneWidgetFunc)
+	// 4. Mentions RenderComponent
+	requiredStrings := []string{
+		"Component function",
+		"StandaloneWidgetFunc",
+		"is targeted but not handled",
+		"target.Is(StandaloneWidgetFunc)",
+		"RenderComponent(target, args...)",
+	}
+
+	for _, required := range requiredStrings {
+		if !strings.Contains(errMsg, required) {
+			t.Errorf("Error message should contain '%s', got: %s", required, errMsg)
+		}
+	}
+
+	// Should NOT contain kebab-case ID in the helpful part (only in page name context)
+	if strings.Contains(errMsg, "target.Is(standalone-widget-func)") {
+		t.Error("Error message should use PascalCase function name, not kebab-case ID")
+	}
+}
+
 // TestRenderComponent_StandaloneFunctionInsufficientArgs tests what happens when
 // a standalone function (not a method) is called with insufficient arguments.
 // Standalone functions bypass the DI system, so we need explicit validation.
