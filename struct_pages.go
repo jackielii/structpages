@@ -345,6 +345,20 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 
 		// If we get here, target is not a method (could be function or custom)
 		// Props should have called RenderComponent
+
+		// Provide better error message for function targets
+		if frt, ok := target.(*functionRenderTarget); ok {
+			// Convert kebab-case ID to PascalCase function name
+			funcName := kebabToPascal(frt.hxTarget)
+			sp.onError(w, r, fmt.Errorf(
+				"page %s: Component function '%s' is targeted but not handled. "+
+					"check target.Is(%s) and call RenderComponent(target, args...). "+
+					"Or build the component directly and call RenderComponent(component)",
+				page.Name, funcName, funcName))
+			return
+		}
+
+		// Generic error for other custom target types
 		sp.onError(w, r, fmt.Errorf("page %s: target is not a method and Props did not use RenderComponent", page.Name))
 	})
 }

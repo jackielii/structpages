@@ -427,9 +427,15 @@ func TestRenderTarget_PropsForgetRenderComponent(t *testing.T) {
 	if capturedErr == nil {
 		t.Error("Expected error when Props doesn't use RenderComponent for function target")
 	}
-	if capturedErr != nil &&
-		!strings.Contains(capturedErr.Error(), "target is not a method and Props did not use RenderComponent") {
-		t.Errorf("Expected 'target is not a method' error, got: %v", capturedErr)
+	// Verify new improved error message
+	if capturedErr != nil {
+		errMsg := capturedErr.Error()
+		if !strings.Contains(errMsg, "Component function 'StandaloneWidget' is targeted but not handled") {
+			t.Errorf("Expected improved error message about StandaloneWidget, got: %v", errMsg)
+		}
+		if !strings.Contains(errMsg, "target.Is(StandaloneWidget)") {
+			t.Errorf("Expected error to mention target.Is(StandaloneWidget), got: %v", errMsg)
+		}
 	}
 }
 
