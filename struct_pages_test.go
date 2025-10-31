@@ -955,15 +955,14 @@ func TestStructPages_IDFor(t *testing.T) {
 
 	t.Run("IDFor with IDParams", func(t *testing.T) {
 		id, err := sp.IDFor(IDParams{
-			Method:   testPageIDFor.UserList,
-			Suffixes: []string{"container"},
-			RawID:    true,
+			Method: testPageIDFor.UserList,
+			RawID:  true,
 		})
 		if err != nil {
 			t.Errorf("IDFor error: %v", err)
 		}
-		if id != "test-user-list-container" {
-			t.Errorf("IDFor() = %q, want %q", id, "test-user-list-container")
+		if id != "test-user-list" {
+			t.Errorf("IDFor() = %q, want %q", id, "test-user-list")
 		}
 	})
 }
@@ -1191,8 +1190,11 @@ func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	if capturedErr == nil {
 		t.Error("Expected error to be captured")
 	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract receiver type") {
-		t.Errorf("Expected 'failed to extract receiver type' error, got: %v", capturedErr)
+	// Accept either error - both indicate we can't handle this function
+	if capturedErr != nil &&
+		!strings.Contains(capturedErr.Error(), "failed to extract receiver type") &&
+		!strings.Contains(capturedErr.Error(), "failed to extract method name") {
+		t.Errorf("Expected 'failed to extract receiver/method' error, got: %v", capturedErr)
 	}
 }
 

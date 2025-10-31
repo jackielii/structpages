@@ -132,22 +132,6 @@ func TestIDFor(t *testing.T) {
 			expected: "#test-user-list",
 		},
 		{
-			name: "method with suffix - returns selector",
-			input: IDParams{
-				Method:   testPageWithMethods.UserModal,
-				Suffixes: []string{"container"},
-			},
-			expected: "#test-user-modal-container",
-		},
-		{
-			name: "method with multiple suffixes",
-			input: IDParams{
-				Method:   testPageWithMethods.GroupSearch,
-				Suffixes: []string{"input", "field"},
-			},
-			expected: "#test-group-search-input-field",
-		},
-		{
 			name: "raw ID without selector",
 			input: IDParams{
 				Method: testPageWithMethods.UserList,
@@ -156,26 +140,9 @@ func TestIDFor(t *testing.T) {
 			expected: "test-user-list",
 		},
 		{
-			name: "raw ID with suffix",
-			input: IDParams{
-				Method:   testPageWithMethods.UserModal,
-				Suffixes: []string{"container"},
-				RawID:    true,
-			},
-			expected: "test-user-modal-container",
-		},
-		{
 			name:     "camelCase method name",
 			input:    testPageWithMethods.userProfile,
 			expected: "#test-user-profile",
-		},
-		{
-			name: "PascalCase suffix",
-			input: IDParams{
-				Method:   testPageWithMethods.TeamManagement,
-				Suffixes: []string{"AddUser", "Form"},
-			},
-			expected: "#test-team-management-add-user-form",
 		},
 		{
 			name:     "with acronym",
@@ -280,28 +247,12 @@ func TestIDFor_RealWorldExamples(t *testing.T) {
 			expected: "#team-management-group-list",
 		},
 		{
-			name: "team user modal container",
-			input: IDParams{
-				Method:   (*TeamManagementViewTest).UserModal,
-				Suffixes: []string{"container"},
-			},
-			expected: "#team-management-user-modal-container",
-		},
-		{
 			name: "team group modal raw ID",
 			input: IDParams{
 				Method: (*TeamManagementViewTest).GroupModal,
 				RawID:  true,
 			},
 			expected: "team-management-group-modal",
-		},
-		{
-			name: "team user search input",
-			input: IDParams{
-				Method:   (*TeamManagementViewTest).UserSearch,
-				Suffixes: []string{"input"},
-			},
-			expected: "#team-management-user-search-input",
 		},
 		{
 			name:     "admin user list - different from team",
@@ -381,19 +332,6 @@ func TestIDFor_withRef(t *testing.T) {
 		}
 	})
 
-	t.Run("Ref with IDParams - qualified", func(t *testing.T) {
-		id, err := IDFor(ctx, IDParams{
-			Method:   Ref("teamManagement.UserModal"),
-			Suffixes: []string{"container"},
-		})
-		if err != nil {
-			t.Errorf("IDFor error: %v", err)
-		}
-		if id != "#team-management-user-modal-container" {
-			t.Errorf("IDFor() = %q, want %q", id, "#team-management-user-modal-container")
-		}
-	})
-
 	t.Run("Ref with IDParams - RawID", func(t *testing.T) {
 		id, err := IDFor(ctx, IDParams{
 			Method: Ref("teamManagement.GroupSearch"),
@@ -404,20 +342,6 @@ func TestIDFor_withRef(t *testing.T) {
 		}
 		if id != "team-management-group-search" {
 			t.Errorf("IDFor() = %q, want %q", id, "team-management-group-search")
-		}
-	})
-
-	t.Run("Ref with IDParams - suffixes and RawID", func(t *testing.T) {
-		id, err := IDFor(ctx, IDParams{
-			Method:   Ref("teamManagement.UserSearch"),
-			Suffixes: []string{"input", "field"},
-			RawID:    true,
-		})
-		if err != nil {
-			t.Errorf("IDFor error: %v", err)
-		}
-		if id != "team-management-user-search-input-field" {
-			t.Errorf("IDFor() = %q, want %q", id, "team-management-user-search-input-field")
 		}
 	})
 
@@ -609,8 +533,8 @@ func TestIDFor_ErrorCases(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for non-function")
 		}
-		if err != nil && !strings.Contains(err.Error(), "failed to extract method name") {
-			t.Errorf("Expected 'failed to extract method name' error, got: %v", err)
+		if err != nil && !strings.Contains(err.Error(), "not a function") {
+			t.Errorf("Expected 'not a function' error, got: %v", err)
 		}
 	})
 
@@ -671,6 +595,174 @@ func TestExtractMethodName_EdgeCases(t *testing.T) {
 		name := extractMethodName(f)
 		if name != "" {
 			t.Errorf("Expected empty name for zero value function, got: %q", name)
+		}
+	})
+}
+
+// TestIDFor_InstanceMethod tests IDFor with instance method values (bound methods)
+// This is the pattern: p.UserList where p is an instance
+func TestIDFor_InstanceMethod(t *testing.T) {
+	// Set up page tree
+	type testPages struct {
+		test testPageWithMethods `route:"/ Test"`
+	}
+
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	// Set up context with parseContext
+	ctx := context.Background()
+	ctx = pcCtx.WithValue(ctx, pc)
+
+	// Create an instance - THIS IS THE KEY DIFFERENCE
+	p := testPageWithMethods{}
+
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "instance method - simple",
+			input:    p.UserList,
+			expected: "#test-user-list",
+		},
+		{
+			name:     "instance method - another method",
+			input:    p.UserModal,
+			expected: "#test-user-modal",
+		},
+		{
+			name: "instance method raw ID",
+			input: IDParams{
+				Method: p.TeamManagement,
+				RawID:  true,
+			},
+			expected: "test-team-management",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := IDFor(ctx, tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("IDFor() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestExtractReceiverType_InstanceMethod tests extractReceiverType with instance methods
+func TestExtractReceiverType_InstanceMethod(t *testing.T) {
+	p := TeamManagementViewTest{}
+
+	t.Run("instance method (bound method) - returns nil by design", func(t *testing.T) {
+		receiverType := extractReceiverType(p.UserList)
+		// Bound methods (instance.Method) return nil by design
+		// They are handled separately by idForBoundMethod
+		if receiverType != nil {
+			t.Errorf("extractReceiverType() = %v for bound method, want nil (handled separately)", receiverType)
+		}
+	})
+
+	t.Run("method expression (unbound) - extracts receiver type", func(t *testing.T) {
+		receiverType := extractReceiverType(TeamManagementViewTest.UserList)
+		if receiverType == nil {
+			t.Fatal("extractReceiverType() returned nil for unbound method expression")
+		}
+		expectedType := reflect.TypeOf(TeamManagementViewTest{})
+		if receiverType != expectedType {
+			t.Errorf("extractReceiverType() = %v, want %v", receiverType, expectedType)
+		}
+	})
+}
+
+// TestIDFor_InstanceMethodVsMethodExpression demonstrates that both patterns work
+func TestIDFor_InstanceMethodVsMethodExpression(t *testing.T) {
+	// Set up page tree
+	type testPages struct {
+		team TeamManagementViewTest `route:"/team Team"`
+	}
+
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	// Create an instance
+	p := TeamManagementViewTest{}
+
+	t.Run("instance method and method expression produce same ID", func(t *testing.T) {
+		// Instance method (bound method)
+		idInstance, err := IDFor(ctx, p.UserList)
+		if err != nil {
+			t.Fatalf("IDFor with instance method failed: %v", err)
+		}
+
+		// Method expression (unbound method)
+		idMethodExpr, err := IDFor(ctx, TeamManagementViewTest.UserList)
+		if err != nil {
+			t.Fatalf("IDFor with method expression failed: %v", err)
+		}
+
+		// They should produce the same ID
+		if idInstance != idMethodExpr {
+			t.Errorf("Instance method and method expression should produce same ID:\n  instance: %q\n  method expr: %q",
+				idInstance, idMethodExpr)
+		}
+
+		// Verify it's the expected ID (derived from field name "team")
+		expected := "#team-user-list"
+		if idInstance != expected {
+			t.Errorf("IDFor() = %q, want %q", idInstance, expected)
+		}
+	})
+
+	t.Run("both patterns work with IDParams", func(t *testing.T) {
+		// Instance method with RawID
+		idInstance, err := IDFor(ctx, IDParams{
+			Method: p.UserModal,
+			RawID:  true,
+		})
+		if err != nil {
+			t.Fatalf("IDFor with instance method and RawID failed: %v", err)
+		}
+
+		// Method expression with RawID
+		idMethodExpr, err := IDFor(ctx, IDParams{
+			Method: TeamManagementViewTest.UserModal,
+			RawID:  true,
+		})
+		if err != nil {
+			t.Fatalf("IDFor with method expression and RawID failed: %v", err)
+		}
+
+		// They should produce the same ID
+		if idInstance != idMethodExpr {
+			t.Errorf(
+				"Instance method and method expression with RawID should produce same ID:\n"+
+					"  instance: %q\n  method expr: %q",
+				idInstance, idMethodExpr)
+		}
+
+		expected := "team-user-modal"
+		if idInstance != expected {
+			t.Errorf("IDFor() = %q, want %q", idInstance, expected)
 		}
 	})
 }
