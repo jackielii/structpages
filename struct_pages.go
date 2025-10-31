@@ -67,6 +67,29 @@ func (sp *StructPages) IDTarget(v any) (string, error) {
 	return idFor(sp.pc, v, false)
 }
 
+// URLFor returns the URL for a given page type. If args is provided, it'll replace
+// the path segments. Supported format is similar to http.ServeMux.
+//
+// Unlike the context-based URLFor function, this method doesn't have access to
+// pre-extracted URL parameters from the current request, so all required parameters
+// must be provided as args.
+//
+// If multiple page type matches are found, the first one is returned.
+// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
+//
+// Additionally, you can pass []any to page to join multiple path segments together.
+// Strings will be joined as is. Example:
+//
+//	sp.URLFor([]any{Page{}, "?foo={bar}"}, "bar", "baz")
+//
+// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
+// It can be useful when you have multiple pages with the same type but different routes.
+func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
+	// Create a context with parseContext and call the context-based URLFor
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	return URLFor(ctx, page, args...)
+}
+
 // Option represents a configuration option for StructPages.
 type Option func(*StructPages)
 
@@ -124,29 +147,6 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	}
 
 	return sp, nil
-}
-
-// URLFor returns the URL for a given page type. If args is provided, it'll replace
-// the path segments. Supported format is similar to http.ServeMux.
-//
-// Unlike the context-based URLFor function, this method doesn't have access to
-// pre-extracted URL parameters from the current request, so all required parameters
-// must be provided as args.
-//
-// If multiple page type matches are found, the first one is returned.
-// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
-//
-// Additionally, you can pass []any to page to join multiple path segments together.
-// Strings will be joined as is. Example:
-//
-//	sp.URLFor([]any{Page{}, "?foo={bar}"}, "bar", "baz")
-//
-// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
-// It can be useful when you have multiple pages with the same type but different routes.
-func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
-	// Create a context with parseContext and call the context-based URLFor
-	ctx := pcCtx.WithValue(context.Background(), sp.pc)
-	return URLFor(ctx, page, args...)
 }
 
 // WithArgs adds global dependency injection arguments that will be
