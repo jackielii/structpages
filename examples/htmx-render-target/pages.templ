@@ -101,8 +101,9 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (Dash
 	case target.Is(UserStatsWidget):
 		// Only load user stats (lightweight query)
 		stats := loadUserStats()
+		comp := UserStatsWidget(stats)
 		// Use RenderComponent with target to render just this widget
-		return DashboardProps{}, structpages.RenderComponent(target, stats)
+		return DashboardProps{}, structpages.RenderComponent(comp)
 
 	case target.Is(SalesChartWidget):
 		// Only load sales data (expensive query - avoid loading unnecessarily)

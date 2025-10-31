@@ -1126,39 +1126,17 @@ func (extendedHandlerErrorPageWithReturn) ServeHTTP(w http.ResponseWriter, r *ht
 
 // Test RenderComponent with invalid method expression (non-function)
 func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
+	// RenderComponent should fail immediately with invalid input
+	err := RenderComponent("not a function") // Not a function, should fail
+	if err == nil {
+		t.Fatal("Expected RenderComponent to return error for invalid input")
 	}
-
-	// Create a custom error handler that captures errors
-	var capturedErr error
-	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Trigger handleRenderComponentError with invalid method expression
-	err = RenderComponent("not a function") // Not a function, should fail
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract method info") {
-		t.Errorf("Expected 'failed to extract method info' error, got: %v", capturedErr)
+	if !strings.Contains(err.Error(), "target must be a component, RenderTarget, or function") {
+		t.Errorf("Expected 'target must be a component, RenderTarget, or function' error, got: %v", err)
 	}
 }
 
-// Test RenderComponent with function having no receiver
+// Test RenderComponent with function (standalone function component)
 func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	mux := http.NewServeMux()
 	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
@@ -1166,34 +1144,57 @@ func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 		t.Fatalf("Mount failed: %v", err)
 	}
 
-	// Create a custom error handler that captures errors
-	var capturedErr error
-	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Create a function that returns a component (valid standalone function)
+	standaloneFunc := func() component { return testComponent{"test from function"} }
+
+	err = RenderComponent(standaloneFunc)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Check that the component was rendered
+	if !strings.Contains(rec.Body.String(), "test from function") {
+		t.Errorf("Expected component to be rendered, got: %s", rec.Body.String())
+	}
+}
+
+// myComponentGetter implements componentGetter interface for testing
+type myComponentGetter struct {
+	data string
+}
+
+func (mcg myComponentGetter) Component() component {
+	return testComponent{mcg.data}
+}
+
+// Test RenderComponent with type that implements Component() method
+func TestRenderComponent_ComponentGetter(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
 	}
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
 
-	// Create a function with no receiver (no parameters)
-	noReceiverFunc := func() component { return testComponent{"test"} }
-
-	err = RenderComponent(noReceiverFunc)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
+	// Create a componentGetter
+	getter := myComponentGetter{data: "from component getter"}
+	err = RenderComponent(getter)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
 	}
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	}
-	// Accept either error - both indicate we can't handle this function
-	if capturedErr != nil &&
-		!strings.Contains(capturedErr.Error(), "failed to extract receiver type") &&
-		!strings.Contains(capturedErr.Error(), "failed to extract method name") {
-		t.Errorf("Expected 'failed to extract receiver/method' error, got: %v", capturedErr)
+
+	// Check that the component was rendered
+	if !strings.Contains(rec.Body.String(), "from component getter") {
+		t.Errorf("Expected component to be rendered, got: %s", rec.Body.String())
 	}
 }
 
@@ -1218,7 +1219,7 @@ func TestHandleRenderComponentError_PageNotFound(t *testing.T) {
 
 	// Try to render component from unregistered page
 	err = RenderComponent(unregisteredPage.SomeComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1252,7 +1253,7 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 
 	// Trigger component render error
 	err = RenderComponent(errorComponentPage.ErrorComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1278,7 +1279,7 @@ func TestHandleRenderComponentError_WithArgs(t *testing.T) {
 
 	// Trigger component render with args
 	err = RenderComponent(argsComponentTestPage.ComponentWithArgs, "arg1", 42)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root, nil)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
