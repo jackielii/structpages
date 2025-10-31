@@ -285,3 +285,71 @@ func TestFunctionRenderTarget_Is(t *testing.T) {
 		t.Error("Should not match non-function")
 	}
 }
+
+// Test methodRenderTarget.Is() with edge cases
+func TestMethodRenderTarget_Is_EdgeCases(t *testing.T) {
+	// Test with zero method (Type == nil)
+	zeroMethod := reflect.Method{}
+	mrt := &methodRenderTarget{
+		name:   "Test",
+		method: zeroMethod,
+	}
+
+	if mrt.Is(selectionTestPage.Page) {
+		t.Error("Should not match when method.Type is nil")
+	}
+
+	// Test with bound method where selectedReceiverType is nil
+	// Create a method with no inputs (NumIn() == 0)
+	noInputMethod := reflect.Method{
+		Name: "Test",
+		Type: reflect.TypeOf(func() {}),
+	}
+
+	mrt2 := &methodRenderTarget{
+		name:   "Test",
+		method: noInputMethod,
+	}
+
+	// Create a bound method info (this would normally come from extractMethodInfo)
+	// We need to test the path where info.isBound is true but selectedReceiverType is nil
+	// This happens when the method has no receiver (NumIn == 0)
+
+	// This will match the path where selectedReceiverType == nil for bound methods
+	// The function should return false
+	if mrt2.Is(selectionTestPage.Page) {
+		t.Error("Should not match when bound method has no receiver type")
+	}
+
+	// Test that standalone functions don't match against method targets
+	if mrt2.Is(StandaloneWidget) {
+		t.Error("Should not match standalone function against method target")
+	}
+}
+
+// Test methodRenderTarget.Is() with actual bound methods
+func TestMethodRenderTarget_Is_BoundMethods(t *testing.T) {
+	// Create a methodRenderTarget for selectionTestPage.TodoList
+	pageType := reflect.TypeOf(selectionTestPage{})
+	method, _ := pageType.MethodByName("TodoList")
+	mrt := &methodRenderTarget{
+		name:   "TodoList",
+		method: method,
+	}
+
+	// Create an actual bound method (instance.Method)
+	instance := selectionTestPage{}
+	boundMethod := instance.TodoList
+
+	// Test with bound method from same type - should match
+	if !mrt.Is(boundMethod) {
+		t.Error("Should match bound method from same type")
+	}
+
+	// Test with bound method from different type - should not match
+	anotherInstance := anotherPage{}
+	anotherBoundMethod := anotherInstance.TodoList
+	if mrt.Is(anotherBoundMethod) {
+		t.Error("Should NOT match bound method from different type")
+	}
+}

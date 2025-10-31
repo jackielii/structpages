@@ -585,3 +585,42 @@ func TestRenderComponent_FromErrHandler(t *testing.T) {
 		})
 	}
 }
+
+// Test renderOpFromTarget with invalid funcValue
+func TestRenderOpFromTarget_InvalidFuncValue(t *testing.T) {
+	// Create a functionRenderTarget with no funcValue set
+	frt := &functionRenderTarget{
+		hxTarget: "test-target",
+		pageName: "TestPage",
+		// funcValue is left as zero value (invalid)
+	}
+
+	// Try to create renderOp from this target - should error
+	_, err := renderOpFromTarget(frt, nil)
+	if err == nil {
+		t.Error("Expected error when functionRenderTarget has invalid funcValue")
+	}
+	if !strings.Contains(err.Error(), "has no funcValue") {
+		t.Errorf("Expected 'has no funcValue' error, got: %v", err)
+	}
+}
+
+// Custom RenderTarget type for testing unsupported type error
+type unsupportedRenderTarget struct{}
+
+func (unsupportedRenderTarget) Is(any) bool { return false }
+
+// Test renderOpFromTarget with unsupported RenderTarget type
+func TestRenderOpFromTarget_UnsupportedType(t *testing.T) {
+	// Create an unsupported RenderTarget type
+	urt := unsupportedRenderTarget{}
+
+	// Try to create renderOp from this target - should error
+	_, err := renderOpFromTarget(urt, nil)
+	if err == nil {
+		t.Error("Expected error when renderOpFromTarget receives unsupported type")
+	}
+	if !strings.Contains(err.Error(), "unsupported RenderTarget type") {
+		t.Errorf("Expected 'unsupported RenderTarget type' error, got: %v", err)
+	}
+}
