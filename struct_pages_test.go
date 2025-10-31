@@ -1302,6 +1302,87 @@ func (argsComponentTestPage) ComponentWithArgs(s string, i int) component {
 	return testComponent{fmt.Sprintf("component: %s, %d", s, i)}
 }
 
+// TestRenderComponent_InsufficientArgs tests what happens when insufficient arguments
+// are provided to RenderComponent. The DI system should catch this and return an error.
+func TestRenderComponent_InsufficientArgs(t *testing.T) {
+	// Capture errors
+	var capturedErr error
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
+		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			capturedErr = err
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Try to call a method that needs 2 args but only provide 1
+	err = RenderComponent((*argsComponentTestPage).ComponentWithArgs, "only-one-arg")
+
+	// This should be handled gracefully, not panic
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Should get an error response with clear message about missing argument
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	} else if !strings.Contains(capturedErr.Error(), "requires argument of type int") {
+		t.Errorf("Expected error about missing int argument, got: %v", capturedErr)
+	}
+	t.Logf("Error (as expected): %v", capturedErr)
+}
+
+// Standalone function for testing
+func standaloneComponentFunc(s string, i int) component {
+	return testComponent{fmt.Sprintf("standalone: %s, %d", s, i)}
+}
+
+// TestRenderComponent_StandaloneFunctionInsufficientArgs tests what happens when
+// a standalone function (not a method) is called with insufficient arguments.
+// Standalone functions bypass the DI system, so we need explicit validation.
+func TestRenderComponent_StandaloneFunctionInsufficientArgs(t *testing.T) {
+	// Capture errors
+	var capturedErr error
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
+		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			capturedErr = err
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Try to call a standalone function with insufficient args
+	// Should now be handled gracefully with validation
+	err = RenderComponent(standaloneComponentFunc, "only-one-arg")
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Should get a clear error message, not a panic
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	} else if !strings.Contains(capturedErr.Error(), "callable expects 2 arguments but got 1") {
+		t.Errorf("Expected error about argument count mismatch, got: %v", capturedErr)
+	}
+	t.Logf("Error (as expected): %v", capturedErr)
+}
+
 // TestHandleRenderComponentError_BoundMethodWithArgs tests that bound methods with
 // arguments are properly detected and don't cause a panic. This was a bug in v0.1.0
 // where bound methods with arguments were not detected as bound (only methods with

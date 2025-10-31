@@ -167,6 +167,12 @@ func (sp *StructPages) executeRenderOp(op *renderOp, page *PageNode) (component,
 		return nil, fmt.Errorf("renderOp has no component, method, or callable")
 	}
 
+	// Validate argument count before calling to prevent panic
+	funcType := op.callable.Type()
+	if funcType.NumIn() != len(op.args) {
+		return nil, fmt.Errorf("callable expects %d arguments but got %d", funcType.NumIn(), len(op.args))
+	}
+
 	results := op.callable.Call(op.args)
 	if len(results) != 1 {
 		return nil, fmt.Errorf("component callable must return single value, got %d", len(results))
