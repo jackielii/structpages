@@ -150,3 +150,138 @@ func TestRenderTarget_InvalidMethodExpression(t *testing.T) {
 		t.Error("Should not match non-function")
 	}
 }
+
+// Standalone function components for testing
+func StandaloneWidget(data string) component {
+	return testComponent{content: "StandaloneWidget: " + data}
+}
+
+func AnotherStandaloneWidget() component {
+	return testComponent{content: "AnotherStandaloneWidget"}
+}
+
+// Page that uses standalone function components
+type standaloneTestPage struct{}
+
+func (standaloneTestPage) Page(data string) component {
+	return testComponent{content: "Page: " + data}
+}
+
+func (p standaloneTestPage) Props(r *http.Request, target RenderTarget) (string, error) {
+	switch {
+	case target.Is(AnotherStandaloneWidget):
+		return "", RenderComponent(target)
+	case target.Is(StandaloneWidget):
+		return "standalone data", RenderComponent(target, "standalone data")
+	case target.Is(p.Page):
+		return "page data", nil
+	default:
+		return "default data", nil
+	}
+}
+
+func TestRenderTarget_StandaloneFunctions(t *testing.T) {
+	type pages struct {
+		standaloneTestPage `route:"/ StandaloneTest"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+	_ = sp
+
+	tests := []struct {
+		name         string
+		headers      map[string]string
+		expectedBody string
+	}{
+		{
+			name: "HTMX request targeting StandaloneWidget",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "standalone-widget",
+			},
+			expectedBody: "StandaloneWidget: standalone data",
+		},
+		{
+			name: "HTMX request targeting StandaloneWidget with page prefix",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "#standalone-test-page-standalone-widget",
+			},
+			expectedBody: "StandaloneWidget: standalone data",
+		},
+		{
+			name: "HTMX request targeting AnotherStandaloneWidget",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "another-standalone-widget",
+			},
+			expectedBody: "AnotherStandaloneWidget",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			for key, value := range tt.headers {
+				req.Header.Set(key, value)
+			}
+
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			body := rec.Body.String()
+			if body != tt.expectedBody {
+				t.Errorf("expected body %q, got %q", tt.expectedBody, body)
+			}
+		})
+	}
+}
+
+func TestFunctionRenderTarget_Is(t *testing.T) {
+	// Test functionRenderTarget.Is() directly
+	frt := &functionRenderTarget{
+		hxTarget: "#standalone-test-page-standalone-widget",
+		pageName: "StandaloneTestPage",
+	}
+
+	// Should match StandaloneWidget
+	if !frt.Is(StandaloneWidget) {
+		t.Error("Should match StandaloneWidget")
+	}
+
+	// funcValue should be set after match
+	if !frt.funcValue.IsValid() {
+		t.Error("funcValue should be set after Is() returns true")
+	}
+
+	// Should NOT match AnotherStandaloneWidget
+	frt2 := &functionRenderTarget{
+		hxTarget: "standalone-widget",
+		pageName: "StandaloneTestPage",
+	}
+	if !frt2.Is(StandaloneWidget) {
+		t.Error("Should match StandaloneWidget without # prefix")
+	}
+
+	// Should NOT match page methods
+	frt3 := &functionRenderTarget{
+		hxTarget: "page",
+		pageName: "StandaloneTestPage",
+	}
+	if frt3.Is(standaloneTestPage.Page) {
+		t.Error("Should NOT match page method")
+	}
+
+	// Test with invalid input
+	if frt3.Is("not a function") {
+		t.Error("Should not match non-function")
+	}
+}
