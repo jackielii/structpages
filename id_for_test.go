@@ -842,3 +842,79 @@ func TestID_ErrorPaths(t *testing.T) {
 		t.Errorf("Expected 'no page found' error, got: %v", err)
 	}
 }
+
+// Test types for findPageNodeByTypeName
+type testPageWithMethod struct{}
+
+func (testPageWithMethod) ExistingMethod() component { return testComponent{content: "test"} }
+
+// Test findPageNodeByTypeName with method not found
+func TestFindPageNodeByTypeName_MethodNotFound(t *testing.T) {
+	type pages struct {
+		testPageWithMethod `route:"/ Test"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Try to find a method that doesn't exist on the page
+	info := &methodInfo{
+		isBound:          true,
+		receiverTypeName: "testPageWithMethod",
+		methodName:       "NonExistentMethod",
+	}
+
+	_, err = sp.pc.findPageNodeByTypeName(info.receiverTypeName, info.methodName)
+	if err == nil {
+		t.Error("Expected error for method not found")
+	}
+	if !strings.Contains(err.Error(), "method \"NonExistentMethod\" not found on page") {
+		t.Errorf("Expected 'method not found on page' error, got: %v", err)
+	}
+}
+
+// Test buildID with empty pageName (standalone function)
+func TestBuildID_StandaloneFunction(t *testing.T) {
+	// Raw ID for standalone function (no page prefix)
+	id := buildID("", "UserStatsWidget", true)
+	if id != "user-stats-widget" {
+		t.Errorf("buildID with empty pageName (raw) = %q, want %q", id, "user-stats-widget")
+	}
+
+	// Selector for standalone function (with # prefix)
+	id = buildID("", "UserStatsWidget", false)
+	if id != "#user-stats-widget" {
+		t.Errorf("buildID with empty pageName (selector) = %q, want %q", id, "#user-stats-widget")
+	}
+}
+
+// Test findPageNodeForMethod panic with standalone function
+func TestFindPageNodeForMethod_PanicOnStandaloneFunction(t *testing.T) {
+	type pages struct {
+		testPageWithMethod `route:"/ Test"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Create a methodInfo for a standalone function
+	info := &methodInfo{
+		isFunction: true,
+		methodName: "StandaloneFunction",
+	}
+
+	// This should panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic when calling findPageNodeForMethod with standalone function")
+		}
+	}()
+
+	_, _ = sp.pc.findPageNodeForMethod(info)
+}
