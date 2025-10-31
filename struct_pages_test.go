@@ -933,31 +933,28 @@ func TestStructPages_IDFor(t *testing.T) {
 		t.Fatalf("Mount failed: %v", err)
 	}
 
-	t.Run("IDFor with method expression", func(t *testing.T) {
-		id, err := sp.IDFor(testPageIDFor.UserList)
+	t.Run("IDTarget with method expression", func(t *testing.T) {
+		id, err := sp.IDTarget(testPageIDFor.UserList)
 		if err != nil {
-			t.Errorf("IDFor error: %v", err)
+			t.Errorf("IDTarget error: %v", err)
 		}
 		if id != "#test-user-list" {
-			t.Errorf("IDFor() = %q, want %q", id, "#test-user-list")
+			t.Errorf("IDTarget() = %q, want %q", id, "#test-user-list")
 		}
 	})
 
-	t.Run("IDFor with Ref", func(t *testing.T) {
-		id, err := sp.IDFor(Ref("test.UserModal"))
+	t.Run("IDTarget with Ref", func(t *testing.T) {
+		id, err := sp.IDTarget(Ref("test.UserModal"))
 		if err != nil {
-			t.Errorf("IDFor error: %v", err)
+			t.Errorf("IDTarget error: %v", err)
 		}
 		if id != "#test-user-modal" {
-			t.Errorf("IDFor() = %q, want %q", id, "#test-user-modal")
+			t.Errorf("IDTarget() = %q, want %q", id, "#test-user-modal")
 		}
 	})
 
-	t.Run("IDFor with IDParams", func(t *testing.T) {
-		id, err := sp.IDFor(IDParams{
-			Method: testPageIDFor.UserList,
-			RawID:  true,
-		})
+	t.Run("ID with method expression", func(t *testing.T) {
+		id, err := sp.ID(testPageIDFor.UserList)
 		if err != nil {
 			t.Errorf("IDFor error: %v", err)
 		}

@@ -8,60 +8,53 @@ import (
 	"strings"
 )
 
-// IDParams provides advanced configuration for ID generation.
-// Use this when you need raw IDs without the CSS selector prefix.
-type IDParams struct {
-	Method any  // The method expression (required)
-	RawID  bool // If true, returns "user-list" instead of "#user-list"
-}
-
-// IDFor generates a consistent HTML ID or CSS selector for a component method.
-// It requires a valid parseContext in the provided context and returns an error if not found.
+// ID generates a raw HTML ID for a component method (without "#" prefix).
+// Use this for HTML id attributes.
 //
-// By default, returns a CSS selector (with "#" prefix) for use in HTMX targets.
-// The ID includes the page name prefix to avoid conflicts across pages.
+// Example:
 //
-// Basic usage (returns CSS selector):
+//	<div id={ structpages.ID(ctx, p.UserList) }>
+//	// → <div id="team-management-view-user-list">
 //
-//	IDFor(ctx, p.UserList)
-//	// → "#team-management-view-user-list"
-//
-//	IDFor(ctx, TeamManagementView{}.GroupMembers)
-//	// → "#team-management-view-group-members"
-//
-// Advanced usage with IDParams:
-//
-//	// For id attribute (raw ID without "#")
-//	IDFor(ctx, IDParams{
-//	    Method: p.UserList,
-//	    RawID: true,
-//	})
-//	// → "team-management-view-user-list"
+//	<div id={ structpages.ID(ctx, UserStatsWidget) }>
+//	// → <div id="user-stats-widget"> (no page prefix for standalone functions)
 //
 // Returns an error if parseContext is not found in the provided context.
-// This ensures IDFor is only used within the intended scope (page handlers/templates).
-func IDFor(ctx context.Context, v any) (string, error) {
+func ID(ctx context.Context, v any) (string, error) {
 	// Extract parseContext - REQUIRED
 	pc := pcCtx.Value(ctx)
 	if pc == nil {
-		return "", errors.New("parseContext not found in context - IDFor must be called within a page handler or template")
+		return "", errors.New("parseContext not found in context - ID must be called within a page handler or template")
 	}
 
-	return idFor(ctx, pc, v)
+	return idFor(pc, v, true)
 }
 
-// idFor generates the ID string based on the provided value (method expression or IDParams).
-func idFor(ctx context.Context, pc *parseContext, v any) (string, error) {
-	// Handle IDParams pattern
-	var methodExpr any
-	rawID := false
-
-	if params, ok := v.(IDParams); ok {
-		methodExpr = params.Method
-		rawID = params.RawID
-	} else {
-		methodExpr = v
+// IDTarget generates a CSS selector (with "#" prefix) for a component method.
+// Use this for HTMX hx-target attributes.
+//
+// Example:
+//
+//	<button hx-target={ structpages.IDTarget(ctx, p.UserList) }>
+//	// → <button hx-target="#team-management-view-user-list">
+//
+//	<button hx-target={ structpages.IDTarget(ctx, UserStatsWidget) }>
+//	// → <button hx-target="#user-stats-widget"> (no page prefix for standalone functions)
+//
+// Returns an error if parseContext is not found in the provided context.
+func IDTarget(ctx context.Context, v any) (string, error) {
+	// Extract parseContext - REQUIRED
+	pc := pcCtx.Value(ctx)
+	if pc == nil {
+		return "", errors.New("parseContext not found in context - IDTarget must be called within a page handler or template")
 	}
+
+	return idFor(pc, v, false)
+}
+
+// idFor generates the ID string based on the provided value (method expression or Ref).
+func idFor(pc *parseContext, v any, rawID bool) (string, error) {
+	methodExpr := v
 
 	// Handle Ref type for dynamic method references
 	if ref, ok := methodExpr.(Ref); ok {
@@ -74,28 +67,27 @@ func idFor(ctx context.Context, pc *parseContext, v any) (string, error) {
 		return "", err
 	}
 
-	// Find the page node
-	pn, err := pc.findPageNodeForMethod(ctx, info)
-	if err != nil {
-		return "", fmt.Errorf("cannot find page for method expression: %w", err)
+	// Find the page node (for methods only - functions don't need one)
+	var pageName string
+	if !info.isFunction {
+		pn, err := pc.findPageNodeForMethod(info)
+		if err != nil {
+			return "", fmt.Errorf("cannot find page for method expression: %w", err)
+		}
+		pageName = pn.Name
 	}
+	// Standalone functions have no page prefix (they're shared components)
 
 	// Build ID
-	id := buildID(pn.Name, info.methodName, rawID)
+	id := buildID(pageName, info.methodName, rawID)
 	return id, nil
 }
 
-// findPageNodeForMethod finds a page node using the method info
-func (p *parseContext) findPageNodeForMethod(ctx context.Context, info *methodInfo) (*PageNode, error) {
-	// Handle standalone functions - use current page from context
+// findPageNodeForMethod finds a page node using the method info.
+// Only call this for methods, not for standalone functions.
+func (p *parseContext) findPageNodeForMethod(info *methodInfo) (*PageNode, error) {
 	if info.isFunction {
-		currentPage := currentPageCtx.Value(ctx)
-		if currentPage == nil {
-			// Fallback: no page prefix, return empty string as page name
-			// This allows IDFor to work outside page context (e.g., tests)
-			return &PageNode{Name: ""}, nil
-		}
-		return currentPage, nil
+		panic("findPageNodeForMethod called with standalone function")
 	}
 
 	if info.isBound {

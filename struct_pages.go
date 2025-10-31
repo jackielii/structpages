@@ -14,55 +14,6 @@ import (
 // implementing conditional rendering or redirects within page logic.
 var ErrSkipPageRender = errors.New("skip page render")
 
-// errRenderComponent is an internal error type that specifies which component
-// to render and provides replacement arguments for that component.
-type errRenderComponent struct {
-	target RenderTarget // The target component to render
-	args   []any        // Replacement arguments for the component
-}
-
-func (e *errRenderComponent) Error() string {
-	return "should render component from target"
-}
-
-// RenderComponent creates an error that instructs the framework to render
-// a specific component instead of the default component.
-//
-// It supports two patterns:
-//
-//  1. Same-page component (with target from Props):
-//     func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
-//     if target.Is(UserStatsWidget) {
-//     stats := loadUserStats()
-//     return DashboardProps{}, RenderComponent(target, stats)
-//     }
-//     }
-//
-//  2. Cross-page component (with method expression):
-//     func (p MyPage) Props(r *http.Request) (Props, error) {
-//     return Props{}, RenderComponent(OtherPage.ErrorComponent, "error message")
-//     }
-func RenderComponent(targetOrMethod any, args ...any) error {
-	// Check if first arg is a RenderTarget (same-page component)
-	if rt, ok := targetOrMethod.(RenderTarget); ok {
-		return &errRenderComponent{target: rt, args: args}
-	}
-
-	// Otherwise, it's a method expression (cross-page component)
-	// Create a wrapper target that will be handled by extracting the method
-	return &errRenderComponent{target: &crossPageTarget{method: targetOrMethod}, args: args}
-}
-
-// crossPageTarget is a special RenderTarget for cross-page component rendering
-type crossPageTarget struct {
-	method any
-}
-
-func (cpt *crossPageTarget) Is(method any) bool {
-	// Cross-page targets don't support Is() - they're used directly
-	return false
-}
-
 // MiddlewareFunc is a function that wraps an http.Handler with additional functionality.
 // It receives both the handler to wrap and the PageNode being handled, allowing middleware
 // to access page metadata like route, title, and other properties.
@@ -84,6 +35,36 @@ type StructPages struct {
 	targetSelector TargetSelector
 	warnEmptyRoute func(*PageNode)
 	args           []any
+}
+
+// ID generates a raw HTML ID for a component method (without "#" prefix).
+// Use this for HTML id attributes.
+// It works without context by using the structpages's parseContext directly.
+//
+// Example:
+//
+//	sp.ID(p.UserList)
+//	// → "team-management-view-user-list"
+//
+//	sp.ID(UserStatsWidget)
+//	// → "user-stats-widget" (no page prefix for standalone functions)
+func (sp *StructPages) ID(v any) (string, error) {
+	return idFor(sp.pc, v, true)
+}
+
+// IDTarget generates a CSS selector (with "#" prefix) for a component method.
+// Use this for HTMX hx-target attributes.
+// It works without context by using the structpages's parseContext directly.
+//
+// Example:
+//
+//	sp.IDTarget(p.UserList)
+//	// → "#team-management-view-user-list"
+//
+//	sp.IDTarget(UserStatsWidget)
+//	// → "#user-stats-widget" (no page prefix for standalone functions)
+func (sp *StructPages) IDTarget(v any) (string, error) {
+	return idFor(sp.pc, v, false)
 }
 
 // Option represents a configuration option for StructPages.
@@ -166,34 +147,6 @@ func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
 	// Create a context with parseContext and call the context-based URLFor
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)
 	return URLFor(ctx, page, args...)
-}
-
-// IDFor generates a consistent HTML ID or CSS selector for a component method.
-// It works without context by using the structpages's parseContext directly.
-//
-// By default, returns a CSS selector (with "#" prefix) for use in HTMX targets.
-// The ID includes the page name prefix to avoid conflicts across pages.
-//
-// Basic usage (returns CSS selector):
-//
-//	sp.IDFor(p.UserList)
-//	// → "#team-management-view-user-list"
-//
-//	sp.IDFor(TeamManagementView{}.GroupMembers)
-//	// → "#team-management-view-group-members"
-//
-// Advanced usage with IDParams:
-//
-//	// For id attribute (raw ID without "#")
-//	sp.IDFor(IDParams{
-//	    Method: p.UserList,
-//	    RawID: true,
-//	})
-//	// → "team-management-view-user-list"
-func (sp *StructPages) IDFor(v any) (string, error) {
-	// Create a context with parseContext - no currentPage since this is outside request context
-	ctx := pcCtx.WithValue(context.Background(), sp.pc)
-	return idFor(ctx, sp.pc, v)
 }
 
 // WithArgs adds global dependency injection arguments that will be
@@ -331,120 +284,6 @@ func (sp *StructPages) registerPageItem(mux Mux, page *PageNode, mw []Middleware
 	}
 	mux.Handle(pattern, handler)
 	return nil
-}
-
-// handleRenderComponentError checks if the error is an errRenderComponent and handles it.
-// Returns true if it handled the error, false otherwise.
-func (sp *StructPages) handleRenderComponentError(
-	w http.ResponseWriter, r *http.Request, err error, page *PageNode, props []reflect.Value,
-) bool {
-	var renderErr *errRenderComponent
-	if !errors.As(err, &renderErr) {
-		return false
-	}
-
-	// Convert args to reflect.Values
-	componentArgs := make([]reflect.Value, len(renderErr.args))
-	for i, arg := range renderErr.args {
-		componentArgs[i] = reflect.ValueOf(arg)
-	}
-
-	// Type-assert target to determine how to render
-	switch target := renderErr.target.(type) {
-	case *functionRenderTarget:
-		// Function component - funcValue was stored by Is()
-		if !target.funcValue.IsValid() {
-			sp.onError(w, r, fmt.Errorf("RenderComponent: function target has no funcValue (did you call target.Is() first?)"))
-			return true
-		}
-
-		results := target.funcValue.Call(componentArgs)
-		if len(results) != 1 {
-			sp.onError(w, r, fmt.Errorf("RenderComponent: function must return single component"))
-			return true
-		}
-
-		comp, ok := results[0].Interface().(component)
-		if !ok {
-			sp.onError(w, r, fmt.Errorf("RenderComponent: function must return component"))
-			return true
-		}
-
-		sp.render(w, r, comp)
-		return true
-
-	case *methodRenderTarget:
-		// Method component - method is already in target
-		comp, compErr := sp.pc.callComponentMethod(page, &target.method, componentArgs...)
-		if compErr != nil {
-			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, target.method.Name, compErr))
-			return true
-		}
-
-		sp.render(w, r, comp)
-		return true
-
-	case *crossPageTarget:
-		// Cross-page component - extract method info and render
-		info, err := extractMethodInfo(target.method)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("failed to extract method info: %w", err))
-			return true
-		}
-
-		// Handle standalone functions
-		if info.isFunction {
-			fnValue := reflect.ValueOf(target.method)
-			if fnValue.Kind() != reflect.Func {
-				sp.onError(w, r, fmt.Errorf("RenderComponent: not a function"))
-				return true
-			}
-
-			results := fnValue.Call(componentArgs)
-			if len(results) != 1 {
-				sp.onError(w, r, fmt.Errorf("RenderComponent: function must return single component"))
-				return true
-			}
-
-			comp, ok := results[0].Interface().(component)
-			if !ok {
-				sp.onError(w, r, fmt.Errorf("RenderComponent: function must return component"))
-				return true
-			}
-
-			sp.render(w, r, comp)
-			return true
-		}
-
-		// Handle methods - find the page that owns this component
-		targetPage, err := sp.pc.findPageNodeForMethod(r.Context(), info)
-		if err != nil {
-			sp.onError(w, r, fmt.Errorf("cannot find page for method expression: %w", err))
-			return true
-		}
-
-		// Look up the component method
-		compMethod, ok := targetPage.Components[info.methodName]
-		if !ok {
-			sp.onError(w, r, fmt.Errorf("component %s not found in page %s", info.methodName, targetPage.Name))
-			return true
-		}
-
-		// Execute the component with the args
-		comp, compErr := sp.pc.callComponentMethod(targetPage, &compMethod, componentArgs...)
-		if compErr != nil {
-			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", targetPage.Name, compMethod.Name, compErr))
-			return true
-		}
-
-		sp.render(w, r, comp)
-		return true
-
-	default:
-		// Custom RenderTarget - can't render
-		sp.onError(w, r, fmt.Errorf("RenderComponent: cannot render custom RenderTarget type: %T", renderErr.target))
-		return true
-	}
 }
 
 func (sp *StructPages) buildHandler(page *PageNode) http.Handler {

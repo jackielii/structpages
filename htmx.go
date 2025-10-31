@@ -35,11 +35,9 @@ func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	}
 
 	// Default: render "Page" component
-	pageMethod, ok := pn.Components["Page"]
-	if !ok {
-		// No Page method - return empty method target, Props must use RenderComponent
-		return newMethodRenderTarget("Page", &pageMethod), nil
-	}
+	// If no Page method exists (Props-only page), methodRenderTarget.Is() will return false,
+	// forcing Props to use RenderComponent
+	pageMethod := pn.Components["Page"]
 	return newMethodRenderTarget("Page", &pageMethod), nil
 }
 
