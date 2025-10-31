@@ -47,11 +47,10 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	funcType := v.Type()
 
 	// Check if this is a bound method (instance.Method)
-	// Bound methods have:
-	// 1. Zero input parameters (receiver already bound)
-	// 2. "-fm" suffix in the name
-	// 3. Method pattern in the name: "package.(*Type).Method-fm"
-	isBound := funcType.NumIn() == 0 && strings.Contains(fullName, "-fm")
+	// Bound methods have "-fm" suffix in the name (receiver already bound)
+	// The number of input parameters varies based on the method's arguments
+	// Method pattern in the name: "package.(*Type).Method-fm"
+	isBound := strings.Contains(fullName, "-fm")
 
 	if isBound {
 		// Extract receiver type name from function name

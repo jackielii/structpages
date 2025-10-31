@@ -195,7 +195,19 @@ func (sp *StructPages) handleRenderComponentError(
 	// For method expressions (not from RenderTarget), we need to resolve the page
 	if op.callable.IsValid() && op.method == nil {
 		info, extractErr := extractMethodInfo(op.callable.Interface())
-		if extractErr == nil && !info.isFunction {
+
+		// Handle extraction errors - these indicate the callable is not what we expected
+		if extractErr != nil {
+			// If it's a callable but we can't extract method info, it might be a lambda or complex function
+			// Try to call it directly, but only if it has the right number of args
+			funcType := op.callable.Type()
+			if funcType.NumIn() != len(op.args) {
+				sp.onError(w, r, fmt.Errorf("callable expects %d arguments but got %d (extraction error: %w)",
+					funcType.NumIn(), len(op.args), extractErr))
+				return true
+			}
+			// Fall through to execute as-is
+		} else if !info.isFunction {
 			// It's a method expression - find the page and convert to method call
 			targetPage, findErr := sp.pc.findPageNodeForMethod(info)
 			if findErr != nil {
@@ -215,6 +227,7 @@ func (sp *StructPages) handleRenderComponentError(
 			op.callable = reflect.Value{} // Clear callable
 			page = targetPage
 		}
+		// else: it's a standalone function, execute as-is at line 221
 	}
 
 	// Execute the renderOp

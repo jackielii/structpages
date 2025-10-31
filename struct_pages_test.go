@@ -1302,6 +1302,40 @@ func (argsComponentTestPage) ComponentWithArgs(s string, i int) component {
 	return testComponent{fmt.Sprintf("component: %s, %d", s, i)}
 }
 
+// TestHandleRenderComponentError_BoundMethodWithArgs tests that bound methods with
+// arguments are properly detected and don't cause a panic. This was a bug in v0.1.0
+// where bound methods with arguments were not detected as bound (only methods with
+// zero args were detected), causing them to be incorrectly treated as unbound method
+// expressions, which led to "reflect: Call with too few input arguments" panic.
+func TestHandleRenderComponentError_BoundMethodWithArgs(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Create a bound method (instance.Method) with arguments
+	instance := argsComponentTestPage{}
+	boundMethod := instance.ComponentWithArgs
+
+	// Trigger component render with bound method - this should work without panic
+	err = RenderComponent(boundMethod, "bound", 99)
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Should have successfully rendered the component with args
+	result := rec.Body.String()
+	if !strings.Contains(result, "bound") || !strings.Contains(result, "99") {
+		t.Errorf("Expected component to render with args, got: %s", result)
+	}
+}
+
 // Test Props method that returns error
 func TestExecProps_PropsError(t *testing.T) {
 	mux := http.NewServeMux()
