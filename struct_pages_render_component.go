@@ -23,18 +23,20 @@ func (e *errRenderComponent) Error() string {
 //
 // It supports two patterns:
 //
-//  1. Same-page component (with target from Props):
-//     func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
-//     if target.Is(UserStatsWidget) {
-//     stats := loadUserStats()
-//     return DashboardProps{}, RenderComponent(target, stats)
-//     }
-//     }
+// 1. Same-page component (with target from Props):
 //
-//  2. Cross-page component (with method expression):
-//     func (p MyPage) Props(r *http.Request) (Props, error) {
-//     return Props{}, RenderComponent(OtherPage.ErrorComponent, "error message")
-//     }
+//	func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
+//		if target.Is(UserStatsWidget) {
+//			stats := loadUserStats()
+//			return DashboardProps{}, RenderComponent(target, stats)
+//		}
+//	}
+//
+// 2. Cross-page component (with method expression):
+//
+//	func (p MyPage) Props(r *http.Request) (Props, error) {
+//		return Props{}, RenderComponent(OtherPage.ErrorComponent, "error message")
+//	}
 func RenderComponent(targetOrMethod any, args ...any) error {
 	// Check if first arg is a RenderTarget (same-page component)
 	if rt, ok := targetOrMethod.(RenderTarget); ok {
