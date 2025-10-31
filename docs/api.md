@@ -5,7 +5,7 @@
 ### Mount
 
 ```go
-func Mount(mux Mux, page any, route, title string, options ...any) (*StructPages, error)
+func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPages, error)
 ```
 
 Mount is the main entry point for setting up routes. It parses the page structure, registers routes on the provided mux, and returns a `StructPages` instance for URL generation.
@@ -15,7 +15,7 @@ Mount is the main entry point for setting up routes. It parses the page structur
 - `page`: Struct containing route definitions using struct tags
 - `route`: Base route path (e.g., `"/"`)
 - `title`: Page title for the root route
-- `options`: Variable number of options and dependency injection arguments
+- `options`: Configuration options (WithArgs, WithErrorHandler, WithMiddlewares, etc.)
 
 **Returns:**
 - `*StructPages`: Instance for generating type-safe URLs via `URLFor` and `IDFor`
@@ -95,6 +95,37 @@ id, _ := sp.IDFor((*todoPage).TodoList)  // "todo-page-todo-list"
 
 Options are passed to `Mount()` to configure behavior.
 
+### WithArgs
+
+```go
+func WithArgs(args ...any) func(*StructPages)
+```
+
+Add global dependency injection arguments available to all page methods.
+
+**Example:**
+```go
+type Database struct { /* ... */ }
+type Logger struct { /* ... */ }
+
+db := &Database{}
+logger := &Logger{}
+
+// Pass dependencies using WithArgs
+sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
+    structpages.WithArgs(db, logger),
+    structpages.WithErrorHandler(errorHandler),
+)
+```
+
+Handler methods can receive injected dependencies:
+
+```go
+func (p productPage) Props(r *http.Request, db *Database, logger *Logger) (ProductProps, error) {
+    // Use db and logger
+}
+```
+
 ### WithErrorHandler
 
 ```go
@@ -137,6 +168,29 @@ sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
 )
 ```
 
+### WithDefaultComponentSelector
+
+```go
+func WithDefaultComponentSelector(selector func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages)
+```
+
+Set a global component selector function that determines which component to render when `RenderComponent` is not explicitly called in Props. Useful for implementing patterns like HTMX partial rendering across all pages.
+
+**Example:**
+```go
+// HTMX boost pattern - render only content for HTMX requests
+selector := func(r *http.Request, pn *PageNode) (string, error) {
+    if r.Header.Get("HX-Request") == "true" {
+        return "Content", nil  // Skip layout, render just content
+    }
+    return "Page", nil  // Full page with layout
+}
+
+sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
+    structpages.WithDefaultComponentSelector(selector),
+)
+```
+
 ### WithWarnEmptyRoute
 
 ```go
@@ -164,34 +218,6 @@ sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
 sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
     structpages.WithWarnEmptyRoute(func(*PageNode) {}),
 )
-```
-
-## Dependency Injection
-
-Arguments passed to `Mount()` that are not options are treated as dependencies available for injection into handler methods.
-
-**Example:**
-```go
-type Database struct { /* ... */ }
-type Logger struct { /* ... */ }
-
-db := &Database{}
-logger := &Logger{}
-
-// Pass dependencies after options
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithErrorHandler(errorHandler),  // Option
-    db,      // Dependency
-    logger,  // Dependency
-)
-```
-
-Handler methods can receive injected dependencies:
-
-```go
-func (p productPage) Props(r *http.Request, db *Database, logger *Logger) (ProductProps, error) {
-    // Use db and logger
-}
 ```
 
 ## Page Methods
