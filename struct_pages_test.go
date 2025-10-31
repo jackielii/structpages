@@ -1884,3 +1884,134 @@ func TestPropsOnlyPageWithRenderTarget(t *testing.T) {
 		}
 	}
 }
+
+// Test RenderComponent edge cases for coverage
+func TestRenderComponent_EdgeCases(t *testing.T) {
+	// Test componentGetter with args (should error)
+	getter := myComponentGetter{data: "test"}
+	err := RenderComponent(getter, "extra arg")
+	if err == nil {
+		t.Fatal("Expected error when passing args to componentGetter")
+	}
+	if !strings.Contains(err.Error(), "componentGetter cannot have args") {
+		t.Errorf("Expected 'componentGetter cannot have args' error, got: %v", err)
+	}
+
+	// Test direct component with args (should error)
+	comp := testComponent{"test"}
+	err = RenderComponent(comp, "extra arg")
+	if err == nil {
+		t.Fatal("Expected error when passing args to component instance")
+	}
+	if !strings.Contains(err.Error(), "component instance cannot have args") {
+		t.Errorf("Expected 'component instance cannot have args' error, got: %v", err)
+	}
+
+	// Test with non-function, non-component, non-RenderTarget
+	err = RenderComponent(struct{ Name string }{"test"})
+	if err == nil {
+		t.Fatal("Expected error for non-component struct")
+	}
+	if !strings.Contains(err.Error(), "target must be a component, RenderTarget, or function") {
+		t.Errorf("Expected 'target must be' error, got: %v", err)
+	}
+}
+
+// Test executeRenderOp error paths
+func TestExecuteRenderOp_Errors(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test function that doesn't return a component
+	badFunc := func() string { return "not a component" }
+	op := &renderOp{
+		callable: reflect.ValueOf(badFunc),
+		args:     []reflect.Value{},
+	}
+
+	_, err = sp.executeRenderOp(op, sp.pc.root)
+	if err == nil {
+		t.Fatal("Expected error for function not returning component")
+	}
+	if !strings.Contains(err.Error(), "must return component") {
+		t.Errorf("Expected 'must return component' error, got: %v", err)
+	}
+
+	// Test function that returns wrong number of values
+	multiReturnFunc := func() (component, error) {
+		return testComponent{"test"}, nil
+	}
+	op2 := &renderOp{
+		callable: reflect.ValueOf(multiReturnFunc),
+		args:     []reflect.Value{},
+	}
+
+	_, err = sp.executeRenderOp(op2, sp.pc.root)
+	if err == nil {
+		t.Fatal("Expected error for function returning multiple values")
+	}
+	if !strings.Contains(err.Error(), "must return single value") {
+		t.Errorf("Expected 'must return single value' error, got: %v", err)
+	}
+
+	// Test method without page context
+	method := reflect.Method{}
+	op3 := &renderOp{
+		method: &method,
+		args:   []reflect.Value{},
+	}
+
+	_, err = sp.executeRenderOp(op3, nil)
+	if err == nil {
+		t.Fatal("Expected error for method without page context")
+	}
+	if !strings.Contains(err.Error(), "cannot execute method without page context") {
+		t.Errorf("Expected 'cannot execute method without page context' error, got: %v", err)
+	}
+
+	// Test renderOp with nothing set
+	op4 := &renderOp{}
+	_, err = sp.executeRenderOp(op4, sp.pc.root)
+	if err == nil {
+		t.Fatal("Expected error for empty renderOp")
+	}
+	if !strings.Contains(err.Error(), "renderOp has no component, method, or callable") {
+		t.Errorf("Expected 'renderOp has no' error, got: %v", err)
+	}
+}
+
+// customTestTarget is an unsupported RenderTarget type for testing
+type customTestTarget struct{}
+
+func (ct customTestTarget) Is(any) bool { return false }
+
+// Test renderOpFromTarget error paths
+func TestRenderOpFromTarget_Errors(t *testing.T) {
+	// Test custom RenderTarget type (unsupported)
+	ct := customTestTarget{}
+	_, err := renderOpFromTarget(ct, []reflect.Value{})
+	if err == nil {
+		t.Fatal("Expected error for unsupported RenderTarget type")
+	}
+	if !strings.Contains(err.Error(), "unsupported RenderTarget type") {
+		t.Errorf("Expected 'unsupported RenderTarget type' error, got: %v", err)
+	}
+
+	// Test functionRenderTarget without funcValue set
+	frt := &functionRenderTarget{
+		hxTarget: "test",
+		pageName: "Test",
+		// funcValue not set (Is() was not called)
+	}
+
+	_, err = renderOpFromTarget(frt, []reflect.Value{})
+	if err == nil {
+		t.Fatal("Expected error for functionRenderTarget without funcValue")
+	}
+	if !strings.Contains(err.Error(), "did you call target.Is() first") {
+		t.Errorf("Expected 'did you call target.Is() first' error, got: %v", err)
+	}
+}

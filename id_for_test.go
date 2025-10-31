@@ -792,3 +792,53 @@ func TestIDFor_InstanceMethodVsMethodExpression(t *testing.T) {
 		}
 	})
 }
+
+// Test pages for error path testing
+type idErrorTestPage struct{}
+
+func (idErrorTestPage) SomeMethod() component { return testComponent{"test"} }
+
+type idUnregisteredPage struct{}
+
+func (idUnregisteredPage) UnknownMethod() component { return testComponent{"test"} }
+
+// Test edge cases for coverage
+func TestID_ErrorPaths(t *testing.T) {
+	type pages struct {
+		idErrorTestPage `route:"/ Test"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test with method expression for method not found on page
+	// This should error because the page isn't registered
+	_, err = sp.ID(idUnregisteredPage.UnknownMethod)
+	if err == nil {
+		t.Error("Expected error for unregistered page method")
+	}
+	if !strings.Contains(err.Error(), "no page node found") {
+		t.Errorf("Expected 'no page node found' error, got: %v", err)
+	}
+
+	// Test Ref with qualified name for method that doesn't exist
+	_, err = sp.ID(Ref("idErrorTestPage.NonExistentMethod"))
+	if err == nil {
+		t.Error("Expected error for non-existent method")
+	}
+	if !strings.Contains(err.Error(), "not found on page") {
+		t.Errorf("Expected 'not found on page' error, got: %v", err)
+	}
+
+	// Test Ref with page name that doesn't exist
+	_, err = sp.ID(Ref("NonExistentPage.SomeMethod"))
+	if err == nil {
+		t.Error("Expected error for non-existent page")
+	}
+	if !strings.Contains(err.Error(), "no page found") {
+		t.Errorf("Expected 'no page found' error, got: %v", err)
+	}
+}
