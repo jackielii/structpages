@@ -801,8 +801,8 @@ func TestHandleRenderComponentError_ExecuteRenderOpFails(t *testing.T) {
 	if capturedErr == nil {
 		t.Error("Expected error when function returns wrong type")
 	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error executing render operation") {
-		t.Errorf("Expected 'error executing render operation' error, got: %v", capturedErr)
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error rendering component") {
+		t.Errorf("Expected 'error rendering component' error, got: %v", capturedErr)
 	}
 }
 

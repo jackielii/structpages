@@ -167,10 +167,25 @@ func (sp *StructPages) executeRenderOp(op *renderOp, page *PageNode) (component,
 		return nil, fmt.Errorf("renderOp has no component, method, or callable")
 	}
 
-	// Validate argument count before calling to prevent panic
+	// Validate argument count and types before calling to prevent panic
 	funcType := op.callable.Type()
+	funcName := formatCallable(op.callable)
+
 	if funcType.NumIn() != len(op.args) {
-		return nil, fmt.Errorf("callable expects %d arguments but got %d", funcType.NumIn(), len(op.args))
+		return nil, fmt.Errorf("function %s expects %d arguments but got %d",
+			funcName, funcType.NumIn(), len(op.args))
+	}
+
+	// Validate argument types are assignable to parameter types
+	for i, arg := range op.args {
+		if !arg.IsValid() {
+			return nil, fmt.Errorf("function %s: argument %d is invalid", funcName, i)
+		}
+		paramType := funcType.In(i)
+		if !arg.Type().AssignableTo(paramType) {
+			return nil, fmt.Errorf("function %s: argument %d has type %s, expected %s",
+				funcName, i, arg.Type(), paramType)
+		}
 	}
 
 	results := op.callable.Call(op.args)
@@ -239,7 +254,11 @@ func (sp *StructPages) handleRenderComponentError(
 	// Execute the renderOp
 	comp, execErr := sp.executeRenderOp(op, page)
 	if execErr != nil {
-		sp.onError(w, r, fmt.Errorf("error executing render operation: %w", execErr))
+		if page != nil {
+			sp.onError(w, r, fmt.Errorf("error rendering component on page %s: %w", page.Name, execErr))
+		} else {
+			sp.onError(w, r, fmt.Errorf("error rendering component: %w", execErr))
+		}
 		return true
 	}
 

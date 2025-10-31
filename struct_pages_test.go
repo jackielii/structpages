@@ -1471,8 +1471,66 @@ func TestRenderComponent_StandaloneFunctionInsufficientArgs(t *testing.T) {
 	// Should get a clear error message, not a panic
 	if capturedErr == nil {
 		t.Error("Expected error to be captured")
-	} else if !strings.Contains(capturedErr.Error(), "callable expects 2 arguments but got 1") {
+	}
+	errMsg := capturedErr.Error()
+	// Check for function name and argument count error
+	if !strings.Contains(errMsg, "standaloneComponentFunc") {
+		t.Errorf("Expected error to include function name, got: %v", capturedErr)
+	}
+	if !strings.Contains(errMsg, "expects 2 arguments but got 1") {
 		t.Errorf("Expected error about argument count mismatch, got: %v", capturedErr)
+	}
+	t.Logf("Error (as expected): %v", capturedErr)
+}
+
+// TestRenderComponent_TypeMismatch tests what happens when arguments have the wrong type.
+// This should return a clear error instead of panicking.
+func TestRenderComponent_TypeMismatch(t *testing.T) {
+	var capturedErr error
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
+		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			capturedErr = err
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// standaloneComponentFunc expects (string, int) but we pass (string, string)
+	// This should be caught by type validation
+	wrongTypeArg := reflect.ValueOf("not-an-int")
+	err = &errRenderComponent{
+		op: &renderOp{
+			callable: reflect.ValueOf(standaloneComponentFunc),
+			args:     []reflect.Value{reflect.ValueOf("test"), wrongTypeArg},
+		},
+	}
+
+	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+
+	if !handled {
+		t.Error("Expected handleRenderComponentError to handle the error")
+	}
+
+	// Should get a clear error message about type mismatch, not a panic
+	if capturedErr == nil {
+		t.Error("Expected error to be captured")
+	}
+	errMsg := capturedErr.Error()
+	// Check for page name, function name, and type error
+	if !strings.Contains(errMsg, "argsComponentTestPage") {
+		t.Errorf("Expected error to include page name, got: %v", capturedErr)
+	}
+	if !strings.Contains(errMsg, "standaloneComponentFunc") {
+		t.Errorf("Expected error to include function name, got: %v", capturedErr)
+	}
+	if !strings.Contains(errMsg, "has type string, expected int") {
+		t.Errorf("Expected error about type mismatch, got: %v", capturedErr)
 	}
 	t.Logf("Error (as expected): %v", capturedErr)
 }
