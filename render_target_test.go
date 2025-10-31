@@ -483,3 +483,37 @@ func TestRenderComponent_MethodTargetFromProps(t *testing.T) {
 		t.Errorf("Expected 'Custom: method target data', got %q", body)
 	}
 }
+
+// Debug test to understand pointer unwrapping
+type debugPtrReceiverPage struct{}
+
+func (*debugPtrReceiverPage) PtrMethod() component {
+	return testComponent{content: "test"}
+}
+
+func TestDebugPointerUnwrapping(t *testing.T) {
+	// Create methodRenderTarget
+	pageType := reflect.TypeOf(&debugPtrReceiverPage{})
+	method, _ := pageType.MethodByName("PtrMethod")
+
+	t.Logf("Method.Type.NumIn(): %d", method.Type.NumIn())
+	if method.Type.NumIn() > 0 {
+		t.Logf("Method.Type.In(0): %v (Kind: %v)", method.Type.In(0), method.Type.In(0).Kind())
+	}
+
+	// Create unbound method expression
+	unboundMethod := (*debugPtrReceiverPage).PtrMethod
+
+	info, err := extractMethodInfo(unboundMethod)
+	if err != nil {
+		t.Fatalf("extractMethodInfo failed: %v", err)
+	}
+
+	t.Logf("MethodInfo:")
+	t.Logf("  isBound: %v", info.isBound)
+	t.Logf("  receiverType: %v", info.receiverType)
+	if info.receiverType != nil {
+		t.Logf("  receiverType.Kind(): %v (Pointer=%v)",
+			info.receiverType.Kind(), info.receiverType.Kind() == reflect.Pointer)
+	}
+}
