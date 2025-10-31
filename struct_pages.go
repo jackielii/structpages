@@ -276,9 +276,17 @@ func (sp *StructPages) registerPageItem(mux Mux, page *PageNode, mw []Middleware
 	for _, middleware := range slices.Backward(mw) {
 		handler = middleware(handler, page)
 	}
+	// Pre-parse route segments for performance (done once at Mount time)
+	fullRoute := page.FullRoute()
+	if page.routeSegments == nil {
+		if segments, err := sp.pc.getSegmentsCached(fullRoute); err == nil {
+			// Store without copying since we own this PageNode
+			page.routeSegments = segments
+		}
+	}
 	// If method is "ALL", register without method prefix (matches all methods)
 	// Otherwise, register with "METHOD /path" format
-	pattern := page.FullRoute()
+	pattern := fullRoute
 	if page.Method != methodAll {
 		pattern = page.Method + " " + pattern
 	}
