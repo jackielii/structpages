@@ -5,30 +5,42 @@ import (
 	"strings"
 )
 
-// HTMXPageConfig is the default component selector for HTMX integration.
-// It automatically selects the appropriate component method based on the HX-Target header.
+// HTMXRenderTarget is the default TargetSelector for HTMX integration.
+// It automatically selects the appropriate component based on the HX-Target header.
 //
 // When an HTMX request is detected (via HX-Request header), it matches the HX-Target
 // value against all available component IDs. For example:
-//   - HX-Target: "content" -> calls Content() method
-//   - HX-Target: "index-page-todo-list" -> calls TodoList() method on IndexPage
-//   - No HX-Target or non-HTMX request -> calls Page() method
+//   - HX-Target: "content" -> returns methodRenderTarget for Content() method
+//   - HX-Target: "index-page-todo-list" -> returns methodRenderTarget for TodoList() method
+//   - HX-Target: "user-stats-widget" (no method match) -> returns functionRenderTarget for lazy evaluation
+//   - No HX-Target or non-HTMX request -> returns methodRenderTarget for Page() method
 //
-// This is the default component selector for StructPages, making IDFor work
+// This is the default TargetSelector for StructPages, making IDFor work
 // seamlessly with HTMX out of the box.
-func HTMXPageConfig(r *http.Request, pn *PageNode) (string, error) {
+func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	if r.Header.Get("HX-Request") == "true" {
 		hxTarget := r.Header.Get("HX-Target")
 		if hxTarget != "" {
-			// Match target against all available components
-			// This is more flexible than trying to extract/transform the component name
+			// Try to match against registered method components
 			componentName := matchComponentByTarget(hxTarget, pn)
 			if componentName != "" {
-				return componentName, nil
+				method := pn.Components[componentName]
+				return newMethodRenderTarget(componentName, &method), nil
 			}
+
+			// No method match - assume it's a standalone function
+			// Store raw hxTarget for lazy evaluation in Is()
+			return newFunctionRenderTarget(hxTarget, pn.Name), nil
 		}
 	}
-	return "Page", nil
+
+	// Default: render "Page" component
+	pageMethod, ok := pn.Components["Page"]
+	if !ok {
+		// No Page method - return empty method target, Props must use RenderComponent
+		return newMethodRenderTarget("Page", &pageMethod), nil
+	}
+	return newMethodRenderTarget("Page", &pageMethod), nil
 }
 
 // matchComponentByTarget finds a component that matches the given HX-Target ID.

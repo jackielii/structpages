@@ -1,18 +1,19 @@
 # HTMX Integration
 
-Structpages has built-in HTMX support enabled by default through `HTMXPageConfig`. This makes `IDFor` work seamlessly with HTMX partial rendering out of the box.
+Structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. This makes `IDFor` work seamlessly with HTMX partial rendering out of the box.
 
 ### How It Works
 
 When an HTMX request is detected (via `HX-Request` header), the framework automatically:
 
 1. Reads the `HX-Target` header value
-2. Converts it from kebab-case to a component method name
+2. Matches it to a component method or standalone function
 3. Renders that specific component instead of the full page
 
 For example:
 - `HX-Target: "content"` → calls `Content()` method
 - `HX-Target: "index-todo-list"` → calls `TodoList()` method on the index page (strips page prefix automatically)
+- `HX-Target: "dashboard-page-user-stats-widget"` → calls `UserStatsWidget` standalone function
 - No HX-Target or non-existent component → falls back to `Page()` method
 
 This works automatically with `IDFor`:
@@ -39,8 +40,9 @@ The real power of HTMX integration comes from the `RenderTarget` parameter in yo
 - ✅ Optimize database queries for partial updates
 - ✅ Override component selection based on application logic
 - ✅ Maintain type safety throughout the flow
+- ✅ Use standalone function components shared across pages
 
-**Important:** While `HTMXPageConfig` is configurable (you can customize how components are selected from HTMX requests), `RenderTarget.Is()` works regardless of your configuration. Whatever component selection logic you use, the `RenderTarget` passed to Props will correctly identify which component was selected, making your Props code independent of the selection mechanism.
+**Important:** While `HTMXRenderTarget` is configurable (you can customize how components are selected from HTMX requests), `RenderTarget.Is()` works regardless of your configuration. Whatever component selection logic you use, the `RenderTarget` passed to Props will correctly identify which component was selected, making your Props code independent of the selection mechanism.
 
 ### How Component Selection Works
 
@@ -49,15 +51,15 @@ When an HTMX request arrives:
 ```
 1. Request arrives with HX-Target header
    ↓
-2. HTMXPageConfig extracts target ID (e.g., "index-todo-list")
+2. HTMXRenderTarget extracts target ID (e.g., "index-todo-list")
    ↓
-3. Component is determined (e.g., TodoList method)
+3. Component is determined (e.g., TodoList method or UserStatsWidget function)
    ↓
-4. RenderTarget is created with that component
+4. RenderTarget is created with that component (lazy evaluation for functions)
    ↓
-5. Props(r, sel) is called with the RenderTarget
+5. Props(r, target) is called with the RenderTarget
    ↓
-6. Props loads appropriate data based on sel.Is(component)
+6. Props loads appropriate data based on target.Is(component)
    ↓
 7. Component renders with the data
 ```
@@ -75,15 +77,15 @@ type IndexProps struct {
     UserInfo   UserInfo
 }
 
-func (p index) Props(r *http.Request, sel *structpages.RenderTarget) (IndexProps, error) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, error) {
     switch {
-    case sel.Is(index.TodoList):
+    case target.Is(p.TodoList):
         // HTMX is updating just the todo list - only load todos
         return IndexProps{
             Todos: getTodos(),
         }, nil
 
-    case sel.Is(index.Page):
+    case target.Is(p.Page):
         // Full page load - load everything
         return IndexProps{
             Todos:    getTodos(),
@@ -116,8 +118,8 @@ templ (p index) TodoList(todos []Todo) {
 ```
 
 **What happens:**
-- Initial page load → `sel.Is(index.Page)` is true → loads all data
-- HTMX updates todo list → `sel.Is(index.TodoList)` is true → loads only todos
+- Initial page load → `target.Is(index.Page)` is true → loads all data
+- HTMX updates todo list → `target.Is(index.TodoList)` is true → loads only todos
 - Database queries are minimized for partial updates ⚡
 
 ### Advanced Pattern: RenderComponent Override
@@ -142,27 +144,27 @@ type GroupPaneProps struct {
     GroupSearchQuery string
 }
 
-func (p TeamManagementView) Props(r *http.Request, sel *structpages.RenderTarget) (TeamManagementProps, error) {
+func (p TeamManagementView) Props(r *http.Request, target structpages.RenderTarget) (TeamManagementProps, error) {
     switch {
-    case sel.Is(TeamManagementView.GroupList):
+    case target.Is(p.GroupList):
         // Load only group data
         groups, err := loadGroups(r)
         if err != nil {
             return TeamManagementProps{}, err
         }
         // Override: render GroupList with just the groups data
-        return TeamManagementProps{}, structpages.RenderComponent(TeamManagementView.GroupList, groups)
+        return TeamManagementProps{}, structpages.RenderComponent(target, groups)
 
-    case sel.Is(TeamManagementView.UserList):
+    case target.Is(p.UserList):
         // Load only user data
         users, err := loadUsers(r)
         if err != nil {
             return TeamManagementProps{}, err
         }
         // Override: render UserList with just the users data
-        return TeamManagementProps{}, structpages.RenderComponent(TeamManagementView.UserList, users)
+        return TeamManagementProps{}, structpages.RenderComponent(target, users)
 
-    case sel.Is(TeamManagementView.Page), sel.Is(TeamManagementView.Content):
+    case target.Is(p.Page), target.Is(p.Content):
         // Full page - load everything
         users, err := loadUsers(r)
         if err != nil {
@@ -248,22 +250,22 @@ type search struct {
     query `route:"GET /search"`
 }
 
-func (p search) Props(r *http.Request, sel *structpages.RenderTarget) ([]Result, error) {
+func (p search) Props(r *http.Request, target structpages.RenderTarget) ([]Result, error) {
     query := r.URL.Query().Get("q")
 
     // Override based on application logic
     if query == "" {
         // No search query - show empty state instead of results
-        return nil, structpages.RenderComponent(search.EmptyState)
+        return nil, structpages.RenderComponent(p.EmptyState)
     }
 
     // Check which component was selected
     switch {
-    case sel.Is(search.Results):
+    case target.Is(p.Results):
         // Perform search and return results
         return performSearch(query), nil
 
-    case sel.Is(search.Page):
+    case target.Is(p.Page):
         // Full page with recent searches
         return performSearch(query), nil
 
@@ -313,8 +315,8 @@ templ (p search) EmptyState() {
 
 ### Pattern 1: Simple Conditional Loading
 ```go
-func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
-    if sel.Is(index.Component) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
+    if target.Is(p.Component) {
         return loadMinimalData(), nil
     }
     return loadFullData(), nil
@@ -324,10 +326,10 @@ func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
 
 ### Pattern 2: RenderComponent Override
 ```go
-func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
-    if sel.Is(index.Component) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
+    if target.Is(p.Component) {
         data := loadSpecificData()
-        return Props{}, structpages.RenderComponent(index.Component, data)
+        return Props{}, structpages.RenderComponent(target, data)
     }
     return loadFullProps(), nil
 }
@@ -336,9 +338,9 @@ func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
 
 ### Pattern 3: Dynamic Component Selection
 ```go
-func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
     if someCondition {
-        return Props{}, structpages.RenderComponent(index.AlternateComponent)
+        return Props{}, structpages.RenderComponent(p.AlternateComponent)
     }
     // Normal flow
     return loadData(), nil
@@ -346,22 +348,44 @@ func (p index) Props(r *http.Request, sel *RenderTarget) (Props, error) {
 ```
 **Use when:** Need to change which component renders based on request data or application state.
 
+### Pattern 4: Standalone Function Components
+```go
+// Shared widget component (standalone function)
+templ UserStatsWidget(stats UserStats) {
+    <div>{ stats.ActiveUsers } active users</div>
+}
+
+func (p DashboardPage) Props(r *http.Request, target structpages.RenderTarget) (DashboardProps, error) {
+    // Check against standalone function
+    if target.Is(UserStatsWidget) {
+        stats := loadUserStats()
+        return DashboardProps{}, structpages.RenderComponent(target, stats)
+    }
+    return loadFullData(), nil
+}
+```
+**Use when:** Need to share components across multiple pages without creating wrapper methods.
+
 ---
 
-### Custom Component Selector
+### Custom Target Selector
 
-The default `HTMXPageConfig` works for most use cases, but you can customize the component selection logic if needed:
+The default `HTMXRenderTarget` works for most use cases, but you can customize the component selection logic if needed:
 
 ```go
 mux := http.NewServeMux()
 sp, err := structpages.Mount(mux, pages{}, "/", "My App",
-    structpages.WithDefaultComponentSelector(func(r *http.Request, pn *PageNode) (string, error) {
+    structpages.WithTargetSelector(func(r *http.Request, pn *PageNode) (structpages.RenderTarget, error) {
         // Your custom logic
         // For example, select based on custom headers, query params, etc.
-        if r.Header.Get("X-Custom-Target") != "" {
-            return r.Header.Get("X-Custom-Target"), nil
+        if customTarget := r.Header.Get("X-Custom-Target"); customTarget != "" {
+            // Look up component by custom header
+            if method, ok := pn.Components[customTarget]; ok {
+                return structpages.NewMethodRenderTarget(customTarget, method), nil
+            }
         }
-        return "Page", nil
+        // Fall back to default HTMX behavior
+        return structpages.HTMXRenderTarget(r, pn)
     }),
 )
 if err != nil {
@@ -369,12 +393,12 @@ if err != nil {
 }
 ```
 
-**Key insight:** No matter how you configure component selection (whether using the default `HTMXPageConfig` or a custom selector), your Props method receives a `RenderTarget` that correctly identifies the selected component. Your Props code using `sel.Is(component)` remains the same and works with any component selection strategy.
+**Key insight:** No matter how you configure component selection (whether using the default `HTMXRenderTarget` or a custom selector), your Props method receives a `RenderTarget` that correctly identifies the selected component. Your Props code using `target.Is(component)` remains the same and works with any component selection strategy.
 
 This separation of concerns means:
 - ✅ You can change component selection logic without modifying Props
 - ✅ Props code is decoupled from HTMX request details
 - ✅ The pattern works whether requests come from HTMX, regular navigation, or custom clients
 
-See `examples/htmx/main.go` and `examples/todo/main.go` for complete working examples.
+See `examples/htmx/main.go`, `examples/todo/main.go`, and `examples/htmx-render-target/` for complete working examples.
 

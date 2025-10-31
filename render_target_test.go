@@ -23,7 +23,7 @@ func (selectionTestPage) Content(data string) component {
 }
 
 // Props that uses RenderTarget to return different data
-func (selectionTestPage) Props(r *http.Request, sel *RenderTarget) (string, error) {
+func (selectionTestPage) Props(r *http.Request, sel RenderTarget) (string, error) {
 	switch {
 	case sel.Is(selectionTestPage.TodoList):
 		return "todo data", nil
@@ -113,13 +113,13 @@ func TestRenderTarget_Selected(t *testing.T) {
 }
 
 func TestRenderTarget_DifferentReceiverTypes(t *testing.T) {
-	// Test that Selected() correctly distinguishes between methods on different types
+	// Test that Is() correctly distinguishes between methods on different types
 	// even if they have the same name
 
 	// Create RenderTarget for selectionTestPage.TodoList
 	pageType := reflect.TypeOf(selectionTestPage{})
 	method, _ := pageType.MethodByName("TodoList")
-	sel := &RenderTarget{selectedMethod: method}
+	sel := newMethodRenderTarget("TodoList", &method)
 
 	// Should match selectionTestPage.TodoList
 	if !sel.Is(selectionTestPage.TodoList) {
@@ -135,7 +135,7 @@ func TestRenderTarget_DifferentReceiverTypes(t *testing.T) {
 func TestRenderTarget_InvalidMethodExpression(t *testing.T) {
 	pageType := reflect.TypeOf(selectionTestPage{})
 	method, _ := pageType.MethodByName("Page")
-	sel := &RenderTarget{selectedMethod: method}
+	sel := newMethodRenderTarget("Page", &method)
 
 	// Test with invalid inputs
 	if sel.Is("not a method") {

@@ -47,11 +47,11 @@ func IDFor(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - IDFor must be called within a page handler or template")
 	}
 
-	return idFor(pc, v)
+	return idFor(ctx, pc, v)
 }
 
 // idFor generates the ID string based on the provided value (method expression or IDParams).
-func idFor(pc *parseContext, v any) (string, error) {
+func idFor(ctx context.Context, pc *parseContext, v any) (string, error) {
 	// Handle IDParams pattern
 	var methodExpr any
 	rawID := false
@@ -68,14 +68,14 @@ func idFor(pc *parseContext, v any) (string, error) {
 		return idForRef(pc, string(ref), rawID)
 	}
 
-	// Extract all method info (handles both bound and unbound methods)
+	// Extract all method info (handles methods and standalone functions)
 	info, err := extractMethodInfo(methodExpr)
 	if err != nil {
 		return "", err
 	}
 
 	// Find the page node
-	pn, err := pc.findPageNodeForMethod(info)
+	pn, err := pc.findPageNodeForMethod(ctx, info)
 	if err != nil {
 		return "", fmt.Errorf("cannot find page for method expression: %w", err)
 	}
@@ -86,7 +86,18 @@ func idFor(pc *parseContext, v any) (string, error) {
 }
 
 // findPageNodeForMethod finds a page node using the method info
-func (p *parseContext) findPageNodeForMethod(info *methodInfo) (*PageNode, error) {
+func (p *parseContext) findPageNodeForMethod(ctx context.Context, info *methodInfo) (*PageNode, error) {
+	// Handle standalone functions - use current page from context
+	if info.isFunction {
+		currentPage := currentPageCtx.Value(ctx)
+		if currentPage == nil {
+			// Fallback: no page prefix, return empty string as page name
+			// This allows IDFor to work outside page context (e.g., tests)
+			return &PageNode{Name: ""}, nil
+		}
+		return currentPage, nil
+	}
+
 	if info.isBound {
 		// Find by type name string
 		return p.findPageNodeByTypeName(info.receiverTypeName, info.methodName)
@@ -192,7 +203,13 @@ func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
 
 // buildID constructs the HTML ID string from page name and method name.
 func buildID(pageName, methodName string, rawID bool) string {
-	id := camelToKebab(pageName) + "-" + camelToKebab(methodName)
+	var id string
+	if pageName != "" {
+		id = camelToKebab(pageName) + "-" + camelToKebab(methodName)
+	} else {
+		// No page name (e.g., standalone function outside page context)
+		id = camelToKebab(methodName)
+	}
 	if !rawID {
 		id = "#" + id
 	}

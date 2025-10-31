@@ -1,0 +1,271 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"math/rand/v2"
+	"net/http"
+	"time"
+
+	"github.com/jackielii/structpages"
+)
+
+// Shared standalone function components (can be used across multiple pages)
+// These demonstrate the power of RenderTarget - no need for wrapper methods!
+templ UserStatsWidget(stats UserStats) {
+	<div class="widget">
+		<h3>User Statistics</h3>
+		<p>Active Users: { fmt.Sprintf("%d", stats.ActiveUsers) }</p>
+		<p>New Today: { fmt.Sprintf("%d", stats.NewToday) }</p>
+		<button
+			type="button"
+			hx-get={ urlFor(ctx, dashboard{}) }
+			hx-target={ idForTarget(ctx, UserStatsWidget) }
+		>
+			Refresh Stats
+		</button>
+	</div>
+}
+
+templ SalesChartWidget(data SalesData) {
+	<div class="widget">
+		<h3>Sales Chart</h3>
+		<div class="chart">
+			for _, point := range data.Points {
+				<div class="bar" style={ fmt.Sprintf("height: %dpx; width: 30px; background: blue; display: inline-block; margin: 2px;", point.Value) }></div>
+			}
+		</div>
+		<p>Total Sales: ${ fmt.Sprintf("%.2f", data.Total) }</p>
+		<button
+			type="button"
+			hx-get={ urlFor(ctx, dashboard{}) }
+			hx-target={ idForTarget(ctx, SalesChartWidget) }
+		>
+			Refresh Sales
+		</button>
+	</div>
+}
+
+templ NotificationsList(notifications []Notification) {
+	<div class="widget">
+		<h3>Recent Notifications</h3>
+		<ul>
+			for _, n := range notifications {
+				<li>{ n.Message } <small>({ n.Time.Format("15:04") })</small></li>
+			}
+		</ul>
+		<button
+			type="button"
+			hx-get={ urlFor(ctx, dashboard{}) }
+			hx-target={ idForTarget(ctx, NotificationsList) }
+		>
+			Refresh Notifications
+		</button>
+	</div>
+}
+
+// Dashboard page using RenderTarget API
+
+type dashboard struct{}
+
+type DashboardProps struct {
+	Stats         UserStats
+	Sales         SalesData
+	Notifications []Notification
+}
+
+type UserStats struct {
+	ActiveUsers int
+	NewToday    int
+}
+
+type SalesData struct {
+	Points []DataPoint
+	Total  float64
+}
+
+type DataPoint struct {
+	Label string
+	Value int
+}
+
+type Notification struct {
+	Message string
+	Time    time.Time
+}
+
+// Props demonstrates conditional data loading with RenderTarget
+func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (DashboardProps, error) {
+	// Check which component is being requested and load only necessary data
+	switch {
+	case target.Is(UserStatsWidget):
+		// Only load user stats (lightweight query)
+		stats := loadUserStats()
+		// Use RenderComponent with target to render just this widget
+		return DashboardProps{}, structpages.RenderComponent(target, stats)
+
+	case target.Is(SalesChartWidget):
+		// Only load sales data (expensive query - avoid loading unnecessarily)
+		sales := loadSalesData()
+		return DashboardProps{}, structpages.RenderComponent(target, sales)
+
+	case target.Is(NotificationsList):
+		// Only load notifications
+		notifications := loadNotifications()
+		return DashboardProps{}, structpages.RenderComponent(target, notifications)
+
+	case target.Is(p.Page):
+		// Full page load - load all data
+		return DashboardProps{
+			Stats:         loadUserStats(),
+			Sales:         loadSalesData(),
+			Notifications: loadNotifications(),
+		}, nil
+
+	default:
+		// Fallback to full page
+		return DashboardProps{
+			Stats:         loadUserStats(),
+			Sales:         loadSalesData(),
+			Notifications: loadNotifications(),
+		}, nil
+	}
+}
+
+templ (p dashboard) Page(props DashboardProps) {
+	@html() {
+		<h1>Dashboard</h1>
+		<p>This example demonstrates the new RenderTarget API with standalone function components.</p>
+		<p>Click "Refresh" buttons to see HTMX partial updates - each widget loads only its own data!</p>
+		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;">
+			<div id={ idFor(ctx, UserStatsWidget) }>
+				@UserStatsWidget(props.Stats)
+			</div>
+			<div id={ idFor(ctx, SalesChartWidget) }>
+				@SalesChartWidget(props.Sales)
+			</div>
+			<div id={ idFor(ctx, NotificationsList) }>
+				@NotificationsList(props.Notifications)
+			</div>
+		</div>
+		<div style="margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;">
+			<h4>How it works:</h4>
+			<ul>
+				<li>✅ <strong>Standalone functions</strong> - UserStatsWidget, SalesChartWidget, NotificationsList are shared components</li>
+				<li>✅ <strong>Conditional loading</strong> - Props checks target.Is() and loads only needed data</li>
+				<li>✅ <strong>RenderComponent</strong> - Passes specific data to each widget</li>
+				<li>✅ <strong>No wrapper methods</strong> - No need to create dashboard.UserStats() method!</li>
+				<li>✅ <strong>HTMX integration</strong> - HTMXRenderTarget automatically handles partial updates</li>
+			</ul>
+		</div>
+	}
+}
+
+// Mock data loaders (simulating database queries)
+// Using random data to showcase HTMX partial updates
+func loadUserStats() UserStats {
+	return UserStats{
+		ActiveUsers: 1000 + rand.IntN(500),
+		NewToday:    10 + rand.IntN(90),
+	}
+}
+
+func loadSalesData() SalesData {
+	points := []DataPoint{
+		{Label: "Mon", Value: 30 + rand.IntN(100)},
+		{Label: "Tue", Value: 30 + rand.IntN(100)},
+		{Label: "Wed", Value: 30 + rand.IntN(100)},
+		{Label: "Thu", Value: 30 + rand.IntN(100)},
+		{Label: "Fri", Value: 30 + rand.IntN(100)},
+	}
+	total := 0.0
+	for _, p := range points {
+		total += float64(p.Value) * 100.0
+	}
+	return SalesData{
+		Points: points,
+		Total:  total,
+	}
+}
+
+func loadNotifications() []Notification {
+	messages := []string{
+		"New user registered",
+		"Payment received",
+		"System update available",
+		"New order placed",
+		"Report generated",
+		"Backup completed",
+	}
+	count := 3 + rand.IntN(3)
+	notifications := make([]Notification, count)
+	for i := 0; i < count; i++ {
+		notifications[i] = Notification{
+			Message: messages[rand.IntN(len(messages))],
+			Time:    time.Now().Add(-time.Duration(rand.IntN(120)) * time.Minute),
+		}
+	}
+	return notifications
+}
+
+// HTML layout
+templ html() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<title>RenderTarget API Example</title>
+			<style>
+				.widget {
+					padding: 1rem;
+					border: 1px solid #ddd;
+					border-radius: 8px;
+					background: white;
+				}
+				.widget h3 {
+					margin-top: 0;
+				}
+				.chart {
+					display: flex;
+					align-items: flex-end;
+					height: 150px;
+					margin: 1rem 0;
+				}
+			</style>
+		</head>
+		<body>
+			<main>
+				{ children... }
+			</main>
+		</body>
+	</html>
+}
+
+// Error handling
+templ errorPage(err error) {
+	@html() {
+		@errorComp(err)
+	}
+}
+
+templ errorComp(err error) {
+	<h1>Error</h1>
+	<p>{ err.Error() }</p>
+}
+
+// Helper functions
+func urlFor(ctx context.Context, page any, args ...any) (string, error) {
+	s, err := structpages.URLFor(ctx, page, args...)
+	return s, err
+}
+
+func idFor(ctx context.Context, v any) (string, error) {
+	s, err := structpages.IDFor(ctx, structpages.IDParams{Method: v, RawID: true})
+	return s, err
+}
+
+func idForTarget(ctx context.Context, v any) (string, error) {
+	s, err := structpages.IDFor(ctx, v)
+	return s, err
+}

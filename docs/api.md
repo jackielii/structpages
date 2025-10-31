@@ -168,26 +168,31 @@ sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
 )
 ```
 
-### WithDefaultComponentSelector
+### WithTargetSelector
 
 ```go
-func WithDefaultComponentSelector(selector func(r *http.Request, pn *PageNode) (string, error)) func(*StructPages)
+func WithTargetSelector(selector TargetSelector) func(*StructPages)
 ```
 
-Set a global component selector function that determines which component to render when `RenderComponent` is not explicitly called in Props. Useful for implementing patterns like HTMX partial rendering across all pages.
+Set a global target selector function that determines which component to render. The selector returns a `RenderTarget` that is passed to your Props method, enabling conditional data loading and component selection.
+
+The default selector is `HTMXRenderTarget`, which handles HTMX partial rendering automatically.
 
 **Example:**
 ```go
-// HTMX boost pattern - render only content for HTMX requests
-selector := func(r *http.Request, pn *PageNode) (string, error) {
-    if r.Header.Get("HX-Request") == "true" {
-        return "Content", nil  // Skip layout, render just content
+// Custom selector for API requests
+selector := func(r *http.Request, pn *PageNode) (structpages.RenderTarget, error) {
+    if r.Header.Get("Accept") == "application/json" {
+        // Return a specific component for JSON responses
+        method := pn.Components["APIResponse"]
+        return structpages.NewMethodRenderTarget("APIResponse", method), nil
     }
-    return "Page", nil  // Full page with layout
+    // Fall back to default HTMX behavior
+    return structpages.HTMXRenderTarget(r, pn)
 }
 
 sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithDefaultComponentSelector(selector),
+    structpages.WithTargetSelector(selector),
 )
 ```
 
@@ -235,10 +240,33 @@ Required for pages that render content. Returns the component to render.
 ### Props
 
 ```go
-func (p PageType) Props(r *http.Request, deps ...any) (any, error)
+func (p PageType) Props(r *http.Request, target RenderTarget, deps ...any) (any, error)
 ```
 
-Optional. Prepare data before rendering. Can receive injected dependencies.
+Optional. Prepare data before rendering. Receives:
+- `r *http.Request`: The HTTP request
+- `target RenderTarget`: Indicates which component will be rendered
+- `deps ...any`: Injected dependencies (from `WithArgs`)
+
+Use `target.Is(component)` to conditionally load data based on which component is being rendered.
+
+**Example:**
+```go
+func (p DashboardPage) Props(r *http.Request, target RenderTarget, db *Database) (DashboardProps, error) {
+    switch {
+    case target.Is(p.UserList):
+        // Only load user data for partial update
+        users := db.LoadUsers()
+        return DashboardProps{}, RenderComponent(target, users)
+
+    case target.Is(p.Page):
+        // Load all data for full page
+        return DashboardProps{
+            Users: db.LoadUsers(),
+            Stats: db.LoadStats(),
+        }, nil
+    }
+}
 
 ### ServeHTTP
 
@@ -275,6 +303,93 @@ func IDFor(ctx context.Context, v any) (string, error)
 ```
 
 Generate IDs using context.
+
+## RenderTarget
+
+The `RenderTarget` interface represents the component that will be rendered for a request. It's passed to your Props method, enabling conditional data loading.
+
+### Interface
+
+```go
+type RenderTarget interface {
+    Is(method any) bool
+}
+```
+
+### Is Method
+
+```go
+func (target RenderTarget) Is(method any) bool
+```
+
+Check if the target matches a specific component. Works with:
+- **Page methods**: `target.Is(p.Page)`, `target.Is(p.UserList)`
+- **Standalone functions**: `target.Is(UserStatsWidget)` (templ components that are functions)
+
+**Example:**
+```go
+func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
+    // Check against page method
+    if target.Is(p.UserList) {
+        users := loadUsers()
+        return DashboardProps{}, RenderComponent(target, users)
+    }
+
+    // Check against standalone function component
+    if target.Is(UserStatsWidget) {
+        stats := loadUserStats()
+        return DashboardProps{}, RenderComponent(target, stats)
+    }
+
+    // Full page
+    return loadFullPageData(), nil
+}
+```
+
+### RenderComponent
+
+```go
+func RenderComponent(targetOrMethod any, args ...any) error
+```
+
+Override which component to render and pass specific arguments to it. Can be called from Props:
+
+**Same-page component:**
+```go
+// Render the component specified by target with custom args
+return DashboardProps{}, RenderComponent(target, userData)
+```
+
+**Cross-page component:**
+```go
+// Render a component from another page using method expression
+return DashboardProps{}, RenderComponent(OtherPage{}.Content, data)
+```
+
+**Standalone function:**
+```go
+// Render a standalone function component
+return DashboardProps{}, RenderComponent(target, stats)
+```
+
+### HTMXRenderTarget
+
+```go
+func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error)
+```
+
+The default `TargetSelector` that handles HTMX partial rendering. It:
+1. Checks for `HX-Request` header
+2. Reads `HX-Target` header value
+3. Matches it to a component method or function
+4. Returns appropriate `RenderTarget`
+
+For non-HTMX requests or missing targets, returns the `Page` component.
+
+**Automatic behavior:**
+- `HX-Target: "content"` → matches `Content()` method
+- `HX-Target: "index-todo-list"` → matches `TodoList()` method (strips page prefix)
+- `HX-Target: "dashboard-page-user-stats-widget"` → matches `UserStatsWidget` function
 
 ## Error Types
 

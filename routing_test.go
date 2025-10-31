@@ -3,6 +3,7 @@ package structpages
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -203,7 +204,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			page:        &emptyRoutePage{},
 			route:       "/default-error",
 			requestPath: "/default-error",
-			wantError:   "error calling default component selector for emptyRoutePage: default config error",
+			wantError:   "error selecting target for emptyRoutePage: default config error",
 			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "", errors.New("default config error")
 			},
@@ -213,7 +214,7 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 			page:        &mockPage{},
 			route:       "/default-unknown",
 			requestPath: "/default-unknown",
-			wantError:   "default component selector for mockPage returned unknown component name: UnknownComponent",
+			wantError:   "error selecting target for mockPage: component not found: UnknownComponent",
 			defaultConfig: func(*http.Request, *PageNode) (string, error) {
 				return "UnknownComponent", nil
 			},
@@ -229,7 +230,19 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 				t.Fatalf("Mount failed: %v", err)
 			}
 			if tt.defaultConfig != nil {
-				sp.defaultComponentSelector = tt.defaultConfig
+				// Wrap old-style selector in new TargetSelector
+				oldSelector := tt.defaultConfig
+				sp.targetSelector = func(r *http.Request, pn *PageNode) (RenderTarget, error) {
+					name, err := oldSelector(r, pn)
+					if err != nil {
+						return nil, err
+					}
+					method, ok := pn.Components[name]
+					if !ok {
+						return nil, fmt.Errorf("component not found: %s", name)
+					}
+					return newMethodRenderTarget(name, &method), nil
+				}
 			}
 
 			req := httptest.NewRequest(http.MethodGet, tt.requestPath, http.NoBody)
@@ -248,9 +261,11 @@ func TestBuildHandler_ErrorScenarios(t *testing.T) {
 	}
 }
 
-// Test findComponent edge cases
-func TestFindComponent_NoPageComponent(t *testing.T) {
-	sp := &StructPages{}
+// Test TargetSelector edge cases
+func TestTargetSelector_NoPageComponent(t *testing.T) {
+	sp := &StructPages{
+		targetSelector: HTMXRenderTarget,
+	}
 
 	// Create a PageNode without Page component manually
 	pn := &PageNode{
@@ -264,12 +279,15 @@ func TestFindComponent_NoPageComponent(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
-	_, err := sp.findComponent(pn, req)
-	if err == nil {
-		t.Errorf("expected error for no Page component")
-	} else if !contains(err.Error(), "no Page component found") &&
-		!contains(err.Error(), "returned unknown component name: Page") {
-		t.Errorf("unexpected error: %v", err)
+	target, err := sp.targetSelector(req, pn)
+
+	// HTMXRenderTarget should return a target even if Page component doesn't exist
+	// The error will occur later when trying to render
+	if err != nil {
+		t.Errorf("unexpected error from targetSelector: %v", err)
+	}
+	if target == nil {
+		t.Errorf("expected target, got nil")
 	}
 }
 
@@ -330,11 +348,6 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	sp := &StructPages{
-		onError: errorHandler,
-		pc:      &parseContext{args: make(argRegistry)},
-	}
-
 	// Create a page node with an invalid component method
 	pn := &PageNode{
 		Value: reflect.ValueOf(&mockPage{}),
@@ -345,6 +358,16 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 				Type: reflect.TypeOf((*mockPage)(nil)).Method(0).Type,
 				Func: reflect.Value{}, // Invalid Func field
 			},
+		},
+	}
+
+	sp := &StructPages{
+		onError: errorHandler,
+		pc:      &parseContext{args: make(argRegistry)},
+		targetSelector: func(r *http.Request, pageNode *PageNode) (RenderTarget, error) {
+			// Return the invalid Page method
+			method := pageNode.Components["Page"]
+			return newMethodRenderTarget("Page", &method), nil
 		},
 	}
 
