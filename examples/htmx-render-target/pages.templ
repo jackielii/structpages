@@ -261,11 +261,9 @@ func urlFor(ctx context.Context, page any, args ...any) (string, error) {
 }
 
 func idFor(ctx context.Context, v any) (string, error) {
-	s, err := structpages.IDFor(ctx, structpages.IDParams{Method: v, RawID: true})
-	return s, err
+	return structpages.ID(ctx, v)
 }
 
 func idForTarget(ctx context.Context, v any) (string, error) {
-	s, err := structpages.IDFor(ctx, v)
-	return s, err
+	return structpages.IDTarget(ctx, v)
 }

@@ -92,7 +92,7 @@ func TestCamelToKebab(t *testing.T) {
 	}
 }
 
-// Test page types for IDFor
+// Test page types for ID/IDTarget
 type testPageWithMethods struct{}
 
 func (testPageWithMethods) UserList() component       { return testComponent{"UserList"} }
@@ -104,8 +104,8 @@ func (testPageWithMethods) Content() component        { return testComponent{"Co
 func (testPageWithMethods) HTMLContent() component    { return testComponent{"HTMLContent"} }
 func (testPageWithMethods) GroupMembers() component   { return testComponent{"GroupMembers"} }
 
-// TestIDFor tests the IDFor function with method expressions
-func TestIDFor(t *testing.T) {
+// TestIDTarget tests IDTarget function with method expressions (returns CSS selector)
+func TestIDTarget(t *testing.T) {
 	// Set up page tree
 	type testPages struct {
 		test testPageWithMethods `route:"/ Test"`
@@ -132,14 +132,6 @@ func TestIDFor(t *testing.T) {
 			expected: "#test-user-list",
 		},
 		{
-			name: "raw ID without selector",
-			input: IDParams{
-				Method: testPageWithMethods.UserList,
-				RawID:  true,
-			},
-			expected: "test-user-list",
-		},
-		{
 			name:     "camelCase method name",
 			input:    testPageWithMethods.userProfile,
 			expected: "#test-user-profile",
@@ -153,7 +145,7 @@ func TestIDFor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := IDFor(ctx, tt.input)
+			result, err := IDTarget(ctx, tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -165,16 +157,75 @@ func TestIDFor(t *testing.T) {
 				return
 			}
 			if result != tt.expected {
-				t.Errorf("IDFor() = %q, want %q", result, tt.expected)
+				t.Errorf("IDTarget() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestID tests ID function with method expressions (returns raw ID)
+func TestID(t *testing.T) {
+	// Set up page tree
+	type testPages struct {
+		test testPageWithMethods `route:"/ Test"`
+	}
+
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	// Set up context with parseContext
+	ctx := context.Background()
+	ctx = pcCtx.WithValue(ctx, pc)
+
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "simple method - returns raw ID",
+			input:    testPageWithMethods.UserList,
+			expected: "test-user-list",
+		},
+		{
+			name:     "camelCase method name",
+			input:    testPageWithMethods.userProfile,
+			expected: "test-user-profile",
+		},
+		{
+			name:     "with acronym",
+			input:    testPageWithMethods.HTMLContent,
+			expected: "test-html-content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ID(ctx, tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("ID() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
 // Test error cases
-func TestIDFor_Errors(t *testing.T) {
+func TestID_Errors(t *testing.T) {
 	t.Run("no context", func(t *testing.T) {
-		_, err := IDFor(context.Background(), testPageWithMethods.UserList)
+		_, err := ID(context.Background(), testPageWithMethods.UserList)
 		if err == nil {
 			t.Error("Expected error when parseContext not in context")
 		}
@@ -194,7 +245,7 @@ func TestIDFor_Errors(t *testing.T) {
 		ctx := pcCtx.WithValue(context.Background(), pc)
 
 		// Pass a non-function value
-		_, err = IDFor(ctx, "not a function")
+		_, err = IDTarget(ctx, "not a function")
 		if err == nil {
 			t.Error("Expected error for non-function input")
 		}
@@ -247,14 +298,6 @@ func TestIDFor_RealWorldExamples(t *testing.T) {
 			expected: "#team-management-group-list",
 		},
 		{
-			name: "team group modal raw ID",
-			input: IDParams{
-				Method: (*TeamManagementViewTest).GroupModal,
-				RawID:  true,
-			},
-			expected: "team-management-group-modal",
-		},
-		{
 			name:     "admin user list - different from team",
 			input:    (*AdminManagementViewTest).UserList,
 			expected: "#admin-management-user-list",
@@ -263,21 +306,21 @@ func TestIDFor_RealWorldExamples(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := IDFor(ctx, tt.input)
+			result, err := IDTarget(ctx, tt.input)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
 			if result != tt.expected {
-				t.Errorf("IDFor() = %q, want %q", result, tt.expected)
+				t.Errorf("IDTarget() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 
 	// Test conflict prevention
 	t.Run("conflict prevention", func(t *testing.T) {
-		teamID, _ := IDFor(ctx, (*TeamManagementViewTest).UserList)
-		adminID, _ := IDFor(ctx, (*AdminManagementViewTest).UserList)
+		teamID, _ := IDTarget(ctx, (*TeamManagementViewTest).UserList)
+		adminID, _ := IDTarget(ctx, (*AdminManagementViewTest).UserList)
 
 		if teamID == adminID {
 			t.Errorf("IDs should be different for same method on different pages: team=%q, admin=%q",
@@ -304,50 +347,47 @@ func TestIDFor_withRef(t *testing.T) {
 	ctx := pcCtx.WithValue(context.Background(), pc)
 
 	t.Run("qualified reference - PageName.MethodName", func(t *testing.T) {
-		id, err := IDFor(ctx, Ref("teamManagement.UserList"))
+		id, err := IDTarget(ctx, Ref("teamManagement.UserList"))
 		if err != nil {
 			t.Errorf("IDFor error: %v", err)
 		}
 		if id != "#team-management-user-list" {
-			t.Errorf("IDFor() = %q, want %q", id, "#team-management-user-list")
+			t.Errorf("IDTarget() = %q, want %q", id, "#team-management-user-list")
 		}
 
-		id, err = IDFor(ctx, Ref("teamManagement.GroupModal"))
+		id, err = IDTarget(ctx, Ref("teamManagement.GroupModal"))
 		if err != nil {
 			t.Errorf("IDFor error: %v", err)
 		}
 		if id != "#team-management-group-modal" {
-			t.Errorf("IDFor() = %q, want %q", id, "#team-management-group-modal")
+			t.Errorf("IDTarget() = %q, want %q", id, "#team-management-group-modal")
 		}
 	})
 
 	t.Run("simple method name - unambiguous", func(t *testing.T) {
 		// GroupList only exists on TeamManagementViewTest
-		id, err := IDFor(ctx, Ref("GroupList"))
+		id, err := IDTarget(ctx, Ref("GroupList"))
 		if err != nil {
 			t.Errorf("IDFor error: %v", err)
 		}
 		if id != "#team-management-group-list" {
-			t.Errorf("IDFor() = %q, want %q", id, "#team-management-group-list")
+			t.Errorf("IDTarget() = %q, want %q", id, "#team-management-group-list")
 		}
 	})
 
-	t.Run("Ref with IDParams - RawID", func(t *testing.T) {
-		id, err := IDFor(ctx, IDParams{
-			Method: Ref("teamManagement.GroupSearch"),
-			RawID:  true,
-		})
+	t.Run("Ref with ID - returns raw ID", func(t *testing.T) {
+		id, err := ID(ctx, Ref("teamManagement.GroupSearch"))
 		if err != nil {
-			t.Errorf("IDFor error: %v", err)
+			t.Errorf("ID error: %v", err)
 		}
 		if id != "team-management-group-search" {
-			t.Errorf("IDFor() = %q, want %q", id, "team-management-group-search")
+			t.Errorf("ID() = %q, want %q", id, "team-management-group-search")
 		}
 	})
 
 	t.Run("error - ambiguous method name", func(t *testing.T) {
 		// UserList exists on both TeamManagementViewTest and AdminManagementViewTest
-		_, err := IDFor(ctx, Ref("UserList"))
+		_, err := IDTarget(ctx, Ref("UserList"))
 		if err == nil {
 			t.Error("Expected error for ambiguous method name")
 		}
@@ -363,7 +403,7 @@ func TestIDFor_withRef(t *testing.T) {
 	})
 
 	t.Run("error - method not found", func(t *testing.T) {
-		_, err := IDFor(ctx, Ref("NonExistentMethod"))
+		_, err := IDTarget(ctx, Ref("NonExistentMethod"))
 		if err == nil {
 			t.Error("Expected error for non-existent method")
 		}
@@ -374,7 +414,7 @@ func TestIDFor_withRef(t *testing.T) {
 	})
 
 	t.Run("error - page not found", func(t *testing.T) {
-		_, err := IDFor(ctx, Ref("NonExistentPage.UserList"))
+		_, err := IDTarget(ctx, Ref("NonExistentPage.UserList"))
 		if err == nil {
 			t.Error("Expected error for non-existent page")
 		}
@@ -386,7 +426,7 @@ func TestIDFor_withRef(t *testing.T) {
 
 	t.Run("error - method not on specified page", func(t *testing.T) {
 		// GroupList doesn't exist on adminManagement page
-		_, err := IDFor(ctx, Ref("adminManagement.GroupList"))
+		_, err := IDTarget(ctx, Ref("adminManagement.GroupList"))
 		if err == nil {
 			t.Error("Expected error for method not on page")
 		}
@@ -508,7 +548,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 	t.Run("context without parseContext", func(t *testing.T) {
 		// Call IDFor with a context that doesn't have parseContext
 		ctx := context.Background()
-		_, err := IDFor(ctx, idForErrorTestPage.Content)
+		_, err := IDTarget(ctx, idForErrorTestPage.Content)
 		if err == nil {
 			t.Error("Expected error when parseContext not in context")
 		}
@@ -529,7 +569,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
 		// Call IDFor with non-function
-		_, err = IDFor(ctx, "not a function")
+		_, err = IDTarget(ctx, "not a function")
 		if err == nil {
 			t.Error("Expected error for non-function")
 		}
@@ -549,7 +589,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 
 		// Call IDFor with function that has no receiver
 		noReceiverFunc := func() component { return testComponent{"test"} }
-		_, err = IDFor(ctx, noReceiverFunc)
+		_, err = IDTarget(ctx, noReceiverFunc)
 		if err == nil {
 			t.Error("Expected error for function with no receiver")
 		}
@@ -568,7 +608,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
 		// Call IDFor with method from unregistered page
-		_, err = IDFor(ctx, idForUnregisteredPage.SomeMethod)
+		_, err = IDTarget(ctx, idForUnregisteredPage.SomeMethod)
 		if err == nil {
 			t.Error("Expected error for method from unregistered page")
 		}
@@ -635,19 +675,11 @@ func TestIDFor_InstanceMethod(t *testing.T) {
 			input:    p.UserModal,
 			expected: "#test-user-modal",
 		},
-		{
-			name: "instance method raw ID",
-			input: IDParams{
-				Method: p.TeamManagement,
-				RawID:  true,
-			},
-			expected: "test-team-management",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := IDFor(ctx, tt.input)
+			result, err := IDTarget(ctx, tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -659,7 +691,7 @@ func TestIDFor_InstanceMethod(t *testing.T) {
 				return
 			}
 			if result != tt.expected {
-				t.Errorf("IDFor() = %q, want %q", result, tt.expected)
+				t.Errorf("IDTarget() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
@@ -709,13 +741,13 @@ func TestIDFor_InstanceMethodVsMethodExpression(t *testing.T) {
 
 	t.Run("instance method and method expression produce same ID", func(t *testing.T) {
 		// Instance method (bound method)
-		idInstance, err := IDFor(ctx, p.UserList)
+		idInstance, err := IDTarget(ctx, p.UserList)
 		if err != nil {
 			t.Fatalf("IDFor with instance method failed: %v", err)
 		}
 
 		// Method expression (unbound method)
-		idMethodExpr, err := IDFor(ctx, TeamManagementViewTest.UserList)
+		idMethodExpr, err := IDTarget(ctx, TeamManagementViewTest.UserList)
 		if err != nil {
 			t.Fatalf("IDFor with method expression failed: %v", err)
 		}
@@ -729,25 +761,19 @@ func TestIDFor_InstanceMethodVsMethodExpression(t *testing.T) {
 		// Verify it's the expected ID (derived from field name "team")
 		expected := "#team-user-list"
 		if idInstance != expected {
-			t.Errorf("IDFor() = %q, want %q", idInstance, expected)
+			t.Errorf("IDTarget() = %q, want %q", idInstance, expected)
 		}
 	})
 
-	t.Run("both patterns work with IDParams", func(t *testing.T) {
-		// Instance method with RawID
-		idInstance, err := IDFor(ctx, IDParams{
-			Method: p.UserModal,
-			RawID:  true,
-		})
+	t.Run("both patterns work with ID", func(t *testing.T) {
+		// Instance method with ID
+		idInstance, err := ID(ctx, p.UserModal)
 		if err != nil {
-			t.Fatalf("IDFor with instance method and RawID failed: %v", err)
+			t.Fatalf("ID with instance method failed: %v", err)
 		}
 
-		// Method expression with RawID
-		idMethodExpr, err := IDFor(ctx, IDParams{
-			Method: TeamManagementViewTest.UserModal,
-			RawID:  true,
-		})
+		// Method expression with ID
+		idMethodExpr, err := ID(ctx, TeamManagementViewTest.UserModal)
 		if err != nil {
 			t.Fatalf("IDFor with method expression and RawID failed: %v", err)
 		}
@@ -762,7 +788,7 @@ func TestIDFor_InstanceMethodVsMethodExpression(t *testing.T) {
 
 		expected := "team-user-modal"
 		if idInstance != expected {
-			t.Errorf("IDFor() = %q, want %q", idInstance, expected)
+			t.Errorf("IDTarget() = %q, want %q", idInstance, expected)
 		}
 	})
 }
