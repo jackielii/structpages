@@ -342,19 +342,6 @@ func TestHTMXPageConfig(t *testing.T) {
 			},
 			expected: "TodoList",
 		},
-		{
-			name: "HTMX request with non-existent component falls back to Page",
-			headers: map[string]string{
-				"HX-Request": "true",
-				"HX-Target":  "index-nonexistent",
-			},
-			pageNode: &PageNode{
-				Name:       "Index",
-				Title:      "Index",
-				Components: map[string]reflect.Method{},
-			},
-			expected: "Page",
-		},
 	}
 
 	for _, tt := range tests {
@@ -364,27 +351,62 @@ func TestHTMXPageConfig(t *testing.T) {
 				req.Header.Set(key, value)
 			}
 
-			result, err := HTMXPageConfig(req, tt.pageNode)
+			target, err := HTMXRenderTarget(req, tt.pageNode)
 			if err != nil {
-				t.Errorf("HTMXPageConfig() unexpected error: %v", err)
+				t.Errorf("HTMXRenderTarget() unexpected error: %v", err)
+				return
+			}
+
+			// Extract component name from target
+			var result string
+			if mrt, ok := target.(*methodRenderTarget); ok {
+				result = mrt.name
+			} else {
+				t.Errorf("HTMXRenderTarget() returned unexpected target type: %T", target)
 				return
 			}
 
 			if result != tt.expected {
-				t.Errorf("HTMXPageConfig() = %q, want %q", result, tt.expected)
+				t.Errorf("HTMXRenderTarget() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestHTMXPageConfig_Default(t *testing.T) {
-	// Test that HTMXPageConfig is the default component selector
-	sp, _ := Mount(nil, struct{}{}, "/", "Test")
-	if sp.defaultComponentSelector == nil {
-		t.Error("Expected default component selector to be set")
+// Test that HTMXRenderTarget returns functionRenderTarget for non-matching components
+func TestHTMXRenderTarget_FunctionTarget(t *testing.T) {
+	pn := &PageNode{
+		Name:  "Index",
+		Title: "Index",
+		Components: map[string]reflect.Method{
+			"Page": {Name: "Page"},
+		},
 	}
 
-	// Verify it behaves like HTMXPageConfig
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "index-nonexistent")
+
+	target, err := HTMXRenderTarget(req, pn)
+	if err != nil {
+		t.Errorf("HTMXRenderTarget() unexpected error: %v", err)
+		return
+	}
+
+	// Should return functionRenderTarget for non-matching component
+	if _, ok := target.(*functionRenderTarget); !ok {
+		t.Errorf("HTMXRenderTarget() should return functionRenderTarget for non-matching component, got %T", target)
+	}
+}
+
+func TestHTMXRenderTarget_Default(t *testing.T) {
+	// Test that HTMXRenderTarget is the default target selector
+	sp, _ := Mount(nil, struct{}{}, "/", "Test")
+	if sp.targetSelector == nil {
+		t.Error("Expected target selector to be set")
+	}
+
+	// Verify it behaves like HTMXRenderTarget
 	pn := &PageNode{
 		Title: "Test",
 		Components: map[string]reflect.Method{
@@ -396,11 +418,18 @@ func TestHTMXPageConfig_Default(t *testing.T) {
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", "content")
 
-	result, err := sp.defaultComponentSelector(req, pn)
+	target, err := sp.targetSelector(req, pn)
 	if err != nil {
-		t.Errorf("default component selector error: %v", err)
+		t.Errorf("target selector error: %v", err)
 	}
-	if result != "Content" {
-		t.Errorf("expected default selector to return Content, got %q", result)
+
+	// Extract component name
+	mrt, ok := target.(*methodRenderTarget)
+	if !ok {
+		t.Errorf("expected methodRenderTarget, got %T", target)
+		return
+	}
+	if mrt.name != "Content" {
+		t.Errorf("expected default selector to return Content, got %q", mrt.name)
 	}
 }

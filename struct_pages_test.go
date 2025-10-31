@@ -653,9 +653,9 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 
-	// Create a dummy reflect.Method for RenderTarget
+	// Create a dummy RenderTarget
 	dummyMethod := reflect.Method{Name: "Page"}
-	compSel := &RenderTarget{selectedMethod: dummyMethod}
+	compSel := newMethodRenderTarget("Page", &dummyMethod)
 	_, err := sp.execProps(pn, req, nil, compSel)
 	if err == nil {
 		t.Error("Expected error from execProps")
@@ -979,7 +979,7 @@ func TestErrRenderComponent_Error(t *testing.T) {
 		t.Fatal("RenderComponent should return non-nil error")
 	}
 
-	expectedMsg := "should render component from method expression"
+	expectedMsg := "should render component from target"
 	if err.Error() != expectedMsg {
 		t.Errorf("Error() = %q, want %q", err.Error(), expectedMsg)
 	}
@@ -991,22 +991,24 @@ type testPageSelector struct{}
 func (testPageSelector) Page() component    { return testComponent{"page"} }
 func (testPageSelector) Content() component { return testComponent{"content"} }
 
-// TestWithDefaultComponentSelector tests the WithDefaultComponentSelector option
-func TestWithDefaultComponentSelector(t *testing.T) {
+// TestWithTargetSelector tests the WithTargetSelector option
+func TestWithTargetSelector(t *testing.T) {
 	type pages struct {
 		test testPageSelector `route:"/ Test"`
 	}
 
 	// Create selector that returns Content for HX-Request
-	selector := func(r *http.Request, pn *PageNode) (string, error) {
+	selector := func(r *http.Request, pn *PageNode) (RenderTarget, error) {
 		if r.Header.Get("HX-Request") == "true" {
-			return "Content", nil
+			method := pn.Components["Content"]
+			return newMethodRenderTarget("Content", &method), nil
 		}
-		return "Page", nil
+		method := pn.Components["Page"]
+		return newMethodRenderTarget("Page", &method), nil
 	}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector))
+	_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(selector))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -1154,8 +1156,8 @@ func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
 	if capturedErr == nil {
 		t.Error("Expected error to be captured")
 	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract method name") {
-		t.Errorf("Expected 'failed to extract method name' error, got: %v", capturedErr)
+	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "failed to extract method info") {
+		t.Errorf("Expected 'failed to extract method info' error, got: %v", capturedErr)
 	}
 }
 
@@ -1367,7 +1369,7 @@ func TestRenderTarget_Is_NoReceiver(t *testing.T) {
 	// Create a RenderTarget
 	pageType := reflect.TypeOf(renderTargetIsTestPage{})
 	method, _ := pageType.MethodByName("Page")
-	rt := &RenderTarget{selectedMethod: method}
+	rt := newMethodRenderTarget("Page", &method)
 
 	// Test with function that has no parameters (no receiver)
 	noReceiverFunc := func() component { return testComponent{"test"} }
@@ -1386,7 +1388,7 @@ func TestRenderTarget_Is_PointerReceiver(t *testing.T) {
 		t.Fatal("Could not find Content method")
 	}
 
-	rt := &RenderTarget{selectedMethod: method}
+	rt := newMethodRenderTarget("Content", &method)
 
 	// Test matching with pointer receiver method
 	if !rt.Is((*pointerReceiverPage).Content) {
@@ -1549,7 +1551,7 @@ func (propsOnlyPageWithTarget) TableView(props TableViewProps) component {
 	return testComponent{content: "Table View: " + props.ViewMode}
 }
 
-func (p propsOnlyPageWithTarget) Props(r *http.Request, target *RenderTarget) error {
+func (p propsOnlyPageWithTarget) Props(r *http.Request, target RenderTarget) error {
 	// This should not panic even though no component is selected yet
 	if target.Is(propsOnlyPageWithTarget.CardView) {
 		// This branch should not execute since no component is selected
@@ -1648,7 +1650,7 @@ func (serveHTTPWithRenderTarget) Content() component {
 	return testComponent{content: "Content"}
 }
 
-func (p serveHTTPWithRenderTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target *RenderTarget) {
+func (p serveHTTPWithRenderTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target RenderTarget) {
 	// Check which component is selected
 	if target.Is(serveHTTPWithRenderTarget.Content) {
 		_, _ = w.Write([]byte("ServeHTTP: Content selected"))
@@ -1675,7 +1677,7 @@ func (serveHTTPWithCustomDepsAndTarget) Content() component {
 }
 
 func (p serveHTTPWithCustomDepsAndTarget) ServeHTTP(
-	w http.ResponseWriter, r *http.Request, appCtx *AppContext, target *RenderTarget,
+	w http.ResponseWriter, r *http.Request, appCtx *AppContext, target RenderTarget,
 ) error {
 	// This mimics the real-world usage where ServeHTTP needs both custom deps and RenderTarget
 	if target.Is(serveHTTPWithCustomDepsAndTarget.Content) {
@@ -1694,17 +1696,19 @@ func TestServeHTTPWithCustomDepsAndRenderTarget(t *testing.T) {
 	}
 
 	// Custom selector that returns Content for HTMX requests
-	selector := func(r *http.Request, pn *PageNode) (string, error) {
+	selector := func(r *http.Request, pn *PageNode) (RenderTarget, error) {
 		if r.Header.Get("HX-Request") == "true" {
-			return "Content", nil
+			method := pn.Components["Content"]
+			return newMethodRenderTarget("Content", &method), nil
 		}
-		return "Page", nil
+		method := pn.Components["Page"]
+		return newMethodRenderTarget("Page", &method), nil
 	}
 
 	appCtx := &AppContext{UserID: "user123"}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector), WithArgs(appCtx))
+	_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(selector), WithArgs(appCtx))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -1744,7 +1748,7 @@ func TestServeHTTPWithCustomDepsAndRenderTarget(t *testing.T) {
 // Test page that uses ServeHTTP with RenderTarget but no components
 type serveHTTPNoComponentsWithTarget struct{}
 
-func (p serveHTTPNoComponentsWithTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target *RenderTarget) error {
+func (p serveHTTPNoComponentsWithTarget) ServeHTTP(w http.ResponseWriter, r *http.Request, target RenderTarget) error {
 	// RenderTarget should be available even with no components (will be empty)
 	if target == nil {
 		_, _ = w.Write([]byte("ERROR: target is nil"))
@@ -1785,15 +1789,17 @@ func TestServeHTTPWithRenderTarget(t *testing.T) {
 	}
 
 	// Custom selector that returns Content for HTMX requests
-	selector := func(r *http.Request, pn *PageNode) (string, error) {
+	selector := func(r *http.Request, pn *PageNode) (RenderTarget, error) {
 		if r.Header.Get("HX-Request") == "true" {
-			return "Content", nil
+			method := pn.Components["Content"]
+			return newMethodRenderTarget("Content", &method), nil
 		}
-		return "Page", nil
+		method := pn.Components["Page"]
+		return newMethodRenderTarget("Page", &method), nil
 	}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", WithDefaultComponentSelector(selector))
+	_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(selector))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}

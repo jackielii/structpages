@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	pcCtx        = ctxkey.New[*parseContext]("structpages.parseContext", nil)
-	urlParamsCtx = ctxkey.New[map[string]string]("structpages.urlParams", nil)
+	pcCtx          = ctxkey.New[*parseContext]("structpages.parseContext", nil)
+	urlParamsCtx   = ctxkey.New[map[string]string]("structpages.urlParams", nil)
+	currentPageCtx = ctxkey.New[*PageNode]("structpages.currentPage", nil)
 )
 
 // encodePathSegment converts a value to string and URL-encodes it for use in path segments.

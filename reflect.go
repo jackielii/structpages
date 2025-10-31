@@ -10,17 +10,19 @@ import (
 	"strings"
 )
 
-// methodInfo holds extracted information about a method expression
+// methodInfo holds extracted information about a method expression or function
 type methodInfo struct {
 	methodName       string
-	receiverType     reflect.Type // nil for bound methods
+	receiverType     reflect.Type // nil for bound methods and standalone functions
 	receiverTypeName string       // for bound methods
 	isBound          bool
+	isFunction       bool // true for standalone functions (not methods)
 }
 
 // extractMethodInfo extracts method information from either:
 // - Unbound method expressions: Type.Method or (*Type).Method
 // - Bound method values: instance.Method
+// - Standalone functions: packageName.FunctionName
 func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	v := reflect.ValueOf(methodExpr)
 	if v.Kind() != reflect.Func {
@@ -61,6 +63,22 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 			methodName:       methodName,
 			receiverTypeName: typeName,
 			isBound:          true,
+			isFunction:       false,
+		}, nil
+	}
+
+	// Check if this is a standalone function (not a method)
+	// Standalone functions have the pattern: "package.FunctionName"
+	// Methods have the pattern: "package.(*Type).Method" or "package.Type.Method"
+	isStandaloneFunc := !isMethodPattern(fullName)
+
+	if isStandaloneFunc {
+		// It's a standalone function, not a method
+		return &methodInfo{
+			methodName:   methodName,
+			receiverType: nil, // No receiver type
+			isBound:      false,
+			isFunction:   true,
 		}, nil
 	}
 
@@ -78,6 +96,7 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 		methodName:   methodName,
 		receiverType: receiverType,
 		isBound:      false,
+		isFunction:   false,
 	}, nil
 }
 
@@ -124,6 +143,35 @@ func extractMethodNameFromFullName(fullName string) string {
 	}
 
 	return methodName
+}
+
+// isMethodPattern checks if a full function name represents a method (vs standalone function).
+// Method patterns: "package.(*Type).Method" or "package.Type.Method"
+// Function patterns: "package.FunctionName" or "package/subpackage.FunctionName"
+func isMethodPattern(fullName string) bool {
+	// Find the last package separator
+	lastSlash := strings.LastIndex(fullName, "/")
+	remainder := fullName
+	if lastSlash != -1 {
+		remainder = fullName[lastSlash+1:]
+	}
+
+	// Skip the package name (first component before dot)
+	firstDot := strings.Index(remainder, ".")
+	if firstDot == -1 {
+		return false // No dot means it's not even a valid function name
+	}
+	remainder = remainder[firstDot+1:]
+
+	// Check for method patterns:
+	// - "(*Type).Method" (pointer receiver)
+	// - "Type.Method" (value receiver, has another dot)
+	if strings.HasPrefix(remainder, "(*") {
+		return true // Pointer receiver method pattern
+	}
+
+	// Check if there's another dot (indicates Type.Method pattern)
+	return strings.Contains(remainder, ".")
 }
 
 // extractReceiverTypeNameFromFuncName extracts the receiver type name from a function name.
