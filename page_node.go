@@ -12,16 +12,17 @@ import (
 // It contains metadata about the page including its route, title, and registered methods.
 // PageNodes form a tree structure with parent-child relationships representing nested routes.
 type PageNode struct {
-	Name        string
-	Title       string
-	Method      string
-	Route       string
-	Value       reflect.Value
-	Props       map[string]reflect.Method
-	Components  map[string]reflect.Method
-	Middlewares *reflect.Method
-	Parent      *PageNode
-	Children    []*PageNode
+	Name          string
+	Title         string
+	Method        string
+	Route         string
+	routeSegments []segment // Pre-parsed route segments for performance
+	Value         reflect.Value
+	Props         map[string]reflect.Method
+	Components    map[string]reflect.Method
+	Middlewares   *reflect.Method
+	Parent        *PageNode
+	Children      []*PageNode
 }
 
 // FullRoute returns the complete route path for this page node,
@@ -32,6 +33,19 @@ func (pn *PageNode) FullRoute() string {
 		return pn.Route
 	}
 	return path.Join(pn.Parent.FullRoute(), pn.Route)
+}
+
+// getRouteSegments returns pre-parsed route segments, parsing on-demand if not cached
+func (pn *PageNode) getRouteSegments() []segment {
+	if pn.routeSegments != nil {
+		// Return a copy to avoid mutations
+		result := make([]segment, len(pn.routeSegments))
+		copy(result, pn.routeSegments)
+		return result
+	}
+	// Fallback: parse on demand (shouldn't normally happen)
+	segments, _ := parseSegments(pn.FullRoute())
+	return segments
 }
 
 // String returns a human-readable representation of the PageNode,

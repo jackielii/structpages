@@ -47,18 +47,14 @@ func extractURLParams(next http.Handler, node *PageNode) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		params := make(map[string]string)
 
-		// Extract path values from the request
-		pattern := r.Pattern
-		if pattern != "" {
-			// Parse the pattern to find parameter names
-			segments, _ := parseSegments(pattern)
-			for _, seg := range segments {
-				if seg.param {
-					// Get the actual value from the request
-					value := r.PathValue(seg.name)
-					if value != "" {
-						params[seg.name] = value
-					}
+		// Use pre-parsed segments from PageNode (already parsed at Mount time)
+		segments := node.getRouteSegments()
+		for _, seg := range segments {
+			if seg.param {
+				// Get the actual value from the request
+				value := r.PathValue(seg.name)
+				if value != "" {
+					params[seg.name] = value
 				}
 			}
 		}
@@ -122,7 +118,15 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 //
 //nolint:gocognit,gocyclo // This function handles multiple cases for flexible argument passing
 func formatPathSegments(ctx context.Context, pattern string, args ...any) (string, error) {
-	segments, err := parseSegments(pattern)
+	// Use cached segment parsing if parseContext is available
+	pc := pcCtx.Value(ctx)
+	var segments []segment
+	var err error
+	if pc != nil {
+		segments, err = pc.getSegmentsCached(pattern)
+	} else {
+		segments, err = parseSegments(pattern)
+	}
 	if err != nil {
 		return pattern, fmt.Errorf("pattern %s: %w", pattern, err)
 	}

@@ -7,15 +7,21 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 )
 
 type parseContext struct {
-	root *PageNode
-	args argRegistry
+	root           *PageNode
+	args           argRegistry
+	segmentCache   map[string][]segment
+	segmentCacheMu sync.RWMutex
 }
 
 func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
-	pc := &parseContext{args: make(map[reflect.Type]reflect.Value)}
+	pc := &parseContext{
+		args:         make(map[reflect.Type]reflect.Value),
+		segmentCache: make(map[string][]segment),
+	}
 	for _, v := range args {
 		if err := pc.args.addArg(v); err != nil {
 			return nil, fmt.Errorf("error adding argument to registry: %w", err)
@@ -352,6 +358,36 @@ func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 		}
 	}
 	return nil, fmt.Errorf("no page found with name %q", ref)
+}
+
+// getSegmentsCached returns cached segments for a pattern, parsing and caching if not already cached
+// Returns a copy of the cached segments to avoid mutation issues
+func (p *parseContext) getSegmentsCached(pattern string) ([]segment, error) {
+	// Try read lock first for cache hit
+	p.segmentCacheMu.RLock()
+	if cached, ok := p.segmentCache[pattern]; ok {
+		p.segmentCacheMu.RUnlock()
+		// Return a copy to avoid mutations affecting the cache
+		result := make([]segment, len(cached))
+		copy(result, cached)
+		return result, nil
+	}
+	p.segmentCacheMu.RUnlock()
+
+	// Cache miss - parse and store
+	segments, err := parseSegments(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	p.segmentCacheMu.Lock()
+	p.segmentCache[pattern] = segments
+	p.segmentCacheMu.Unlock()
+
+	// Return a copy to avoid mutations affecting the cache
+	result := make([]segment, len(segments))
+	copy(result, segments)
+	return result, nil
 }
 
 func parseTag(route string) (method, path, title string) {

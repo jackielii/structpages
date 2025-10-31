@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // methodInfo holds extracted information about a method expression or function
@@ -19,18 +20,29 @@ type methodInfo struct {
 	isFunction       bool // true for standalone functions (not methods)
 }
 
+// Global cache for method info to avoid repeated runtime.FuncForPC calls
+// Key: function pointer (uintptr), Value: *methodInfo
+var methodInfoCache sync.Map
+
 // extractMethodInfo extracts method information from either:
 // - Unbound method expressions: Type.Method or (*Type).Method
 // - Bound method values: instance.Method
 // - Standalone functions: packageName.FunctionName
+//
+// Results are cached by function pointer for performance.
 func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	v := reflect.ValueOf(methodExpr)
 	if v.Kind() != reflect.Func {
 		return nil, errors.New("not a function")
 	}
 
-	// Get function metadata
+	// Check cache first
 	funcPC := v.Pointer()
+	if cached, ok := methodInfoCache.Load(funcPC); ok {
+		return cached.(*methodInfo), nil
+	}
+
+	// Cache miss - extract method info
 	fn := runtime.FuncForPC(funcPC)
 	if fn == nil {
 		return nil, errors.New("cannot get function info")
@@ -52,51 +64,52 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	// Method pattern in the name: "package.(*Type).Method-fm"
 	isBound := strings.Contains(fullName, "-fm")
 
+	var info *methodInfo
+
 	if isBound {
 		// Extract receiver type name from function name
 		typeName := extractReceiverTypeNameFromFuncName(fullName)
 		if typeName == "" {
 			return nil, fmt.Errorf("cannot extract receiver type from bound method: %s", fullName)
 		}
-		return &methodInfo{
+		info = &methodInfo{
 			methodName:       methodName,
 			receiverTypeName: typeName,
 			isBound:          true,
 			isFunction:       false,
-		}, nil
-	}
-
-	// Check if this is a standalone function (not a method)
-	// Standalone functions have the pattern: "package.FunctionName"
-	// Methods have the pattern: "package.(*Type).Method" or "package.Type.Method"
-	isStandaloneFunc := !isMethodPattern(fullName)
-
-	if isStandaloneFunc {
+		}
+	} else if isStandaloneFunc := !isMethodPattern(fullName); isStandaloneFunc {
 		// It's a standalone function, not a method
-		return &methodInfo{
+		// Standalone functions have the pattern: "package.FunctionName"
+		// Methods have the pattern: "package.(*Type).Method" or "package.Type.Method"
+		info = &methodInfo{
 			methodName:   methodName,
 			receiverType: nil, // No receiver type
 			isBound:      false,
 			isFunction:   true,
-		}, nil
+		}
+	} else {
+		// Unbound method expression - extract receiver from first parameter
+		if funcType.NumIn() == 0 {
+			return nil, errors.New("failed to extract receiver type from method expression")
+		}
+
+		receiverType := funcType.In(0)
+		if receiverType.Kind() == reflect.Pointer {
+			receiverType = receiverType.Elem()
+		}
+
+		info = &methodInfo{
+			methodName:   methodName,
+			receiverType: receiverType,
+			isBound:      false,
+			isFunction:   false,
+		}
 	}
 
-	// Unbound method expression - extract receiver from first parameter
-	if funcType.NumIn() == 0 {
-		return nil, errors.New("failed to extract receiver type from method expression")
-	}
-
-	receiverType := funcType.In(0)
-	if receiverType.Kind() == reflect.Pointer {
-		receiverType = receiverType.Elem()
-	}
-
-	return &methodInfo{
-		methodName:   methodName,
-		receiverType: receiverType,
-		isBound:      false,
-		isFunction:   false,
-	}, nil
+	// Cache the result before returning
+	methodInfoCache.Store(funcPC, info)
+	return info, nil
 }
 
 // extractMethodName extracts the method name from a method expression using reflection.
