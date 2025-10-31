@@ -290,7 +290,9 @@ func (u userManager) ServeHTTP(w http.ResponseWriter, r *http.Request,
 
 // Pass dependencies when mounting pages
 mux := http.NewServeMux()
-sp, err := structpages.Mount(mux, pages{}, "/", "App", db, logger)
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
+    structpages.WithArgs(db, logger),
+)
 if err != nil {
     log.Fatal(err)
 }
