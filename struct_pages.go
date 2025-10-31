@@ -457,7 +457,10 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 		})
 	}
 
-	return nil
+	// unlikely case: ServeHTTP exists but does not match any known signature
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sp.onError(w, r, fmt.Errorf("page %s has ServeHTTP method with unsupported signature", pn.Name))
+	})
 }
 
 func (sp *StructPages) execProps(pn *PageNode,
