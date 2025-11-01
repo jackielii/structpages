@@ -231,7 +231,7 @@ func TestID_Errors(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid method expression", func(t *testing.T) {
+	t.Run("plain string is treated as literal ID", func(t *testing.T) {
 		// Set up page tree
 		type testPages struct {
 			test testPageWithMethods `route:"/ Test"`
@@ -244,10 +244,77 @@ func TestID_Errors(t *testing.T) {
 
 		ctx := pcCtx.WithValue(context.Background(), pc)
 
-		// Pass a non-function value
-		_, err = IDTarget(ctx, "not a function")
-		if err == nil {
-			t.Error("Expected error for non-function input")
+		stringTests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			{
+				name:     "simple string without #",
+				input:    "my-custom-target",
+				expected: "my-custom-target",
+			},
+			{
+				name:     "string with # prefix",
+				input:    "#my-custom-id",
+				expected: "#my-custom-id",
+			},
+			{
+				name:     "empty string",
+				input:    "",
+				expected: "",
+			},
+			{
+				name:     "string with numbers",
+				input:    "item-123",
+				expected: "item-123",
+			},
+			{
+				name:     "string with underscores",
+				input:    "my_custom_id",
+				expected: "my_custom_id",
+			},
+			{
+				name:     "camelCase string",
+				input:    "myCustomTarget",
+				expected: "myCustomTarget",
+			},
+			{
+				name:     "body",
+				input:    "body",
+				expected: "body",
+			},
+			{
+				name:     "CSS selector with #",
+				input:    "#outer-div",
+				expected: "#outer-div",
+			},
+			{
+				name:     "single character",
+				input:    "a",
+				expected: "a",
+			},
+		}
+
+		for _, tt := range stringTests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Both ID and IDTarget return the string as-is
+				result, err := IDTarget(ctx, tt.input)
+				if err != nil {
+					t.Errorf("Unexpected error for plain string: %v", err)
+				}
+				if result != tt.expected {
+					t.Errorf("IDTarget(%q) = %q, want %q", tt.input, result, tt.expected)
+				}
+
+				result, err = ID(ctx, tt.input)
+				if err != nil {
+					t.Errorf("Unexpected error for plain string: %v", err)
+				}
+				if result != tt.expected {
+					t.Errorf("ID(%q) = %q, want %q", tt.input, result, tt.expected)
+				}
+			})
 		}
 	})
 }
@@ -437,6 +504,83 @@ func TestIDFor_withRef(t *testing.T) {
 	})
 }
 
+// TestStringVsRef tests the difference between plain strings and Ref types
+func TestStringVsRef(t *testing.T) {
+	// Set up page tree with multiple pages
+	type testPages struct {
+		teamManagement TeamManagementViewTest `route:"/team Team"`
+	}
+
+	pc, err := parsePageTree("/", &testPages{})
+	if err != nil {
+		t.Fatalf("parsePageTree failed: %v", err)
+	}
+
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	t.Run("plain string returns literal ID", func(t *testing.T) {
+		// Plain string "UserList" should be returned as-is
+		id, err := IDTarget(ctx, "UserList")
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		// Should return exactly what was passed in
+		if id != "UserList" {
+			t.Errorf("IDTarget(\"UserList\") = %q, want %q", id, "UserList")
+		}
+	})
+
+	t.Run("Ref type performs dynamic lookup", func(t *testing.T) {
+		// Ref("UserList") should lookup the method and build ID from page name
+		id, err := IDTarget(ctx, Ref("UserList"))
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		// Should return the dynamically built ID
+		if id != "#team-management-user-list" {
+			t.Errorf("IDTarget(Ref(\"UserList\")) = %q, want %q", id, "#team-management-user-list")
+		}
+	})
+
+	t.Run("plain string vs Ref produce different results", func(t *testing.T) {
+		stringID, _ := IDTarget(ctx, "UserList")
+		refID, _ := IDTarget(ctx, Ref("UserList"))
+
+		if stringID == refID {
+			t.Errorf("Plain string and Ref should produce different IDs: string=%q, ref=%q", stringID, refID)
+		}
+
+		// Plain string should be returned as-is
+		if stringID != "UserList" {
+			t.Errorf("Plain string ID = %q, want %q", stringID, "UserList")
+		}
+
+		// Ref should be dynamic lookup
+		if refID != "#team-management-user-list" {
+			t.Errorf("Ref ID = %q, want %q", refID, "#team-management-user-list")
+		}
+	})
+
+	t.Run("plain string never errors for non-existent methods", func(t *testing.T) {
+		// Plain string "NonExistent" should work (it's returned as-is)
+		id, err := IDTarget(ctx, "NonExistent")
+		if err != nil {
+			t.Errorf("Unexpected error for plain string: %v", err)
+		}
+		if id != "NonExistent" {
+			t.Errorf("IDTarget(\"NonExistent\") = %q, want %q", id, "NonExistent")
+		}
+	})
+
+	t.Run("Ref errors for non-existent methods", func(t *testing.T) {
+		// Ref("NonExistent") should error because method doesn't exist
+		_, err := IDTarget(ctx, Ref("NonExistent"))
+		if err == nil {
+			t.Error("Expected error for non-existent method with Ref")
+		}
+	})
+}
+
 // TestExtractMethodName tests the extractMethodName helper function
 func TestExtractMethodName(t *testing.T) {
 	t.Run("valid method expression", func(t *testing.T) {
@@ -557,7 +701,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 		}
 	})
 
-	t.Run("non-function method expression", func(t *testing.T) {
+	t.Run("non-function non-string types should error", func(t *testing.T) {
 		// Set up a proper context with parseContext
 		mux := http.NewServeMux()
 		sp, err := Mount(mux, &idForErrorTestPage{}, "/", "Test")
@@ -568,13 +712,25 @@ func TestIDFor_ErrorCases(t *testing.T) {
 		// Create context with parseContext
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
-		// Call IDFor with non-function
-		_, err = IDTarget(ctx, "not a function")
-		if err == nil {
-			t.Error("Expected error for non-function")
+		// Strings should work (returned as-is)
+		result, err := IDTarget(ctx, "my-literal-id")
+		if err != nil {
+			t.Errorf("Unexpected error for string: %v", err)
 		}
-		if err != nil && !strings.Contains(err.Error(), "not a function") {
-			t.Errorf("Expected 'not a function' error, got: %v", err)
+		if result != "my-literal-id" {
+			t.Errorf("IDTarget() = %q, want %q", result, "my-literal-id")
+		}
+
+		// But other non-function types should error
+		_, err = IDTarget(ctx, 123)
+		if err == nil {
+			t.Error("Expected error for integer")
+		}
+		if err != nil && !strings.Contains(err.Error(), "unsupported type") {
+			t.Errorf("Expected 'unsupported type' error, got: %v", err)
+		}
+		if err != nil && !strings.Contains(err.Error(), "int") {
+			t.Errorf("Expected error to mention the type 'int', got: %v", err)
 		}
 	})
 

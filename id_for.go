@@ -11,6 +11,13 @@ import (
 // ID generates a raw HTML ID for a component method (without "#" prefix).
 // Use this for HTML id attributes.
 //
+// Parameters:
+//   - ctx: Context containing parseContext (required for method expressions and Ref)
+//   - v: One of:
+//   - Method expression (p.UserList) - generates ID from page and method name
+//   - Ref type (structpages.Ref("PageName.MethodName")) - looks up page/method dynamically
+//   - Plain string ("my-custom-id") - returned as-is
+//
 // Example:
 //
 //	<div id={ structpages.ID(ctx, p.UserList) }>
@@ -18,6 +25,9 @@ import (
 //
 //	<div id={ structpages.ID(ctx, UserStatsWidget) }>
 //	// → <div id="user-stats-widget"> (no page prefix for standalone functions)
+//
+//	<div id={ structpages.ID(ctx, "my-custom-id") }>
+//	// → <div id="my-custom-id">
 //
 // Returns an error if parseContext is not found in the provided context.
 func ID(ctx context.Context, v any) (string, error) {
@@ -33,6 +43,14 @@ func ID(ctx context.Context, v any) (string, error) {
 // IDTarget generates a CSS selector (with "#" prefix) for a component method.
 // Use this for HTMX hx-target attributes.
 //
+// Parameters:
+//
+//   - ctx: Context containing parseContext (required for method expressions and Ref)
+//   - v: One of:
+//   - Method expression (p.UserList) - generates selector from page and method name
+//   - Ref type (structpages.Ref("PageName.MethodName")) - looks up page/method dynamically
+//   - string ("body" or "#my-custom-id") - returned as-is
+//
 // Example:
 //
 //	<button hx-target={ structpages.IDTarget(ctx, p.UserList) }>
@@ -40,6 +58,9 @@ func ID(ctx context.Context, v any) (string, error) {
 //
 //	<button hx-target={ structpages.IDTarget(ctx, UserStatsWidget) }>
 //	// → <button hx-target="#user-stats-widget"> (no page prefix for standalone functions)
+//
+//	<button hx-target={ structpages.IDTarget(ctx, "body") }>
+//	// → <button hx-target="body">
 //
 // Returns an error if parseContext is not found in the provided context.
 func IDTarget(ctx context.Context, v any) (string, error) {
@@ -59,6 +80,17 @@ func idFor(pc *parseContext, v any, rawID bool) (string, error) {
 	// Handle Ref type for dynamic method references
 	if ref, ok := methodExpr.(Ref); ok {
 		return idForRef(pc, string(ref), rawID)
+	}
+
+	// Handle plain string as literal ID - return as-is
+	if str, ok := methodExpr.(string); ok {
+		return str, nil
+	}
+
+	// Validate that we have a method expression (function) before extracting method info
+	rv := reflect.ValueOf(methodExpr)
+	if rv.Kind() != reflect.Func {
+		return "", fmt.Errorf("unsupported type %T: expected method expression, Ref, or string", methodExpr)
 	}
 
 	// Extract all method info (handles methods and standalone functions)
