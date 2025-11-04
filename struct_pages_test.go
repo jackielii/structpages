@@ -861,6 +861,51 @@ func TestWithWarnEmptyRoute_DefaultWarning(t *testing.T) {
 	}
 }
 
+// Test type for Props-only page (no Page or ServeHTTP)
+type propsOnlyPageForWarnTest struct{}
+
+func (propsOnlyPageForWarnTest) Props(r *http.Request) error {
+	return RenderComponent(testComponent{content: "rendered from props"})
+}
+
+// Test that pages with Props-only (no Page or ServeHTTP) don't trigger warning
+func TestWithWarnEmptyRoute_PropsOnly(t *testing.T) {
+	var warnMessages []string
+
+	// Custom warn function that captures messages
+	customWarn := func(pn *PageNode) {
+		warnMessages = append(warnMessages, fmt.Sprintf("Warning: %s has no handler or children", pn.Name))
+	}
+
+	type pages struct {
+		PropsOnly propsOnlyPageForWarnTest `route:"/props Props"`
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test", WithWarnEmptyRoute(customWarn))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Should have NO warnings - Props is a valid handler
+	if len(warnMessages) != 0 {
+		t.Errorf("Expected 0 warning messages for Props-only page, got %d: %v", len(warnMessages), warnMessages)
+	}
+
+	// Test that the Props-only page works
+	req := httptest.NewRequest(http.MethodGet, "/props", http.NoBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", rec.Code)
+	}
+
+	if rec.Body.String() != "rendered from props" {
+		t.Errorf("Expected body 'rendered from props', got %q", rec.Body.String())
+	}
+}
+
 // Test types for URLFor wrapper test
 type homePageURLFor struct{}
 
