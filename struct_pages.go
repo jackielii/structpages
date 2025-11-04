@@ -298,7 +298,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 	if h := sp.asHandler(page); h != nil {
 		return h
 	}
-	if len(page.Components) == 0 {
+	if len(page.Components) == 0 && len(page.Props) == 0 {
 		return nil
 	}
 
