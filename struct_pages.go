@@ -352,12 +352,31 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 		}
 
 		// If we get here, target is not a method (could be function or custom)
+		// and default hx-target didn't match any component
 		// Props should have called RenderComponent
 
-		// Provide better error message for function targets
 		if frt, ok := target.(*functionRenderTarget); ok {
+			// Check if this is a plain string ID (not a matched function)
+			// If funcValue is not valid, it means Props never called Is() with a matching function
+			// This indicates a static ID like "body" or "comments-list" that didn't match any component method
+			if !frt.funcValue.IsValid() {
+				// Check if page has a Page() method to fallback to
+				// if the component method exists and Props returns values that fit the method's arguments, allow it
+				if pageMethod, hasPage := page.Components["Page"]; hasPage && pageMethod.Func.IsValid() {
+					// Fallback to Page() - useful for static IDs
+					comp, err := sp.pc.callComponentMethod(page, &pageMethod, props...)
+					if err != nil {
+						sp.onError(w, r, fmt.Errorf("error calling Page() fallback for %s: %w", page.Name, err))
+						return
+					}
+					sp.render(w, r, comp)
+					return
+				}
+			}
+
 			// Convert kebab-case ID to PascalCase function name
 			funcName := kebabToPascal(frt.hxTarget)
+
 			sp.onError(w, r, fmt.Errorf(
 				"page %s: Component function '%s' is targeted but not handled. "+
 					"check target.Is(%s) and call RenderComponent(target, args...). "+
