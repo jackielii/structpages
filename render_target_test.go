@@ -385,6 +385,7 @@ func TestMethodRenderTarget_Is_PointerReceiverUnbound(t *testing.T) {
 }
 
 // Page with Props that doesn't handle function targets
+// This is valid: use doesn't care about what target is selected, e.g. partial pages for lazy load
 type forgotRenderComponentPage struct{}
 
 func (forgotRenderComponentPage) Page(data string) component {
@@ -404,18 +405,12 @@ func TestRenderTarget_PropsForgetRenderComponent(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	var capturedErr error
-	sp, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}))
+	_, err := Mount(mux, &pages{}, "/", "Test")
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
-	_ = sp
 
-	// Make HTMX request targeting a standalone function
+	// Make HTMX request targeting a standalone function ID
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", "standalone-widget") // This will create a functionRenderTarget
@@ -423,19 +418,15 @@ func TestRenderTarget_PropsForgetRenderComponent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	// Should get error because Props didn't call RenderComponent
-	if capturedErr == nil {
-		t.Error("Expected error when Props doesn't use RenderComponent for function target")
+	// With the new behavior, pages with only Page() fallback for any static ID
+	// This is more intuitive than erroring
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	// Verify new improved error message
-	if capturedErr != nil {
-		errMsg := capturedErr.Error()
-		if !strings.Contains(errMsg, "Component function 'StandaloneWidget' is targeted but not handled") {
-			t.Errorf("Expected improved error message about StandaloneWidget, got: %v", errMsg)
-		}
-		if !strings.Contains(errMsg, "target.Is(StandaloneWidget)") {
-			t.Errorf("Expected error to mention target.Is(StandaloneWidget), got: %v", errMsg)
-		}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Page: data") {
+		t.Errorf("Expected Page() to be rendered with fallback, got: %q", body)
 	}
 }
 
@@ -522,4 +513,267 @@ func TestDebugPointerUnwrapping(t *testing.T) {
 		t.Logf("  receiverType.Kind(): %v (Pointer=%v)",
 			info.receiverType.Kind(), info.receiverType.Kind() == reflect.Pointer)
 	}
+}
+
+// Page with only Props and Page methods - no specific component methods
+type pageWithOnlyPropsAndPage struct{}
+
+func (pageWithOnlyPropsAndPage) Page() component {
+	return testComponent{content: "Full Page Rendered"}
+}
+
+func (p pageWithOnlyPropsAndPage) Props(r *http.Request, target RenderTarget) error {
+	// Simple Props that doesn't handle any specific targets
+	// Just lets the framework render whatever is selected
+	return nil
+}
+
+func TestRenderTarget_PageFallbackWithStaticID(t *testing.T) {
+	// When using a static ID with hx-target that doesn't match any component method,
+	// the framework should fallback to calling Page() instead of erroring
+	//
+	// Example:
+	//   <div hx-target="comments-list" hx-get={urlfor(ListCommentsPartial{})} ...
+	// Where ListCommentsPartial only has Props and Page methods
+
+	type pages struct {
+		pageWithOnlyPropsAndPage `route:"/ CommentsPartial"`
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &pages{}, "/", "Test")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		headers        map[string]string
+		expectedBody   string
+		expectedStatus int
+	}{
+		{
+			name:    "Non-HTMX request renders Page",
+			headers: map[string]string{
+				// No HTMX headers
+			},
+			expectedBody:   "Full Page Rendered",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "HTMX request with static ID should fallback to Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "comments-list", // Static ID that doesn't match any method
+			},
+			expectedBody:   "Full Page Rendered",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "HTMX request with another static ID should fallback to Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "body", // Another static ID
+			},
+			expectedBody:   "Full Page Rendered",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name: "HTMX request with random ID should fallback to Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "some-random-div-id",
+			},
+			expectedBody:   "Full Page Rendered",
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			for key, value := range tt.headers {
+				req.Header.Set(key, value)
+			}
+
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d: %s", tt.expectedStatus, rec.Code, rec.Body.String())
+			}
+
+			if tt.expectedStatus == http.StatusOK {
+				body := rec.Body.String()
+				if !strings.Contains(body, tt.expectedBody) {
+					t.Errorf("expected body to contain %q, got %q", tt.expectedBody, body)
+				}
+			}
+		})
+	}
+}
+
+// Page with multiple component methods - should NOT fallback
+type pageWithMultipleComponents struct{}
+
+func (pageWithMultipleComponents) Page() component {
+	return testComponent{content: "Page"}
+}
+
+func (pageWithMultipleComponents) UserList() component {
+	return testComponent{content: "UserList"}
+}
+
+func (p pageWithMultipleComponents) Props(r *http.Request, target RenderTarget) error {
+	// Intentionally doesn't handle any targets
+	return nil
+}
+
+// Page with NO Page() method
+type pageWithoutPageMethod struct{}
+
+func (pageWithoutPageMethod) SomeComponent() component {
+	return testComponent{content: "SomeComponent"}
+}
+
+func (p pageWithoutPageMethod) Props(r *http.Request, target RenderTarget) error {
+	return nil
+}
+
+func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
+	t.Run("page with multiple components should select componnetnt", func(t *testing.T) {
+		type pages struct {
+			pageWithMultipleComponents `route:"/ MultiComponent"`
+		}
+
+		mux := http.NewServeMux()
+		_, err := Mount(mux, &pages{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "user-list")
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		// Even with multiple components, if it's a static ID (not matched),
+		// fallback to Page() if the Props return values fit Page()'s signature
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200 status, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		body := rec.Body.String()
+		if !strings.Contains(body, "UserList") {
+			t.Errorf("Expected Page() to be rendered with UserList, got: %q", body)
+		}
+	})
+
+	t.Run("page with multiple components can still fallback to Page", func(t *testing.T) {
+		type pages struct {
+			pageWithMultipleComponents `route:"/ MultiComponent"`
+		}
+
+		mux := http.NewServeMux()
+		_, err := Mount(mux, &pages{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "random-static-id")
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		// Even with multiple components, if it's a static ID (not matched),
+		// fallback to Page() if the Props return values fit Page()'s signature
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected 200 status, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		body := rec.Body.String()
+		if !strings.Contains(body, "Page") {
+			t.Errorf("Expected Page() to be rendered with fallback, got: %q", body)
+		}
+	})
+
+	t.Run("page without Page() method should error", func(t *testing.T) {
+		type pages struct {
+			pageWithoutPageMethod `route:"/ NoPage"`
+		}
+
+		mux := http.NewServeMux()
+		var capturedErr error
+		_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+			capturedErr = err
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}))
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "random-static-id")
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		// Should error because there's no Page() to fallback to
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("Expected 500 status, got %d", rec.Code)
+		}
+
+		if capturedErr == nil {
+			t.Error("Expected error for page without Page() method")
+		}
+
+		if capturedErr != nil && !strings.Contains(capturedErr.Error(), "is targeted but not handled") {
+			t.Errorf("Expected helpful error message, got: %v", capturedErr)
+		}
+	})
+
+	t.Run("fallback works with different static IDs", func(t *testing.T) {
+		type pages struct {
+			pageWithOnlyPropsAndPage `route:"/ Simple"`
+		}
+
+		mux := http.NewServeMux()
+		_, err := Mount(mux, &pages{}, "/", "Test")
+		if err != nil {
+			t.Fatalf("Mount failed: %v", err)
+		}
+
+		testCases := []string{
+			"body",
+			"#main-content",
+			"comments-section",
+			"user-profile-123",
+			"data-table",
+		}
+
+		for _, targetID := range testCases {
+			t.Run("target="+targetID, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+				req.Header.Set("HX-Request", "true")
+				req.Header.Set("HX-Target", targetID)
+
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+
+				if rec.Code != http.StatusOK {
+					t.Errorf("Expected 200 for target %q, got %d", targetID, rec.Code)
+				}
+
+				body := rec.Body.String()
+				if !strings.Contains(body, "Full Page Rendered") {
+					t.Errorf("Expected Page() fallback for target %q, got: %q", targetID, body)
+				}
+			})
+		}
+	})
 }

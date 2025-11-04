@@ -1373,14 +1373,8 @@ func (p pageWithStandaloneFunc) Props(r *http.Request) (pageWithStandaloneFuncPr
 // 3. Props method doesn't check target.Is() for the standalone function
 // 4. Framework tries to call the function but doesn't have the right args
 func TestStandaloneFunctionHTMXTarget_NoTargetIsCheck(t *testing.T) {
-	var capturedErr error
-
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pageWithStandaloneFunc{}, "/test", "Test",
-		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-			capturedErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}))
+	sp, err := Mount(mux, &pageWithStandaloneFunc{}, "/test", "Test")
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -1401,42 +1395,19 @@ func TestStandaloneFunctionHTMXTarget_NoTargetIsCheck(t *testing.T) {
 
 	mux.ServeHTTP(rec, req)
 
-	// Should return 500 with helpful error message
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("Expected 500 status, got %d", rec.Code)
+	// With the new behavior, pages with only Page() fallback for any static ID
+	// This is more intuitive - Props doesn't need to handle every possible target
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected 200 status, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// Verify error was captured and provides helpful guidance
-	if capturedErr == nil {
-		t.Fatal("Expected error to be captured")
+	body := rec.Body.String()
+	if !strings.Contains(body, "Page: default message") {
+		t.Errorf("Expected Page() to be rendered with fallback, got: %q", body)
 	}
 
-	errMsg := capturedErr.Error()
-	t.Logf("Error message: %s", errMsg)
-
-	// Check that error message:
-	// 1. Mentions "Component function"
-	// 2. Uses the actual function name (StandaloneWidgetFunc) not kebab-case
-	// 3. Provides the exact code to check: target.Is(StandaloneWidgetFunc)
-	// 4. Mentions RenderComponent
-	requiredStrings := []string{
-		"Component function",
-		"StandaloneWidgetFunc",
-		"is targeted but not handled",
-		"target.Is(StandaloneWidgetFunc)",
-		"RenderComponent(target, args...)",
-	}
-
-	for _, required := range requiredStrings {
-		if !strings.Contains(errMsg, required) {
-			t.Errorf("Error message should contain '%s', got: %s", required, errMsg)
-		}
-	}
-
-	// Should NOT contain kebab-case ID in the helpful part (only in page name context)
-	if strings.Contains(errMsg, "target.Is(standalone-widget-func)") {
-		t.Error("Error message should use PascalCase function name, not kebab-case ID")
-	}
+	// The old behavior expected an error, but the new behavior is more flexible:
+	// Pages with only Page() can handle any target ID without explicit target.Is() checks
 }
 
 // TestRenderComponent_StandaloneFunctionInsufficientArgs tests what happens when
