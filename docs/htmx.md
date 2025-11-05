@@ -1,6 +1,6 @@
 # HTMX Integration
 
-Structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. This makes `IDFor` work seamlessly with HTMX partial rendering out of the box.
+Structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. This makes `ID` and `IDTarget` work seamlessly with HTMX partial rendering out of the box.
 
 ### How It Works
 
@@ -16,16 +16,16 @@ For example:
 - `HX-Target: "dashboard-page-user-stats-widget"` → calls `UserStatsWidget` standalone function
 - No HX-Target or non-existent component → falls back to `Page()` method
 
-This works automatically with `IDFor`:
+This works automatically with `ID` and `IDTarget`:
 
 ```go
 // In your template
-<div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.TodoList, RawID: true}) }>
+<div id={ structpages.ID(ctx, index.TodoList) }>
     @p.TodoList()
 </div>
 
 // In HTMX attributes
-hx-target={ structpages.IDFor(ctx, index.TodoList) }  // Generates "#index-todo-list"
+hx-target={ structpages.IDTarget(ctx, index.TodoList) }  // Generates "#index-todo-list"
 ```
 
 The HTMX request will automatically extract the component name from the target ID and render just that component.
@@ -104,7 +104,7 @@ templ (p index) Page(props IndexProps) {
         <div class="header">{ props.UserInfo.Name }</div>
         <div class="stats">{ props.Stats.String() }</div>
 
-        <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.TodoList, RawID: true}) }>
+        <div id={ structpages.ID(ctx, index.TodoList) }>
             @p.TodoList(props.Todos)
         </div>
     </div>
@@ -197,20 +197,20 @@ templ (p TeamManagementView) Page(props TeamManagementProps) {
     <div class="team-management">
         <div class="user-pane">
             <input hx-get="/search-users"
-                   hx-target={ structpages.IDFor(ctx, TeamManagementView.UserList) }
+                   hx-target={ structpages.IDTarget(ctx, TeamManagementView.UserList) }
                    name="user-search" />
 
-            <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: TeamManagementView.UserList, RawID: true}) }>
+            <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
                 @p.UserList(props.UserPaneProps.Users)
             </div>
         </div>
 
         <div class="group-pane">
             <input hx-get="/search-groups"
-                   hx-target={ structpages.IDFor(ctx, TeamManagementView.GroupList) }
+                   hx-target={ structpages.IDTarget(ctx, TeamManagementView.GroupList) }
                    name="group-search" />
 
-            <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: TeamManagementView.GroupList, RawID: true}) }>
+            <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
                 @p.GroupList(props.GroupPaneProps.Groups)
             </div>
         </div>
@@ -277,11 +277,11 @@ func (p search) Props(r *http.Request, target structpages.RenderTarget) ([]Resul
 templ (p search) Page(results []Result) {
     <div class="search-page">
         <input hx-get={ structpages.URLFor(ctx, query{}) }
-               hx-target={ structpages.IDFor(ctx, search.Results) }
+               hx-target={ structpages.IDTarget(ctx, search.Results) }
                name="q"
                placeholder="Search..." />
 
-        <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: search.Results, RawID: true}) }>
+        <div id={ structpages.ID(ctx, search.Results) }>
             @p.Results(results)
         </div>
     </div>
