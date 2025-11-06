@@ -117,11 +117,11 @@ templ (d dashboardPage) Content(data ContentData) {
 
 ### Cross-Page Component Rendering
 
-Structpages provides the ability to render components from different pages using the `RenderPageComponent` function. This is useful when you want to conditionally redirect rendering to a component from another page, such as error pages or shared components.
+Structpages provides the ability to render components from different pages using the `RenderComponent` function. This is useful when you want to conditionally redirect rendering to a component from another page, such as error pages or shared components.
 
-#### RenderPageComponent
+#### RenderComponent
 
-The `RenderPageComponent` function can be used in Props methods to render a component from a different page:
+The `RenderComponent` function can be used in Props methods to render a component from a different page:
 
 ```go
 type errorPage struct{}
@@ -140,7 +140,7 @@ func (p productPage) Props(r *http.Request, store *Store) (string, error) {
     product, err := store.LoadProduct(productID)
     if err != nil {
         // Instead of returning an error, render the ErrorComponent from errorPage
-        return "", structpages.RenderPageComponent(&errorPage{}, "ErrorComponent", "Product not found")
+        return "", structpages.RenderComponent(errorPage{}.ErrorComponent, "Product not found")
     }
     return product.Name, nil
 }
@@ -153,18 +153,16 @@ templ (p productPage) Page(productName string) {
 
 #### Parameters
 
-- `page`: The page struct instance containing the component to render
-- `component`: The name of the component method to call on the specified page
+- `targetOrMethod`: A method expression (e.g., `errorPage{}.ErrorComponent`) or RenderTarget
 - `args`: Optional arguments to pass to the component method (these replace the original Props return values)
 
 #### Behavior
 
-When `RenderPageComponent` is returned as an error from a Props method:
+When `RenderComponent` is returned as an error from a Props method:
 
-1. The framework looks up the specified page in the current router
-2. Finds the requested component method on that page
-3. Calls the component with the provided arguments
-4. Renders the component instead of the original page's component
+1. The framework resolves the method expression to the component
+2. Calls the component with the provided arguments
+3. Renders the component instead of the original page's component
 
 This pattern is particularly useful for:
 - Error handling and displaying error pages

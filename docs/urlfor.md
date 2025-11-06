@@ -131,9 +131,9 @@ templ (v viewPost) Page() {
 
 This automatic extraction eliminates the need to manually pass parameters that are already present in the current request context, making URL generation more convenient and less error-prone.
 
-### IDFor - Consistent HTML IDs
+### ID and IDTarget - Consistent HTML IDs
 
-The `IDFor` function generates consistent HTML IDs from component method references, helping maintain consistency between template IDs, HTMX targets, and component names.
+The `ID` and `IDTarget` functions generate consistent HTML IDs from component method references, helping maintain consistency between template IDs, HTMX targets, and component names.
 
 #### The Problem
 
@@ -151,50 +151,40 @@ templ (p TeamManagementView) UserList(users []User) { ... }  // Component name
 
 #### The Solution
 
-Use `IDFor` with method expressions to generate IDs automatically:
+Use `ID` and `IDTarget` with method expressions to generate IDs automatically:
 
 ```templ
-// In your component template
+// In your component template - use ID() for HTML id attributes
 templ (p TeamManagementView) UserList(users []User) {
-    <div id={ structpages.IDFor(p.UserList) }>
+    <div id={ structpages.ID(ctx, p.UserList) }>
         <!-- content -->
     </div>
 }
 
-// In HTMX attributes
-@PrimaryButton(templ.Attributes{
-    "hx-get":    "/api/users",
-    "hx-target": "#" + structpages.IDFor(TeamManagementView{}.UserList),
-})
+// In HTMX attributes - use IDTarget() for hx-target (includes "#" prefix)
+templ (p TeamManagementView) Page(props Props) {
+    <button hx-get="/api/users"
+            hx-target={ structpages.IDTarget(ctx, p.UserList) }>
+        Refresh
+    </button>
+    <div id={ structpages.ID(ctx, p.UserList) }>
+        @p.UserList(props.Users)
+    </div>
+}
 ```
 
-Now when you rename `UserList` to `UserTable` using your IDE's refactoring tools, all references including `p.UserList` and `TeamManagementView{}.UserList` will be automatically updated!
-
-#### With Suffixes
-
-For compound IDs like `user-modal-container` or `group-search-input`:
-
-```templ
-// Generate "user-modal-container"
-<div id={ structpages.IDFor(p.UserModal, "container") }>
-    <!-- modal content -->
-</div>
-
-// Generate "group-search-input"
-<input
-    id={ structpages.IDFor(p.GroupSearch, "input") }
-    name="search"
-/>
-```
+Now when you rename `UserList` to `UserTable` using your IDE's refactoring tools, all references including `p.UserList` will be automatically updated!
 
 #### Naming Convention
 
-`IDFor` converts CamelCase/PascalCase to kebab-case:
+Both `ID` and `IDTarget` convert CamelCase/PascalCase to kebab-case:
 
-- `IDFor(p.UserList)` → `user-list`
-- `IDFor(p.GroupMembers)` → `group-members`
-- `IDFor(p.HTMLParser)` → `html-parser`
-- `IDFor(p.UserModal, "container")` → `user-modal-container`
+- `ID(ctx, p.UserList)` → `"user-list"`
+- `IDTarget(ctx, p.UserList)` → `"#user-list"`
+- `ID(ctx, p.GroupMembers)` → `"group-members"`
+- `ID(ctx, p.HTMLParser)` → `"html-parser"`
 
-See [IDFOR_USAGE.md](./IDFOR_USAGE.md) for more detailed examples and usage patterns.
+The only difference is that `IDTarget` adds the "#" prefix for CSS selectors, while `ID` returns the raw ID string.
+
+See the [HTMX integration guide](./htmx.md) for more detailed examples and usage patterns.
 

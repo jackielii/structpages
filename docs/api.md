@@ -18,7 +18,7 @@ Mount is the main entry point for setting up routes. It parses the page structur
 - `options`: Configuration options (WithArgs, WithErrorHandler, WithMiddlewares, etc.)
 
 **Returns:**
-- `*StructPages`: Instance for generating type-safe URLs via `URLFor` and `IDFor`
+- `*StructPages`: Instance for generating type-safe URLs via `URLFor`, `ID`, and `IDTarget`
 - `error`: Error if mounting fails
 
 **Example:**
@@ -78,17 +78,21 @@ url, _ := sp.URLFor(userPage{}, "123")  // "/users/123"
 url, _ := sp.URLFor(postPage{}, "year", 2024, "slug", "hello")  // "/blog/2024/hello"
 ```
 
-#### IDFor
+#### ID and IDTarget
 
 ```go
-func (sp *StructPages) IDFor(v any) (string, error)
+func (sp *StructPages) ID(v any) (string, error)
+func (sp *StructPages) IDTarget(v any) (string, error)
 ```
 
-Generate a consistent HTML ID or CSS selector for a component method.
+Generate consistent HTML IDs for component methods.
+- `ID` returns raw ID (for HTML `id` attributes): `"todo-page-todo-list"`
+- `IDTarget` returns CSS selector (for HTMX `hx-target`): `"#todo-page-todo-list"`
 
 **Example:**
 ```go
-id, _ := sp.IDFor((*todoPage).TodoList)  // "todo-page-todo-list"
+id, _ := sp.ID((*todoPage).TodoList)         // "todo-page-todo-list"
+target, _ := sp.IDTarget((*todoPage).TodoList)  // "#todo-page-todo-list"
 ```
 
 ## Options
@@ -296,13 +300,16 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error)
 
 Generate URLs using context (available during request handling).
 
-### IDFor
+### ID and IDTarget
 
 ```go
-func IDFor(ctx context.Context, v any) (string, error)
+func ID(ctx context.Context, v any) (string, error)
+func IDTarget(ctx context.Context, v any) (string, error)
 ```
 
-Generate IDs using context.
+Generate IDs using context (available during request handling).
+- `ID` returns raw ID (for HTML `id` attributes)
+- `IDTarget` returns CSS selector (for HTMX `hx-target`)
 
 ## RenderTarget
 

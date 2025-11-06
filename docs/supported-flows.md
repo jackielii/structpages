@@ -39,7 +39,7 @@ This is the primary way to build pages in structpages. It handles both full page
 | **Browser navigation** | ❌ No | N/A | `Page` | `sel.Is(index.Page) == true` | Initial page load |
 | **HTMX boost** | ✅ Yes | ❌ Empty | `Page` | `sel.Is(index.Page) == true` | Progressive enhancement |
 | **Simple HTMX target** | ✅ Yes | `"content"` | `Content` | `sel.Is(index.Content) == true` | Direct component name |
-| **IDFor target** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `sel.Is(index.TodoList) == true` | **Primary pattern** |
+| **ID/IDTarget** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `sel.Is(index.TodoList) == true` | **Primary pattern** |
 | **Unknown target** | ✅ Yes | `"nonexistent"` | `Page` (fallback) | `sel.Is(index.Page) == true` | Graceful degradation |
 
 ### Complete Example: Flow 4 with RenderTarget
@@ -68,11 +68,11 @@ func (p index) Props(r *http.Request, sel *structpages.RenderTarget) ([]Todo, er
 templ (p index) Page(todos []Todo) {
     @html() {
         <form hx-post={ structpages.URLFor(ctx, add{}) }
-              hx-target={ structpages.IDFor(ctx, index.TodoList) }>
+              hx-target={ structpages.IDTarget(ctx, index.TodoList) }>
             <input name="text" />
             <button>Add</button>
         </form>
-        <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.TodoList, RawID: true}) }>
+        <div id={ structpages.ID(ctx, index.TodoList) }>
             @p.TodoList(todos)
         </div>
     }
@@ -140,16 +140,16 @@ templ (p index) Page(props IndexProps) {
     @html() {
         <div>
             <input hx-get={ structpages.URLFor(ctx, searchUser{}) }
-                   hx-target={ structpages.IDFor(ctx, index.UserList) }
+                   hx-target={ structpages.IDTarget(ctx, index.UserList) }
                    name="q" />
             <span>Total: { strconv.Itoa(props.TotalCount) }</span>
         </div>
 
-        <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.UserList, RawID: true}) }>
+        <div id={ structpages.ID(ctx, index.UserList) }>
             @p.UserList(props.Users)
         </div>
 
-        <div id={ structpages.IDFor(ctx, structpages.IDParams{Method: index.PicklistDropdown, RawID: true}) }>
+        <div id={ structpages.ID(ctx, index.PicklistDropdown) }>
             @p.PicklistDropdown(props.Picklists)
         </div>
     }

@@ -221,29 +221,24 @@ templ Navigation(ctx context.Context) {
 }
 ```
 
-#### IDFor with Ref
+#### ID/IDTarget with Ref
 
 Use `Ref` to reference component methods dynamically:
 
 ```go
 // Qualified reference (PageName.MethodName)
-id, err := IDFor(ctx, Ref("userPage.UserList"))
+id, err := ID(ctx, Ref("userPage.UserList"))
+// → "user-page-user-list"
+
+idTarget, err := IDTarget(ctx, Ref("userPage.UserList"))
 // → "#user-page-user-list"
 
 // Simple method name (must be unambiguous)
-id, err := IDFor(ctx, Ref("UserList"))
-// → "#user-page-user-list" (if only one page has UserList)
-
-// With IDParams for suffixes and raw IDs
-id, err := IDFor(ctx, IDParams{
-    Method:   Ref("userPage.UserModal"),
-    Suffixes: []string{"container"},
-    RawID:    true,
-})
-// → "user-page-user-modal-container"
+id, err := ID(ctx, Ref("UserList"))
+// → "user-page-user-list" (if only one page has UserList)
 ```
 
-**Matching rules for IDFor:**
+**Matching rules for ID/IDTarget:**
 - If `Ref` contains `.`, splits into `PageName.MethodName` (qualified)
 - Otherwise, searches all pages for the method name
   - If found on one page, returns that page's ID
@@ -262,7 +257,7 @@ type FormConfig struct {
 templ DynamicForm(ctx context.Context, config FormConfig) {
     @{
         actionURL, _ := URLFor(ctx, Ref(config.ActionPage))
-        targetID, _ := IDFor(ctx, Ref(config.TargetComponent))
+        targetID, _ := IDTarget(ctx, Ref(config.TargetComponent))
     }
     <form hx-post={ actionURL } hx-target={ targetID }>
         <button>Submit</button>
@@ -272,7 +267,7 @@ templ DynamicForm(ctx context.Context, config FormConfig) {
 
 #### Error Handling
 
-Both URLFor and IDFor with `Ref` return descriptive errors for runtime safety:
+Both URLFor and ID/IDTarget with `Ref` return descriptive errors for runtime safety:
 
 ```go
 // Page not found by name
@@ -284,16 +279,16 @@ url, err := URLFor(ctx, Ref("/bad/route"))
 // Error: "no page found with route \"/bad/route\""
 
 // Method not found
-id, err := IDFor(ctx, Ref("NonExistentMethod"))
+id, err := ID(ctx, Ref("NonExistentMethod"))
 // Error: "method \"NonExistentMethod\" not found on any page"
 
 // Ambiguous method (exists on multiple pages)
-id, err := IDFor(ctx, Ref("UserList"))
+id, err := ID(ctx, Ref("UserList"))
 // Error: "method \"UserList\" found on multiple pages: userPage, adminPage.
 //         Use qualified name like \"userPage.UserList\""
 
 // Method not on specified page
-id, err := IDFor(ctx, Ref("userPage.AdminSettings"))
+id, err := ID(ctx, Ref("userPage.AdminSettings"))
 // Error: "method \"AdminSettings\" not found on page \"userPage\""
 ```
 
