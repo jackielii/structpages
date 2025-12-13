@@ -311,3 +311,76 @@ func TestMenuReferences(t *testing.T) {
         }
     }
 }
+```
+
+### Type Aliases and URLFor/IDFor
+
+Go type aliases (`type X = Y`) are identical at runtime. This has implications when the same type (or its alias) is used for multiple routes.
+
+#### The Limitation
+
+```go
+type productPage struct{}
+
+func (productPage) Page() templ.Component { return productTemplate() }
+
+// Type alias - identical to productPage at runtime
+type featuredProduct = productPage
+
+type pages struct {
+    products productPage     `route:"/products Products"`
+    featured featuredProduct `route:"/featured Featured"`
+}
+```
+
+When using `URLFor` with type references:
+
+```go
+// Both return "/products" - the first matching route
+url1, _ := URLFor(ctx, productPage{})     // → "/products"
+url2, _ := URLFor(ctx, featuredProduct{}) // → "/products" (not "/featured"!)
+```
+
+This happens because `reflect.TypeOf(featuredProduct{})` returns the same type as `reflect.TypeOf(productPage{})`. Go's reflection cannot distinguish between a type and its alias.
+
+#### The Workaround: Use Ref
+
+Use `Ref("fieldName")` to target routes by their struct field name instead of type:
+
+```go
+// Target specific routes using field names
+url1, _ := URLFor(ctx, Ref("products")) // → "/products"
+url2, _ := URLFor(ctx, Ref("featured")) // → "/featured" ✓
+
+// Same for IDFor/IDTarget
+id1, _ := IDTarget(ctx, Ref("products.Page")) // → "#products-page"
+id2, _ := IDTarget(ctx, Ref("featured.Page")) // → "#featured-page" ✓
+```
+
+#### When This Matters
+
+This limitation only affects scenarios where:
+1. The same type (or its alias) is used for multiple routes
+2. You need to reference a specific route using `URLFor` or `IDFor`
+
+If each route uses a unique type, type-based matching works perfectly:
+
+```go
+type productsPage struct{}
+type featuredPage struct{}  // Different type, not an alias
+
+type pages struct {
+    products productsPage `route:"/products Products"`
+    featured featuredPage `route:"/featured Featured"`
+}
+
+// Works correctly - different types
+url1, _ := URLFor(ctx, productsPage{}) // → "/products"
+url2, _ := URLFor(ctx, featuredPage{}) // → "/featured" ✓
+```
+
+#### Best Practices
+
+1. **Use distinct types** for routes that need individual `URLFor`/`IDFor` references
+2. **Use `Ref("fieldName")`** when you must use the same type for multiple routes
+3. **Type aliases are fine** for routing and rendering - only `URLFor`/`IDFor` type matching is affected
