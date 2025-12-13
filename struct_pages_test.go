@@ -2298,3 +2298,188 @@ func TestRenderOpFromTarget_Errors(t *testing.T) {
 		t.Errorf("Expected 'did you call target.Is() first' error, got: %v", err)
 	}
 }
+
+// Test types for alias type mount
+type aliasOriginalPage struct{}
+
+func (aliasOriginalPage) Page() component {
+	return testComponent{content: "alias original page"}
+}
+
+func (aliasOriginalPage) Content() component {
+	return testComponent{content: "alias content"}
+}
+
+type aliasPage = aliasOriginalPage
+
+func TestAliasTypeMount(t *testing.T) {
+	type parentWithAlias struct {
+		original aliasOriginalPage `route:"/original Original"`
+		child    aliasPage         `route:"/alias Alias"`
+	}
+
+	mux := http.NewServeMux()
+	_, err := Mount(mux, &parentWithAlias{}, "/", "Parent")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// Test original route
+	{
+		req := httptest.NewRequest(http.MethodGet, "/original", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "alias original page" {
+			t.Errorf("expected body %q, got %q", "alias original page", rec.Body.String())
+		}
+	}
+
+	// Test alias route
+	{
+		req := httptest.NewRequest(http.MethodGet, "/alias", http.NoBody)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+		}
+		if rec.Body.String() != "alias original page" {
+			t.Errorf("expected body %q, got %q", "alias original page", rec.Body.String())
+		}
+	}
+}
+
+// TestAliasTypeMount_URLFor demonstrates Go type alias behavior with URLFor.
+//
+// Go type aliases (type X = Y) are identical at runtime - reflect.TypeOf(aliasPage{})
+// returns the same type as reflect.TypeOf(aliasOriginalPage{}). This means URLFor
+// cannot distinguish between them and will return the first matching route.
+//
+// Use Ref("fieldName") to target a specific route when the same type is used
+// for multiple routes.
+func TestAliasTypeMount_URLFor(t *testing.T) {
+	type parentWithAlias struct {
+		original aliasOriginalPage `route:"/original/{id} Original"`
+		child    aliasPage         `route:"/alias/{id} Alias"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &parentWithAlias{}, "/", "Parent")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// URLFor with original type - returns the first matching route
+	{
+		url, err := sp.URLFor(aliasOriginalPage{}, "123")
+		if err != nil {
+			t.Errorf("URLFor original type error: %v", err)
+		}
+		if url != "/original/123" {
+			t.Errorf("URLFor original type = %q, want %q", url, "/original/123")
+		}
+	}
+
+	// URLFor with alias type - ALSO returns /original because Go type aliases
+	// are identical at runtime. This is a Go language limitation, not a bug.
+	{
+		url, err := sp.URLFor(aliasPage{}, "456")
+		if err != nil {
+			t.Errorf("URLFor alias type error: %v", err)
+		}
+		if url != "/original/456" {
+			t.Errorf("URLFor alias type = %q, want %q", url, "/original/456")
+		}
+	}
+
+	// WORKAROUND: Use Ref("fieldName") to target a specific route
+	// This uses the struct field name instead of type matching
+	{
+		url, err := sp.URLFor(Ref("child"), "789")
+		if err != nil {
+			t.Errorf("URLFor Ref error: %v", err)
+		}
+		if url != "/alias/789" {
+			t.Errorf("URLFor Ref = %q, want %q", url, "/alias/789")
+		}
+	}
+
+	// You can also use Ref for the original field
+	{
+		url, err := sp.URLFor(Ref("original"), "999")
+		if err != nil {
+			t.Errorf("URLFor Ref original error: %v", err)
+		}
+		if url != "/original/999" {
+			t.Errorf("URLFor Ref original = %q, want %q", url, "/original/999")
+		}
+	}
+}
+
+// TestAliasTypeMount_IDFor demonstrates Go type alias behavior with ID/IDTarget.
+//
+// Same limitation as URLFor - type aliases are identical at runtime, so ID()
+// with a method expression will find the first matching page type.
+//
+// Use Ref("fieldName.MethodName") to target a specific component.
+func TestAliasTypeMount_IDFor(t *testing.T) {
+	type parentWithAlias struct {
+		original aliasOriginalPage `route:"/original Original"`
+		child    aliasPage         `route:"/alias Alias"`
+	}
+
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &parentWithAlias{}, "/", "Parent")
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+
+	// ID with original type method expression - returns first match
+	{
+		id, err := sp.ID(aliasOriginalPage.Content)
+		if err != nil {
+			t.Errorf("ID original type error: %v", err)
+		}
+		if id != "original-content" {
+			t.Errorf("ID original type = %q, want %q", id, "original-content")
+		}
+	}
+
+	// ID with alias type method expression - ALSO returns "original-content"
+	// because Go type aliases are identical at runtime
+	{
+		id, err := sp.ID(aliasPage.Content)
+		if err != nil {
+			t.Errorf("ID alias type error: %v", err)
+		}
+		if id != "original-content" {
+			t.Errorf("ID alias type = %q, want %q", id, "original-content")
+		}
+	}
+
+	// WORKAROUND: Use Ref("fieldName.MethodName") to target a specific component
+	{
+		id, err := sp.IDTarget(Ref("child.Content"))
+		if err != nil {
+			t.Errorf("IDTarget Ref error: %v", err)
+		}
+		if id != "#child-content" {
+			t.Errorf("IDTarget Ref = %q, want %q", id, "#child-content")
+		}
+	}
+
+	// ID (without #) using Ref
+	{
+		id, err := sp.ID(Ref("child.Content"))
+		if err != nil {
+			t.Errorf("ID Ref error: %v", err)
+		}
+		if id != "child-content" {
+			t.Errorf("ID Ref = %q, want %q", id, "child-content")
+		}
+	}
+}
