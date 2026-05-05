@@ -139,7 +139,7 @@ func (u userList) Props(r *http.Request, store *genericStore[userModel]) ([]user
 	store.Set("1", userModel{ID: "1", Name: "Alice"})
 	store.Set("2", userModel{ID: "2", Name: "Bob"})
 
-	users := make([]userModel, 0)
+	users := make([]userModel, 0, len(store.data))
 	for _, v := range store.data {
 		users = append(users, v)
 	}

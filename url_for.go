@@ -235,7 +235,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				m := make(map[string]any)
 				for i := 0; i < len(args); i += 2 {
 					key := args[i].(string)
-					m[key] = args[i+1]
+					m[key] = args[i+1] //nolint:gosec // G602 false positive: outer guard ensures len(args)%2 == 0, so i+1 < len(args)
 				}
 				for _, idx := range indicies {
 					name := segments[idx].name
