@@ -78,40 +78,37 @@ templ (p productPage) Page(props productPageProps) {
 }
 ```
 
-#### Props Method Resolution Rules
+#### Props Method Resolution
 
-Structpages looks for Props methods in the following order:
+Only the method literally named `Props` is auto-invoked by the framework. Methods whose names *end* in `Props` (e.g. `UserListProps`, `PageProps`, `ContentProps`) are stored in the page node but **not** auto-resolved — they are conventional helpers you call yourself from inside `Props`. The earlier per-component-Props auto-resolution (`PageProps()`, `ContentProps()`, etc.) was removed in favor of the simpler `Props` + `RenderComponent` pattern below.
 
-1. **Component-specific Props method**: `<ComponentName>Props()` - e.g., `PageProps()`, `ContentProps()`, `SidebarProps()`
-2. **Generic Props method**: `Props()` - used as a fallback if no component-specific method exists
+**Parameter resolution is by type, not position.** All of these signatures work and the framework matches each parameter by its type:
 
-**ResponseWriter Support**: Props methods can include `http.ResponseWriter` as a parameter to manipulate the response directly (e.g., setting cookies, custom headers). This must be the second parameter after `*http.Request`.
+```go
+func (d dashboardPage) Props(r *http.Request, store *Store) (DashboardData, error) { ... }
+func (d dashboardPage) Props(store *Store, r *http.Request) (DashboardData, error) { ... }   // any order
+func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, store *Store) (DashboardData, error) { ... }
+func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error) { ... }
+```
 
-This allows you to have different props for different components:
+The injectable types are: `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and any type registered via `WithArgs`. Position doesn't matter — the framework fills each parameter by looking up its type.
+
+To run different data-loading paths for different components, use the `RenderTarget` parameter and `RenderComponent`:
 
 ```go
 type dashboardPage struct{}
 
-// Different props for different components
-func (d dashboardPage) PageProps(r *http.Request, w http.ResponseWriter, store *Store) (PageData, error) {
-    // Full page data including layout
-    // Can set cookies or headers as needed
-    http.SetCookie(w, &http.Cookie{Name: "dashboard_visited", Value: "true"})
-    return PageData{User: store.GetUser(r), Stats: store.GetStats()}, nil
-}
-
-func (d dashboardPage) ContentProps(r *http.Request, store *Store) (ContentData, error) {
-    // Just the content data for HTMX partial updates
-    // Note: ResponseWriter is optional - only include if needed
-    return ContentData{Stats: store.GetStats()}, nil
-}
-
-templ (d dashboardPage) Page(data PageData) {
-    // Full page render
-}
-
-templ (d dashboardPage) Content(data ContentData) {
-    // Partial content render
+func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, target structpages.RenderTarget, store *Store) (DashboardData, error) {
+    // Full page or full content — load everything
+    if target.Is(d.Page) || target.Is(d.Content) {
+        http.SetCookie(w, &http.Cookie{Name: "dashboard_visited", Value: "true"})
+        return DashboardData{User: store.GetUser(r), Stats: store.GetStats()}, nil
+    }
+    // HTMX partial — render just the stats widget
+    if target.Is(d.Content) {
+        return DashboardData{}, structpages.RenderComponent(d.Content, ContentData{Stats: store.GetStats()})
+    }
+    return DashboardData{}, nil
 }
 ```
 

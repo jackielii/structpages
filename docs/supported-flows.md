@@ -8,8 +8,9 @@ This document explains how structpages processes different types of requests and
 |------|-------------|-------------|---------------------|---------|
 | **1** | Full control over request/response | `ServeHTTP(w, r)` | N/A | File uploads, WebSockets |
 | **2** | Actions that render components | `ServeHTTP(w, r) error` | Return `RenderComponent(method)` | Add todo → render todo list |
-| **3** | Actions with database/logger | `ServeHTTP(w, r, db, logger) error` | Return `RenderComponent(method)` | CRUD operations |
-| **4** | Standard pages with HTMX | `Props(r, sel)` + Component methods | Automatic via `HTMXPageConfig` + `RenderTarget` | **Primary pattern** ⭐ |
+| **3** | Actions with database/logger | `ServeHTTP(w, r, db, logger) error` (or no error return) | Return `RenderComponent(method)` | CRUD operations |
+| **4** | Standard pages with HTMX | `Props(r, target)` + component methods | Automatic via `HTMXRenderTarget` + `RenderTarget` | **Primary pattern** ⭐ |
+| **5** | Props-only pages | `Props(r, target)` returning `RenderComponent(...)` as error | Manual via `RenderComponent` | Pages without a `Page()` method |
 
 ## Flow 4: Component-Based Rendering (Recommended)
 
@@ -20,14 +21,15 @@ This is the primary way to build pages in structpages. It handles both full page
 ```
 1. Request arrives
    ↓
-2. Component Selection (HTMXPageConfig decides which component to render)
-   ├─ Regular request → "Page" component
-   ├─ HTMX request with HX-Target: "content" → "Content" component
-   └─ HTMX request with HX-Target: "index-todo-list" → "TodoList" component
+2. Component selection (HTMXRenderTarget produces a RenderTarget)
+   ├─ Regular request → methodRenderTarget for "Page"
+   ├─ HTMX request with HX-Target: "content" → methodRenderTarget for "Content"
+   ├─ HTMX request with HX-Target: "index-todo-list" → methodRenderTarget for "TodoList"
+   └─ HTMX request whose target matches no method → functionRenderTarget (resolved lazily in Props via target.Is(fn))
    ↓
 3. Props runs (with RenderTarget injected)
    - Knows which component will render
-   - Returns appropriate data
+   - Returns appropriate data, or returns RenderComponent(...) as error to override
    ↓
 4. Component renders with props data
 ```
@@ -36,11 +38,11 @@ This is the primary way to build pages in structpages. It handles both full page
 
 | Request Type | HX-Request | HX-Target | Selected Component | Props Receives | Use Case |
 |-------------|-----------|-----------|-------------------|----------------|----------|
-| **Browser navigation** | ❌ No | N/A | `Page` | `sel.Is(index.Page) == true` | Initial page load |
-| **HTMX boost** | ✅ Yes | ❌ Empty | `Page` | `sel.Is(index.Page) == true` | Progressive enhancement |
-| **Simple HTMX target** | ✅ Yes | `"content"` | `Content` | `sel.Is(index.Content) == true` | Direct component name |
-| **ID/IDTarget** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `sel.Is(index.TodoList) == true` | **Primary pattern** |
-| **Unknown target** | ✅ Yes | `"nonexistent"` | `Page` (fallback) | `sel.Is(index.Page) == true` | Graceful degradation |
+| **Browser navigation** | ❌ No | N/A | `Page` | `target.Is(index.Page) == true` | Initial page load |
+| **HTMX boost** | ✅ Yes | ❌ Empty | `Page` | `target.Is(index.Page) == true` | Progressive enhancement |
+| **Simple HTMX target** | ✅ Yes | `"content"` | `Content` | `target.Is(index.Content) == true` | Direct component name |
+| **ID/IDTarget** ⭐ | ✅ Yes | `"index-todo-list"` | `TodoList` | `target.Is(index.TodoList) == true` | **Primary pattern** |
+| **Unknown target** | ✅ Yes | `"nonexistent"` | `Page` (fallback) | `target.Is(index.Page) == true` | Graceful degradation |
 
 ### Complete Example: Flow 4 with RenderTarget
 
@@ -50,13 +52,14 @@ type index struct {
 }
 
 // Props knows which component will render via RenderTarget
-func (p index) Props(r *http.Request, sel *structpages.RenderTarget) ([]Todo, error) {
+// (RenderTarget is an interface, no pointer)
+func (p index) Props(r *http.Request, target structpages.RenderTarget) ([]Todo, error) {
     switch {
-    case sel.Is(index.TodoList):
+    case target.Is(index.TodoList):
         // Only load active todos for TodoList component
         return getActiveTodos(), nil
 
-    case sel.Is(index.Page):
+    case target.Is(index.Page):
         // Load everything for full page
         return getAllTodos(), nil
 
@@ -86,8 +89,8 @@ templ (p index) TodoList(todos []Todo) {
 ```
 
 **What happens:**
-1. **Initial page load**: Browser requests `/` → Props gets `sel.Is(index.Page) == true` → loads all todos → renders full page
-2. **Add todo via HTMX**: Form submits → Add handler runs → returns `RenderComponent(index.TodoList)` → Props gets `sel.Is(index.TodoList) == true` → loads active todos → renders just TodoList component → HTMX swaps it in
+1. **Initial page load**: Browser requests `/` → Props gets `target.Is(index.Page) == true` → loads all todos → renders full page
+2. **Add todo via HTMX**: Form submits → Add handler runs → returns `RenderComponent(index.TodoList)` → Props gets `target.Is(index.TodoList) == true` → loads active todos → renders just TodoList component → HTMX swaps it in
 
 **Benefits:**
 - ✅ Props efficiently loads only needed data
@@ -117,9 +120,9 @@ type index struct {
 
 // Props returns the full IndexProps structure
 // This matches the Page component signature
-func (p index) Props(r *http.Request, sel *RenderTarget) (IndexProps, error) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, error) {
     switch {
-    case sel.Is(index.Page):
+    case target.Is(index.Page):
         // Full page load - get everything
         return IndexProps{
             Users:      getAllUsers(),
@@ -309,13 +312,14 @@ if err != nil {
 Props receives RenderTarget to know which component will render:
 
 ```go
-func (p index) Props(r *http.Request, sel *RenderTarget) (interface{}, error) {
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (any, error) {
     switch {
-    case sel.Is(index.TodoList):
+    case target.Is(index.TodoList):
         return getTodos(), nil
-    case sel.Is(index.Page):
+    case target.Is(index.Page):
         return getAllData(), nil
     }
+    return nil, nil
 }
 ```
 
@@ -329,20 +333,22 @@ func (p index) Props(r *http.Request, sel *RenderTarget) (interface{}, error) {
 
 Flow 4 executes in this order:
 ```
-1. findComponent() → Determines which component (e.g., "TodoList")
-2. Create RenderTarget with selected component
-3. Props() → Receives RenderTarget, returns data
-4. Render component with data from Props
+1. targetSelector(r, pn) → returns a RenderTarget (HTMXRenderTarget by default)
+   - For methods: methodRenderTarget captures the method at construction
+   - For unmatched HX-Target strings: functionRenderTarget defers matching until target.Is(fn)
+2. Props(r, target, ...) → receives RenderTarget, returns data
+   (or returns RenderComponent(...) as error to override)
+3. Component renders with data from Props
 ```
 
-**Key insight:** Component selection happens BEFORE Props runs, so Props knows what it's loading data for.
+**Key insight:** Component selection happens BEFORE Props runs, so Props knows what it's loading data for. For function components, the actual function value is bound when Props calls `target.Is(fn)` — this is why function-target `RenderComponent(target, args...)` requires `Is()` to have been called first.
 
 ### Props Override Pattern
 
 Props can override the selected component:
 
 ```go
-func (p search) Props(r *http.Request, sel *RenderTarget) ([]Result, error) {
+func (p search) Props(r *http.Request, target structpages.RenderTarget) ([]Result, error) {
     query := r.URL.Query().Get("q")
 
     // Override component selection based on logic
@@ -352,9 +358,12 @@ func (p search) Props(r *http.Request, sel *RenderTarget) ([]Result, error) {
 
     // Normal flow uses RenderTarget
     switch {
-    case sel.Is(search.Results):
+    case target.Is(search.Results):
+        return performSearch(query), nil
+    case target.Is(search.Page):
         return performSearch(query), nil
     }
+    return nil, nil
 }
 ```
 
@@ -362,6 +371,6 @@ func (p search) Props(r *http.Request, sel *RenderTarget) ([]Result, error) {
 
 ## See Also
 
-- [RenderTarget Guide](./component-selection.md) - Detailed RenderTarget documentation
-- [IDFor Usage](../IDFOR_USAGE.md) - Type-safe ID generation
+- [HTMX Integration](./htmx.md) - RenderTarget and component selection
+- [URLFor & ID generation](./urlfor.md) - Type-safe URL and ID generation
 - [examples/todo](../examples/todo) - Complete working example

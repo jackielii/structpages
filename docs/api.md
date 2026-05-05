@@ -182,16 +182,25 @@ Set a global target selector function that determines which component to render.
 
 The default selector is `HTMXRenderTarget`, which handles HTMX partial rendering automatically.
 
-**Example:**
+A custom selector returns any type that implements the `RenderTarget` interface (`Is(method any) bool`). The framework's own `methodRenderTarget` and `functionRenderTarget` constructors are unexported, so a custom selector typically either: (a) delegates to `HTMXRenderTarget` and returns its result for the cases it doesn't want to override, or (b) returns its own type that implements `RenderTarget` (and optionally `Component() component` for direct rendering — see *RenderComponent* below).
+
+**Example — content negotiation that falls back to HTMX:**
+
 ```go
-// Custom selector for API requests
-selector := func(r *http.Request, pn *PageNode) (structpages.RenderTarget, error) {
+// Custom RenderTarget for JSON responses
+type jsonTarget struct{ data any }
+
+func (t jsonTarget) Is(method any) bool { return false } // never matches normal components
+func (t jsonTarget) Component() component {
+    return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+        return json.NewEncoder(w).Encode(t.data)
+    })
+}
+
+selector := func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
     if r.Header.Get("Accept") == "application/json" {
-        // Return a specific component for JSON responses
-        method := pn.Components["APIResponse"]
-        return structpages.NewMethodRenderTarget("APIResponse", method), nil
+        return jsonTarget{data: loadJSON(r, pn)}, nil
     }
-    // Fall back to default HTMX behavior
     return structpages.HTMXRenderTarget(r, pn)
 }
 
@@ -199,6 +208,8 @@ sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
     structpages.WithTargetSelector(selector),
 )
 ```
+
+When `Props` calls `RenderComponent(target)` (no args) on a target that implements `Component()`, the framework calls `Component()` to get the component to render — useful for selectors that already know the data.
 
 ### WithWarnEmptyRoute
 
@@ -243,14 +254,16 @@ Required for pages that render content. Returns the component to render.
 
 ### Props
 
+Optional. Prepare data before rendering. The framework matches each parameter by **type** (not position), so any of these signatures work and parameters can appear in any order:
+
 ```go
-func (p PageType) Props(r *http.Request, target RenderTarget, deps ...any) (any, error)
+func (p PageType) Props(r *http.Request) (PropsType, error)
+func (p PageType) Props(r *http.Request, store *Store) (PropsType, error)
+func (p PageType) Props(r *http.Request, w http.ResponseWriter, store *Store) (PropsType, error)
+func (p PageType) Props(r *http.Request, target RenderTarget, store *Store) (PropsType, error)
 ```
 
-Optional. Prepare data before rendering. Receives:
-- `r *http.Request`: The HTTP request
-- `target RenderTarget`: Indicates which component will be rendered
-- `deps ...any`: Injected dependencies (from `WithArgs`)
+Injectable parameter types: `*http.Request`, `http.ResponseWriter`, `RenderTarget`, `*PageNode`, and any type registered via `WithArgs`. **DI is positional+typed, not variadic** — there is no `deps ...any` form; declare each dep as its own typed parameter.
 
 Use `target.Is(component)` to conditionally load data based on which component is being rendered.
 
@@ -270,15 +283,22 @@ func (p DashboardPage) Props(r *http.Request, target RenderTarget, db *Database)
             Stats: db.LoadStats(),
         }, nil
     }
+    return DashboardProps{}, nil
 }
+```
 
 ### ServeHTTP
 
+Optional. Handle HTTP requests directly. Four signatures are supported (DI form takes typed params, not variadic `any`):
+
 ```go
-func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request, deps ...any)
+func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request)                               // standard http.Handler
+func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request) error                          // buffered, error → handler
+func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)                  // DI, no return
+func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error            // DI, buffered
 ```
 
-Optional. Handle HTTP requests directly without component rendering.
+In the DI forms, `RenderTarget` is also injectable (the framework computes one and adds it to the available args), so `ServeHTTP` can decide which partial to render via `target.Is(...)` + `RenderComponent(...)`.
 
 ### Middlewares
 
@@ -385,18 +405,20 @@ return DashboardProps{}, RenderComponent(target, stats)
 func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error)
 ```
 
-The default `TargetSelector` that handles HTMX partial rendering. It:
-1. Checks for `HX-Request` header
-2. Reads `HX-Target` header value
-3. Matches it to a component method or function
-4. Returns appropriate `RenderTarget`
+The default `TargetSelector` that handles HTMX partial rendering. Algorithm:
 
-For non-HTMX requests or missing targets, returns the `Page` component.
+1. Non-HTMX requests (no `HX-Request: true` header), or HTMX requests with no `HX-Target` → returns `methodRenderTarget` for the page's `Page()` method.
+2. HTMX request with `HX-Target` → tries to match it against the page's component methods:
+   - **Pass 1, exact match**: first against `<pageprefix>-<componentid>`, then against bare `<componentid>`.
+   - **Pass 2, suffix match (longest wins)**: with three rules — full ID ends with target; target ends with full ID; or target ends with `<componentid>` (only when target also starts with `<pageprefix>-`, which guards against cross-page false matches).
+3. If a method matches → returns `methodRenderTarget` for it.
+4. If no method matches → returns `functionRenderTarget` carrying the raw `HX-Target`. The actual function value is bound lazily when `Props` calls `target.Is(SomeFunc)`.
 
-**Automatic behavior:**
-- `HX-Target: "content"` → matches `Content()` method
-- `HX-Target: "index-todo-list"` → matches `TodoList()` method (strips page prefix)
-- `HX-Target: "dashboard-page-user-stats-widget"` → matches `UserStatsWidget` function
+**Examples** (page named `IndexPage`, components `Content`, `TodoList`):
+- `HX-Target: "content"` → `Content()` (exact match without page prefix)
+- `HX-Target: "index-page-todo-list"` → `TodoList()` (exact match with page prefix)
+- `HX-Target: "todo-list"` → `TodoList()` (exact match without page prefix)
+- `HX-Target: "dashboard-page-user-stats-widget"` (no method by that name) → `functionRenderTarget`; resolved to `UserStatsWidget` standalone function only after Props calls `target.Is(UserStatsWidget)`.
 
 ## Error Types
 
@@ -406,14 +428,14 @@ For non-HTMX requests or missing targets, returns the `Page` component.
 var ErrSkipPageRender = errors.New("skip page render")
 ```
 
-Return this error from `Props` to skip rendering (useful for redirects).
+Return this error from `Props` to skip rendering (useful for redirects). **Only the Props error path checks for this sentinel** — returning it from `ServeHTTP` does nothing special.
 
 **Example:**
 ```go
-func (p loginPage) Props(r *http.Request) (any, error) {
+func (p loginPage) Props(r *http.Request, w http.ResponseWriter) (LoginProps, error) {
     if isAuthenticated(r) {
         http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-        return nil, ErrSkipPageRender
+        return LoginProps{}, structpages.ErrSkipPageRender
     }
     return LoginProps{}, nil
 }

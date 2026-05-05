@@ -56,10 +56,10 @@ url, err := structpages.URLFor(ctx, userProfile{}, "123")
 
 ### With Query Parameters
 
-Use the `join` helper to add query parameters:
+The framework's `URLFor` accepts a `[]any` slice as the page argument. Strings in the slice are concatenated as literals; type/`Ref`/predicate entries resolve to their route. To make this read more nicely in templates, define a small `join` helper in your own package:
 
 ```go
-// Helper function
+// User-defined helper (NOT a framework function)
 func join(page any, pattern string) []any {
     return []any{page, pattern}
 }
@@ -177,14 +177,21 @@ Now when you rename `UserList` to `UserTable` using your IDE's refactoring tools
 
 #### Naming Convention
 
-Both `ID` and `IDTarget` convert CamelCase/PascalCase to kebab-case:
+Both `ID` and `IDTarget` convert CamelCase/PascalCase to kebab-case. **For method expressions, the resulting ID includes the page prefix** (`<pageName>-<methodName>`); only standalone function components return the bare kebab-cased name.
 
-- `ID(ctx, p.UserList)` → `"user-list"`
-- `IDTarget(ctx, p.UserList)` → `"#user-list"`
-- `ID(ctx, p.GroupMembers)` → `"group-members"`
-- `ID(ctx, p.HTMLParser)` → `"html-parser"`
+For a page named `TeamManagementView`:
 
-The only difference is that `IDTarget` adds the "#" prefix for CSS selectors, while `ID` returns the raw ID string.
+- `ID(ctx, p.UserList)` → `"team-management-view-user-list"`
+- `IDTarget(ctx, p.UserList)` → `"#team-management-view-user-list"`
+- `ID(ctx, p.GroupMembers)` → `"team-management-view-group-members"`
+- `ID(ctx, p.HTMLParser)` → `"team-management-view-html-parser"`
+
+For standalone function components (defined as `templ FuncName(...)` outside a page receiver):
+
+- `ID(ctx, UserStatsWidget)` → `"user-stats-widget"`
+- `IDTarget(ctx, UserStatsWidget)` → `"#user-stats-widget"`
+
+The only difference between `ID` and `IDTarget` is that `IDTarget` adds the `#` prefix for CSS selectors. **Plain string arguments pass through unchanged** in both functions — `IDTarget(ctx, "body")` returns `"body"`, not `"#body"`. Pass `"#body"` if you want the hash.
 
 See the [HTMX integration guide](./htmx.md) for more detailed examples and usage patterns.
 
