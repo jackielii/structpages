@@ -19,7 +19,7 @@ if err != nil {
 
 ### Page Middlewares
 
-Implement the `Middlewares()` method to add middleware to specific page, which will also be applied to its descendants:
+Implement the `Middlewares()` method to add middleware to a specific page; it also applies to all descendant routes:
 
 ```go
 type protectedPage struct{
@@ -35,6 +35,24 @@ func (p protectedPage) Middlewares() []structpages.MiddlewareFunc {
 
 templ (p protectedPage) Page() {
     ...
+}
+```
+
+`Middlewares()` can take injected dependencies (matched by type from `WithArgs`):
+
+```go
+func (p protectedPages) Middlewares(sm *SessionManager) []structpages.MiddlewareFunc {
+    return []structpages.MiddlewareFunc{
+        func(next http.Handler, pn *structpages.PageNode) http.Handler {
+            return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                if !sm.Exists(r.Context(), "user") {
+                    http.Redirect(w, r, "/login", http.StatusSeeOther)
+                    return
+                }
+                next.ServeHTTP(w, r)
+            })
+        },
+    }
 }
 ```
 
@@ -65,10 +83,15 @@ func loggingMiddleware(next http.Handler, pn *structpages.PageNode) http.Handler
 
 ### Middleware Execution Order
 
-Middlewares are executed in the order they are defined:
-1. Global middlewares (first to last)
-2. Page-specific middlewares (first to last)
-3. Page handler
+The framework prepends two implicit middlewares to every route, then layers the user-supplied chain on top. The final order, from outermost (runs first on the request, last on the response) to innermost:
 
-The middleware execution forms a chain where each middleware wraps the next, creating an "onion" pattern. The `TestMiddlewareOrder` test in the codebase validates this behavior.
+1. **Framework: `withPcCtx`** — injects the parse context into `r.Context()` so `URLFor` / `ID` / `IDTarget` work in handlers.
+2. **Framework: `extractURLParams`** — pre-extracts the current request's path params into context for `URLFor` auto-fill.
+3. **Global middlewares from `WithMiddlewares(...)`** — first item is outermost.
+4. **Page-specific middlewares from `Middlewares()`** — accumulate down the page tree (parent's middlewares wrap children's).
+5. **The page handler** — innermost.
+
+Middleware execution forms an "onion": the outermost middleware sees the request first and the response last. The `TestMiddlewareOrder` test in the codebase validates this behavior.
+
+Note: because of the auto-injected middlewares, you don't need to do anything to make `URLFor` and `ID`/`IDTarget` work from inside your handlers — the parse context and current-route params are already in `r.Context()`.
 

@@ -16,18 +16,18 @@ func (f formPage) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
     if r.Method == "POST" {
         // Process form
         if err := processForm(r); err != nil {
-            // Response is buffered, so error page can be rendered
+            // Response is buffered, so the error handler can render
+            // an error page even though we already wrote partial output
             return err
         }
         http.Redirect(w, r, "/success", http.StatusSeeOther)
         return nil
     }
-    
-    // Render form
-    return customError{
-        Code:    http.StatusMethodNotAllowed,
-        Message: "Method not allowed",
-    }
+
+    // Any non-nil return goes to the configured error handler
+    // (see WithErrorHandler). The framework does not auto-map error
+    // types to status codes — your error handler decides.
+    return fmt.Errorf("method not allowed: %s", r.Method)
 }
 ```
 
@@ -49,18 +49,21 @@ func (a apiEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 ### Initialization
 
-Use the `Init` method for setup (You shouldn't use `Init` for dependency injection, see below):
+Use the `Init` method for one-time setup at `Mount` time. `Init` may take an `error` return and may receive injected dependencies (matched by type from `WithArgs`):
 
 ```go
 type databasePage struct {
     db *sql.DB
 }
 
-func (d *databasePage) Init() {
-    // Called during route parsing
-    d.db = connectToDatabase()
+func (d *databasePage) Init(store *Store) error {
+    // Called once during Mount. Errors abort Mount.
+    d.db = store.DB()
+    return nil
 }
 ```
+
+Either value or pointer receiver works; use pointer if `Init` mutates the page (the typical case). Prefer `WithArgs` for runtime dependencies — `Init` is for setup that has to happen exactly once and isn't naturally a method parameter.
 
 ### Dependency Injection
 
@@ -76,17 +79,16 @@ type SessionManager struct {
     // session configuration
 }
 
-// Pass services when mounting pages
+// Pass services when mounting pages — wrap them in WithArgs(...)
 mux := http.NewServeMux()
 
 store := &Store{db: db}
 sessionManager := NewSessionManager()
 
-// Services are passed as additional arguments to Mount
+// Services are registered via the WithArgs option (Mount's variadic
+// param is options ...Option, not raw values)
 sp, err := structpages.Mount(mux, pages{}, "/", "My App",
-    store,           // Will be available in page & other methods
-    sessionManager,  // Will be available in page & other methods
-    logger,          // Any other dependencies
+    structpages.WithArgs(store, sessionManager, logger),
 )
 if err != nil {
     log.Fatal(err)
@@ -99,8 +101,10 @@ if err != nil {
 // DON'T do this - will return an error for duplicate type
 mux := http.NewServeMux()
 _, err := structpages.Mount(mux, pages{}, "/", "My App",
-    "api-key",      // First string
-    "db-name",      // Second string - will cause error
+    structpages.WithArgs(
+        "api-key",  // First string
+        "db-name",  // Second string - will cause error
+    ),
 )
 if err != nil {
     // Error: duplicate type string in args registry
@@ -111,8 +115,10 @@ type APIKey string
 type DatabaseName string
 
 sp, err := structpages.Mount(mux, pages{}, "/", "My App",
-    APIKey("your-api-key"),
-    DatabaseName("mydb"),
+    structpages.WithArgs(
+        APIKey("your-api-key"),
+        DatabaseName("mydb"),
+    ),
 )
 if err != nil {
     log.Fatal(err)
@@ -126,6 +132,10 @@ func (p userPage) Props(r *http.Request, apiKey APIKey, dbName DatabaseName) (Us
     // ...
 }
 ```
+
+**Type matching with coercion.** The argument registry coerces between pointer and value forms and falls back to assignability (`args.go`). One concrete consequence: a single `*AppContext` registration can fill a parameter typed as any interface that `*AppContext` implements. So you can register concrete types and have handler methods declare interface parameters (good for testability).
+
+**Generic types and interface types in DI.** Both work — `generics_injection_test.go` covers basic injection, type parameters, slices/maps as deps, type aliases, function types, complex constraints, pointer semantics, and interface injection (12 tests). Anywhere these docs say "type", read it as "any reflect-distinguishable type, including generics and interfaces".
 
 #### Using Injected Services
 
@@ -294,24 +304,24 @@ id, err := ID(ctx, Ref("userPage.AdminSettings"))
 
 **Testing Dynamic References**
 
+Outside a request context, use the methods on the returned `*StructPages` value (which has its own access to the parse context):
+
 ```go
 func TestMenuReferences(t *testing.T) {
-    // Mount pages
     mux := http.NewServeMux()
     sp, _ := structpages.Mount(mux, &pages{}, "/", "App")
 
-    // Get context with parseContext
-    ctx := sp.Context()
-
     // Verify all menu items reference valid pages
     for _, item := range menu {
-        _, err := structpages.URLFor(ctx, item.PageRef)
+        _, err := sp.URLFor(item.PageRef)
         if err != nil {
             t.Errorf("Invalid menu item %s: %v", item.Label, err)
         }
     }
 }
 ```
+
+Within a request handler, use the context-based functions: `structpages.URLFor(r.Context(), ...)`. The framework auto-injects the parse context into the request context via internal middleware.
 
 ### Type Aliases and URLFor/IDFor
 

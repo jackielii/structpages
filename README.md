@@ -80,11 +80,12 @@ Route definitions use the format `[method] path [Title]`:
 
 - [API Reference](./docs/api.md) - Complete API documentation for Mount, options, and methods
 - [Routing Patterns](./docs/routing.md) - Route definitions, path parameters, nested routes
+- [Supported Request Flows](./docs/supported-flows.md) - How requests are dispatched to handlers and components
 - [Middleware](./docs/middleware.md) - Using middleware with your pages
 - [HTMX Integration](./docs/htmx.md) - Partial rendering and HTMX support
-- [URLFor](./docs/urlfor.md) - Type-safe URL generation
+- [URLFor & ID Generation](./docs/urlfor.md) - Type-safe URL and HTML id generation
 - [Templ Patterns](./docs/templ.md) - Working with Templ templates
-- [Advanced Features](./docs/advanced.md) - Dependency injection, error handling, and more
+- [Advanced Features](./docs/advanced.md) - Dependency injection, Init, dynamic Refs, type aliases
 
 ## Examples
 
@@ -92,7 +93,8 @@ Check out the [examples directory](./examples) for complete working applications
 
 - [Simple](./examples/simple) - Basic routing and page rendering
 - [HTMX](./examples/htmx) - HTMX integration with partial updates
-- [Todo](./examples/todo) - Full todo application with database
+- [HTMX RenderTarget](./examples/htmx-render-target) - Standalone-function components shared across pages, with per-component data loading via `RenderTarget`
+- [Todo](./examples/todo) - Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component (in-memory store)
 
 ## Contributing
 

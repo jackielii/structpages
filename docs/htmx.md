@@ -10,11 +10,14 @@ When an HTMX request is detected (via `HX-Request` header), the framework automa
 2. Matches it to a component method or standalone function
 3. Renders that specific component instead of the full page
 
-For example:
-- `HX-Target: "content"` → calls `Content()` method
-- `HX-Target: "index-todo-list"` → calls `TodoList()` method on the index page (strips page prefix automatically)
-- `HX-Target: "dashboard-page-user-stats-widget"` → calls `UserStatsWidget` standalone function
-- No HX-Target or non-existent component → falls back to `Page()` method
+For example (page named `index`, with `Content` and `TodoList` components):
+- `HX-Target: "content"` → matches `Content()` (exact match, no prefix needed)
+- `HX-Target: "index-todo-list"` → matches `TodoList()` (exact match with page prefix)
+- `HX-Target: "todo-list"` → matches `TodoList()` (exact match without prefix)
+- `HX-Target: "dashboard-page-user-stats-widget"` (no method by that name) → returns a function-target placeholder; the actual `UserStatsWidget` standalone function is bound lazily when Props calls `target.Is(UserStatsWidget)`
+- No `HX-Target` or non-HTMX request → falls back to `Page()` method
+
+Detailed matching algorithm and the page-prefix guard for cross-page false matches are described in [api.md → HTMXRenderTarget](./api.md#htmxrendertarget).
 
 This works automatically with `ID` and `IDTarget`:
 
@@ -370,19 +373,23 @@ func (p DashboardPage) Props(r *http.Request, target structpages.RenderTarget) (
 
 ### Custom Target Selector
 
-The default `HTMXRenderTarget` works for most use cases, but you can customize the component selection logic if needed:
+The default `HTMXRenderTarget` works for most use cases. For custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`). The framework's own constructors (`methodRenderTarget`, `functionRenderTarget`) are unexported, so a custom selector typically delegates to `HTMXRenderTarget` for the cases it doesn't override.
+
+If your custom target type also implements `Component() component`, then `RenderComponent(target)` (no args) inside Props will call `Component()` directly to get the component to render — handy for selectors that already know the data.
 
 ```go
+type customRenderTarget struct {
+    component component
+}
+
+func (c customRenderTarget) Is(method any) bool { return false } // never matches normal components
+func (c customRenderTarget) Component() component { return c.component }
+
 mux := http.NewServeMux()
 sp, err := structpages.Mount(mux, pages{}, "/", "My App",
-    structpages.WithTargetSelector(func(r *http.Request, pn *PageNode) (structpages.RenderTarget, error) {
-        // Your custom logic
-        // For example, select based on custom headers, query params, etc.
-        if customTarget := r.Header.Get("X-Custom-Target"); customTarget != "" {
-            // Look up component by custom header
-            if method, ok := pn.Components[customTarget]; ok {
-                return structpages.NewMethodRenderTarget(customTarget, method), nil
-            }
+    structpages.WithTargetSelector(func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
+        if r.Header.Get("X-Custom-Target") == "json" {
+            return customRenderTarget{component: jsonComponent(loadData(r, pn))}, nil
         }
         // Fall back to default HTMX behavior
         return structpages.HTMXRenderTarget(r, pn)
