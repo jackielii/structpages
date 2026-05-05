@@ -43,7 +43,7 @@ func Test_walk(t *testing.T) {
 		}
 	})
 	t.Run("walk iter all", func(t *testing.T) {
-		items := make([]string, 0)
+		items := make([]string, 0, len(expected))
 		for n := range testNode.All() {
 			items = append(items, n.Name)
 		}
