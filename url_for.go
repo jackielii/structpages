@@ -204,9 +204,10 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 	} else {
 		switch {
 		case len(args) == len(indicies):
-			for i, idx := range indicies {
+			for i, arg := range args {
 				// Always override with provided args when count matches exactly
-				segments[idx].value = encodePathSegment(args[i], segments[idx].wildcard)
+				idx := indicies[i]
+				segments[idx].value = encodePathSegment(arg, segments[idx].wildcard)
 				segments[idx].filled = true
 			}
 		case len(args)%2 == 0 && len(args) >= 2:
