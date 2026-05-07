@@ -1,0 +1,119 @@
+package admin
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/jackielii/structpages/examples/blog/auth"
+	"github.com/jackielii/structpages/examples/blog/store"
+	"github.com/jackielii/structpages/examples/blog/ui/components"
+	"github.com/jackielii/structpages/examples/blog/ui/layout"
+)
+
+// adminShellWith is a tiny templ wrapper used by handlers that need to
+// render a custom body inside AdminShell from Go code.
+templ adminShellWith(title string, user store.User, body templ.Component) {
+	@layout.AdminShell(title, user) {
+		@body
+	}
+}
+
+// --- List ---
+
+type postListPage struct{}
+
+type postListProps struct {
+	User  store.User
+	Posts []store.Post
+}
+
+func (postListPage) Props(r *http.Request, s *store.Store) (postListProps, error) {
+	user, _ := auth.UserFromContext(r.Context())
+	posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 50})
+	return postListProps{User: user, Posts: posts}, nil
+}
+
+templ (p postListPage) Page(props postListProps) {
+	@layout.AdminShell("Posts", props.User) {
+		@p.Content(props)
+	}
+}
+
+templ (postListPage) Content(props postListProps) {
+	<header class="mb-4 flex items-center justify-between">
+		<h1 class="text-2xl font-semibold">All posts</h1>
+		<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ components.URL(ctx, postNewPage{}) }>New post</a>
+	</header>
+	@PostsTable(props.Posts)
+}
+
+// --- New ---
+
+type postNewPage struct{}
+
+type postFormViewProps struct {
+	User       store.User
+	Categories []store.Category
+	Post       store.Post
+}
+
+func (postNewPage) Props(r *http.Request, s *store.Store) (postFormViewProps, error) {
+	user, _ := auth.UserFromContext(r.Context())
+	return postFormViewProps{User: user, Categories: s.ListCategories()}, nil
+}
+
+templ (postNewPage) Page(props postFormViewProps) {
+	@layout.AdminShell("New post", props.User) {
+		<h1 class="mb-4 text-2xl font-semibold">New post</h1>
+		@postForm(props.Post, props.Categories, "")
+	}
+}
+
+// --- Edit ---
+
+type postEditPage struct{}
+
+func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, error) {
+	user, _ := auth.UserFromContext(r.Context())
+	id, _ := strconv.Atoi(r.PathValue("id"))
+	p, err := s.GetPost(id)
+	if err != nil {
+		return postFormViewProps{}, err
+	}
+	return postFormViewProps{User: user, Categories: s.ListCategories(), Post: p}, nil
+}
+
+templ (postEditPage) Page(props postFormViewProps) {
+	@layout.AdminShell("Edit post", props.User) {
+		<h1 class="mb-4 text-2xl font-semibold">Edit post</h1>
+		@postForm(props.Post, props.Categories, "")
+	}
+}
+
+// --- Shared form ---
+
+templ postForm(p store.Post, cats []store.Category, errMsg string) {
+	<form method="POST" action={ postFormAction(ctx, p) } class="space-y-3">
+		@components.Alert(components.AlertError, errMsg)
+		@components.Input("title", "Title", p.Title, "")
+		@components.Input("slug", "Slug (auto if blank)", p.Slug, "")
+		<label class="block text-sm">
+			<span class="mb-1 block font-medium text-slate-700">Category</span>
+			<select name="category_id" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+				<option value="0">— pick one —</option>
+				for _, c := range cats {
+					<option value={ strconv.Itoa(c.ID) } selected?={ c.ID == p.CategoryID }>{ c.Name }</option>
+				}
+			</select>
+		</label>
+		@components.Textarea("body", "Body", p.Body, "")
+		<label class="flex items-center gap-2 text-sm">
+			<input type="checkbox" name="published" checked?={ p.Published }/>
+			Publish immediately
+		</label>
+		<div class="flex items-center gap-2">
+			@components.Button("Save", templ.Attributes{"type": "submit"})
+			<a class="text-sm text-slate-500 hover:underline" href={ components.URL(ctx, postListPage{}) }>Cancel</a>
+		</div>
+	</form>
+}
