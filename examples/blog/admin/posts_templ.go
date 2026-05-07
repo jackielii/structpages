@@ -5,6 +5,7 @@ package admin
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -155,7 +156,7 @@ func (postListPage) Content(props postListProps) templ.Component {
 		var templ_7745c5c3_Var6 templ.SafeURL
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postNewPage{}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 45, Col: 137}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 46, Col: 137}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -245,7 +246,10 @@ type postEditPage struct{}
 
 func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, error) {
 	user, _ := auth.UserFromContext(r.Context())
-	id, _ := strconv.Atoi(r.PathValue("id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return postFormViewProps{}, fmt.Errorf("invalid post id: %w", err)
+	}
 	p, err := s.GetPost(id)
 	if err != nil {
 		return postFormViewProps{}, err
@@ -333,7 +337,7 @@ func postForm(p store.Post, cats []store.Category, errMsg string) templ.Componen
 		var templ_7745c5c3_Var12 templ.SafeURL
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(postFormAction(ctx, p))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 96, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 100, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -365,9 +369,9 @@ func postForm(p store.Post, cats []store.Category, errMsg string) templ.Componen
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(c.ID))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(c.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 105, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 109, Col: 25}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -390,7 +394,7 @@ func postForm(p store.Post, cats []store.Category, errMsg string) templ.Componen
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 105, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 109, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -434,7 +438,7 @@ func postForm(p store.Post, cats []store.Category, errMsg string) templ.Componen
 		var templ_7745c5c3_Var15 templ.SafeURL
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postListPage{}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 116, Col: 95}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/posts.templ`, Line: 120, Col: 95}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {

@@ -4,8 +4,6 @@
 package admin
 
 import (
-	"fmt"
-
 	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -13,7 +11,7 @@ import (
 
 templ statCell(label string, value int) {
 	<div class="rounded-lg border bg-white p-4 text-center shadow-sm">
-		<div class="text-3xl font-semibold text-slate-900">{ fmt.Sprintf("%d", value) }</div>
+		<div class="text-3xl font-semibold text-slate-900">{ value }</div>
 		<div class="mt-1 text-xs uppercase tracking-wide text-slate-500">{ label }</div>
 	</div>
 }
@@ -36,7 +34,7 @@ templ RecentPostsCard(posts []store.Post) {
 				}
 				for _, p := range posts {
 					<li class="flex items-center justify-between py-2">
-						<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", fmt.Sprintf("%d", p.ID)) }>
+						<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>
 							{ p.Title }
 						</a>
 						if p.Published {
@@ -66,7 +64,7 @@ templ PostsTable(posts []store.Post) {
 				for _, p := range posts {
 					<tr class="border-t">
 						<td class="px-3 py-2 font-medium">
-							<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", fmt.Sprintf("%d", p.ID)) }>{ p.Title }</a>
+							<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>{ p.Title }</a>
 						</td>
 						<td class="px-3 py-2">
 							if p.Published {
@@ -79,8 +77,8 @@ templ PostsTable(posts []store.Post) {
 						<td class="px-3 py-2 text-right">
 							<form
 								method="POST"
-								action={ components.URL(ctx, postDeleteHandler{}, "id", fmt.Sprintf("%d", p.ID)) }
-								hx-post={ structpages.URLFor(ctx, postDeleteHandler{}, "id", fmt.Sprintf("%d", p.ID)) }
+								action={ components.URL(ctx, postDeleteHandler{}, "id", p.ID) }
+								hx-post={ structpages.URLFor(ctx, postDeleteHandler{}, "id", p.ID) }
 								hx-target={ structpages.IDTarget(ctx, PostsTable) }
 								hx-swap="outerHTML"
 								hx-confirm="Delete this post?"

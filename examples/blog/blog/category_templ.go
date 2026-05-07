@@ -53,7 +53,7 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 			URL: func(target int) (string, error) {
 				return structpages.URLFor(ctx,
 					[]any{categoryPage{}, "?page={page}"},
-					"page", strconv.Itoa(target),
+					"page", target,
 				)
 			},
 		},

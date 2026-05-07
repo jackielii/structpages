@@ -5,7 +5,6 @@ package admin
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/a-h/templ"
@@ -124,7 +123,7 @@ func (userListPage) Content(props userListProps) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(u.Username)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 39, Col: 19}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 38, Col: 19}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -145,9 +144,9 @@ func (userListPage) Content(props userListProps) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var6 templ.SafeURL
-				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, userDeleteHandler{}, "id", fmt.Sprintf("%d", u.ID)))
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, userDeleteHandler{}, "id", u.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 46, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 45, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -187,7 +186,7 @@ func (userListPage) Content(props userListProps) templ.Component {
 			var templ_7745c5c3_Var8 templ.SafeURL
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, userCreateHandler{}))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 56, Col: 72}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/users.templ`, Line: 55, Col: 72}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {

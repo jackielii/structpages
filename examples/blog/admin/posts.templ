@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -75,7 +76,10 @@ type postEditPage struct{}
 
 func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, error) {
 	user, _ := auth.UserFromContext(r.Context())
-	id, _ := strconv.Atoi(r.PathValue("id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return postFormViewProps{}, fmt.Errorf("invalid post id: %w", err)
+	}
 	p, err := s.GetPost(id)
 	if err != nil {
 		return postFormViewProps{}, err
@@ -102,7 +106,7 @@ templ postForm(p store.Post, cats []store.Category, errMsg string) {
 			<select name="category_id" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
 				<option value="0">— pick one —</option>
 				for _, c := range cats {
-					<option value={ strconv.Itoa(c.ID) } selected?={ c.ID == p.CategoryID }>{ c.Name }</option>
+					<option value={ c.ID } selected?={ c.ID == p.CategoryID }>{ c.Name }</option>
 				}
 			</select>
 		</label>

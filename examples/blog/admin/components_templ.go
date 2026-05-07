@@ -11,8 +11,6 @@ package admin
 //lint:file-ignore SA4006 This context is only used if a nested component is present.
 
 import (
-	"fmt"
-
 	"github.com/a-h/templ"
 	templruntime "github.com/a-h/templ/runtime"
 	"github.com/jackielii/structpages"
@@ -46,9 +44,9 @@ func statCell(label string, value int) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", value))
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 16, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 14, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -61,7 +59,7 @@ func statCell(label string, value int) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 17, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 15, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -103,7 +101,7 @@ func StatsGrid(stats store.Stats) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.ID(ctx, StatsGrid))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 22, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 20, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -165,7 +163,7 @@ func RecentPostsCard(posts []store.Post) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.ID(ctx, RecentPostsCard))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 31, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 29, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -203,9 +201,9 @@ func RecentPostsCard(posts []store.Post) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var9 templ.SafeURL
-				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postEditPage{}, "id", fmt.Sprintf("%d", p.ID)))
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postEditPage{}, "id", p.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 39, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 37, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -218,7 +216,7 @@ func RecentPostsCard(posts []store.Post) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(p.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 40, Col: 16}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 38, Col: 16}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -290,7 +288,7 @@ func PostsTable(posts []store.Post) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.ID(ctx, PostsTable))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 55, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 53, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -306,9 +304,9 @@ func PostsTable(posts []store.Post) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 templ.SafeURL
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postEditPage{}, "id", fmt.Sprintf("%d", p.ID)))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postEditPage{}, "id", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 69, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 67, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -321,7 +319,7 @@ func PostsTable(posts []store.Post) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(p.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 69, Col: 119}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 67, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -349,7 +347,7 @@ func PostsTable(posts []store.Post) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(p.CreatedAt.Format("Jan 2, 2006"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 78, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 76, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -360,9 +358,9 @@ func PostsTable(posts []store.Post) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 templ.SafeURL
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postDeleteHandler{}, "id", fmt.Sprintf("%d", p.ID)))
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, postDeleteHandler{}, "id", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 82, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 80, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -373,9 +371,9 @@ func PostsTable(posts []store.Post) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
-			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.URLFor(ctx, postDeleteHandler{}, "id", fmt.Sprintf("%d", p.ID)))
+			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.URLFor(ctx, postDeleteHandler{}, "id", p.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 83, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 81, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -388,7 +386,7 @@ func PostsTable(posts []store.Post) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(structpages.IDTarget(ctx, PostsTable))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 84, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `admin/components.templ`, Line: 82, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {

@@ -7,8 +7,6 @@
 // kebab-cased name — e.g. hx-target="#pagination" matches Pagination.
 package components
 
-import "fmt"
-
 type AlertKind string
 
 const (
@@ -99,7 +97,7 @@ templ Pagination(p PaginationProps) {
 			} else {
 				<span class="rounded border px-2 py-1 text-slate-300">← Prev</span>
 			}
-			<span class="px-2 py-1 text-slate-600">Page { fmt.Sprintf("%d", p.Page) } of { fmt.Sprintf("%d", p.Pages()) }</span>
+			<span class="px-2 py-1 text-slate-600">Page { p.Page } of { p.Pages() }</span>
 			if p.HasNext() {
 				<a class="rounded border px-2 py-1 hover:bg-slate-50" href={ p.URL(p.Page + 1) }>Next →</a>
 			} else {
@@ -116,7 +114,7 @@ templ ErrorPage(status int, msg string) {
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
-			<title>Error { fmt.Sprintf("%d", status) }</title>
+			<title>Error { status }</title>
 			<script src="https://cdn.tailwindcss.com"></script>
 		</head>
 		<body class="bg-slate-50 text-slate-900">
@@ -129,7 +127,7 @@ templ ErrorPage(status int, msg string) {
 
 templ ErrorBlock(status int, msg string) {
 	<div class="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
-		<div class="text-4xl font-semibold text-red-700">{ fmt.Sprintf("%d", status) }</div>
+		<div class="text-4xl font-semibold text-red-700">{ status }</div>
 		<p class="mt-2 text-red-700">{ msg }</p>
 		<a class="mt-4 inline-block text-sm text-red-700 underline" href="/">Back to home</a>
 	</div>

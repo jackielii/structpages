@@ -127,7 +127,7 @@ func postFormAction(ctx context.Context, p store.Post) templ.SafeURL {
 	if p.ID == 0 {
 		return must(components.URL(ctx, postCreateHandler{}))
 	}
-	return must(components.URL(ctx, postUpdateHandler{}, "id", strconv.Itoa(p.ID)))
+	return must(components.URL(ctx, postUpdateHandler{}, "id", p.ID))
 }
 
 func must[T any](v T, err error) T {
