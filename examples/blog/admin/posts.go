@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -49,7 +50,10 @@ type postUpdateHandler struct{}
 
 func (postUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store) error {
 	user, _ := auth.UserFromContext(r.Context())
-	id, _ := strconv.Atoi(r.PathValue("id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return fmt.Errorf("invalid post id: %w", err)
+	}
 	incoming, errMsg := parsePostForm(r)
 	incoming.ID = id
 	if errMsg != "" {
@@ -75,9 +79,12 @@ type postDeleteHandler struct{}
 // Delete supports both styles: the PostsTable form falls back to a full POST
 // (visible without HTMX) but also sends hx-post for live refresh of the table.
 func (postDeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store) error {
-	id, _ := strconv.Atoi(r.PathValue("id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return fmt.Errorf("invalid post id: %w", err)
+	}
 	if err := s.DeletePost(id); err != nil {
-		return err
+		return fmt.Errorf("delete post: %w", err)
 	}
 	if r.Header.Get("HX-Request") == "true" {
 		posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 50})

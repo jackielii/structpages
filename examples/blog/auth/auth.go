@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -35,7 +36,10 @@ func (a *Service) Login(w http.ResponseWriter, username, password string) (store
 	if err != nil || u.Password != password {
 		return store.User{}, ErrInvalidCredentials
 	}
-	id := newSessionID()
+	id, err := newSessionID()
+	if err != nil {
+		return store.User{}, fmt.Errorf("create session id: %w", err)
+	}
 	a.mu.Lock()
 	a.sessions[id] = u.ID
 	a.mu.Unlock()
@@ -83,8 +87,10 @@ func (a *Service) Current(r *http.Request) (store.User, bool) {
 	return u, true
 }
 
-func newSessionID() string {
+func newSessionID() (string, error) {
 	var buf [16]byte
-	_, _ = rand.Read(buf[:])
-	return hex.EncodeToString(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }

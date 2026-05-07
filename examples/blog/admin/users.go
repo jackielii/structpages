@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,10 +22,11 @@ func (userCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *st
 	password := r.FormValue("password")
 	isAdmin := r.FormValue("is_admin") == "on"
 	if username == "" || password == "" {
-		http.Redirect(w, r, "/admin/users/", http.StatusSeeOther)
-		return nil
+		return fmt.Errorf("username and password are required")
 	}
-	_, _ = s.CreateUser(store.User{Username: username, Password: password, IsAdmin: isAdmin})
+	if _, err := s.CreateUser(store.User{Username: username, Password: password, IsAdmin: isAdmin}); err != nil {
+		return fmt.Errorf("create user: %w", err)
+	}
 	http.Redirect(w, r, "/admin/users/", http.StatusSeeOther)
 	return nil
 }
@@ -32,8 +34,13 @@ func (userCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *st
 type userDeleteHandler struct{}
 
 func (userDeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store) error {
-	id, _ := strconv.Atoi(r.PathValue("id"))
-	_ = s.DeleteUser(id)
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		return fmt.Errorf("invalid user id: %w", err)
+	}
+	if err := s.DeleteUser(id); err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
 	http.Redirect(w, r, "/admin/users/", http.StatusSeeOther)
 	return nil
 }
