@@ -15,6 +15,9 @@ import (
 //   - HX-Target: "user-stats-widget" (no method match) -> returns functionRenderTarget for lazy evaluation
 //   - No HX-Target or non-HTMX request -> returns methodRenderTarget for Page() method
 //
+// This selector works with htmx 1.x and 2.x, where HX-Target carries the bare
+// element id. For htmx 4, use [HTMXv4RenderTarget] instead.
+//
 // This is the default TargetSelector for StructPages, making IDFor work
 // seamlessly with HTMX out of the box.
 func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
@@ -39,6 +42,62 @@ func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	// forcing Props to use RenderComponent
 	pageMethod := pn.Components["Page"]
 	return newMethodRenderTarget("Page", &pageMethod), nil
+}
+
+// HTMXv4RenderTarget is the htmx 4 variant of [HTMXRenderTarget].
+//
+// htmx 4 reshaped two request headers we care about:
+//
+//   - HX-Target now carries "<tag>#<id>" (or just "<tag>" for unidentified
+//     elements) instead of a bare id.
+//   - HX-Request-Type was added: "full" when the swap target is <body> or
+//     hx-select is in play, "partial" otherwise. The server is expected to
+//     honor it.
+//
+// This selector treats HX-Request-Type=full as a hard hint to render the Page
+// component. Otherwise it picks the matching key from HX-Target — preferring
+// the id portion of "<tag>#<id>" when present, falling back to the tag for
+// id-less targets — and applies the same matching rules as
+// [HTMXRenderTarget]. A component named e.g. Form matches both
+// `hx-target="#some-form"` (sent as "form#some-form") and `hx-target="form"`
+// (sent as "form").
+//
+// HX-Source (htmx 4's HX-Trigger replacement) identifies the trigger element
+// rather than the swap target, so it is not used for component routing. Read
+// it from the request directly if you need it.
+//
+// See https://four.htmx.org/reference/#headers.
+//
+// Wire it via [WithTargetSelector] when serving an htmx 4 frontend:
+//
+//	sp, err := structpages.Mount(mux, root{}, "/", "App",
+//	    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget))
+func HTMXv4RenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
+	if r.Header.Get("HX-Request") == "true" &&
+		r.Header.Get("HX-Request-Type") != "full" {
+		if key := htmxv4TargetKey(r.Header.Get("HX-Target")); key != "" {
+			if componentName := matchComponentByTarget(key, pn); componentName != "" {
+				method := pn.Components[componentName]
+				return newMethodRenderTarget(componentName, &method), nil
+			}
+			return newFunctionRenderTarget(key, pn.Name), nil
+		}
+	}
+
+	pageMethod := pn.Components["Page"]
+	return newMethodRenderTarget("Page", &pageMethod), nil
+}
+
+// htmxv4TargetKey extracts the matching key from an htmx 4 HX-Target value.
+// The header format is "<tag>#<id>" when the swap target has an id, or just
+// "<tag>" when it doesn't. Prefer the id when available (more specific);
+// otherwise use the tag so components like Form can match `hx-target="form"`.
+func htmxv4TargetKey(target string) string {
+	tag, id, ok := strings.Cut(target, "#")
+	if ok && id != "" {
+		return id
+	}
+	return tag
 }
 
 // matchComponentByTarget finds a component that matches the given HX-Target ID.
