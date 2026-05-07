@@ -110,6 +110,11 @@ func (contact) Page() tpl { return tpl{page: "contact", entry: "layout/public"} 
 func (contact) Main() tpl { return tpl{page: "contact", entry: "body"} }
 
 // --- post page: demonstrates atom + molecule + organism composition ---
+//
+// Data loading lives in a single Props method; component methods receive
+// the loaded props as a parameter. structpages calls Props once per
+// request before dispatching to the matched component, so Comments() and
+// Main() and Page() all see the same props without re-loading.
 
 type postProps struct {
 	Title    string
@@ -123,7 +128,17 @@ type postSummary struct {
 	Excerpt string
 }
 
-func loadPostProps() postProps {
+type post struct{}
+
+// Props is the single place data is loaded for the post page. structpages
+// calls it before any component method on this page; the return value is
+// then passed as an argument to whichever method is dispatched (Page,
+// Main, or Comments).
+//
+// In a real app this would query a store and could optionally take a
+// structpages.RenderTarget parameter to skip work when only a partial is
+// being rendered (see examples/blog for that pattern).
+func (post) Props() postProps {
 	return postProps{
 		Title: "Hello, atomic design",
 		Body:  "This page composes a layout, two molecule cards, and a comments organism.",
@@ -135,24 +150,26 @@ func loadPostProps() postProps {
 	}
 }
 
-type post struct{}
-
-func (post) Page() tpl {
-	return tpl{page: "post", entry: "layout/public", data: loadPostProps()}
+func (post) Page(props postProps) tpl {
+	return tpl{page: "post", entry: "layout/public", data: props}
 }
 
 // Main renders just the page body — used for HTMX nav swaps targeting <main>.
-func (post) Main() tpl {
-	return tpl{page: "post", entry: "body", data: loadPostProps()}
+func (post) Main(props postProps) tpl {
+	return tpl{page: "post", entry: "body", data: props}
 }
 
 // Comments renders just the comments organism. structpages's
 // HTMXv4RenderTarget routes HX-Target=section#comments (or tag-only
-// "comments") here by matching the method name to the kebab-cased component
-// id. The partial template is wrapped in <section id="comments"> so it
-// targets itself for subsequent swaps.
-func (post) Comments() tpl {
-	return tpl{page: "post", entry: "post/comments-list", data: loadPostProps().Comments}
+// "comments") here by matching the method name to the kebab-cased
+// component id. The partial template is wrapped in <section id="comments">
+// so it targets itself for subsequent swaps.
+//
+// Comments only needs the comments slice — Props loads everything, but a
+// real Props could check the RenderTarget and skip the rest when only
+// this organism is being rendered.
+func (post) Comments(props postProps) tpl {
+	return tpl{page: "post", entry: "post/comments-list", data: props.Comments}
 }
 
 func main() {
