@@ -3,15 +3,16 @@
 // feature partials / pages).
 //
 // structpages is render-engine agnostic: a Page() method can return any
-// value with a Render(ctx context.Context, w io.Writer) error method. The
-// `tpl` type here is a thin wrapper around an html/template set, and
-// htmltemplate.Funcs registers ctx-first helpers so the same parsed
-// *template.Template handles every request — no per-request Clone.
+// value with a Render(ctx context.Context, w io.Writer) error method.
+// The `tpl` type here is a thin wrapper around an html/template set; two
+// small template funcs (urlFor and args) live right beside it. They take
+// ctx as their first argument so the FuncMap registers ONCE at parse
+// time and never needs Clone-rebinding per request.
 //
 // The convention this example uses for exposing ctx in templates is a
 // `view` struct ({Ctx, Data}) passed as the template dot. Templates call
 // `{{ urlFor .Ctx "x" }}` and read page state via `.Data.X`. Pick whatever
-// shape suits you — the htmltemplate package doesn't dictate one.
+// shape suits you — there is no library-imposed wrapper.
 package main
 
 import (
@@ -24,7 +25,6 @@ import (
 	"net/http"
 
 	"github.com/jackielii/structpages"
-	"github.com/jackielii/structpages/htmltemplate"
 )
 
 //go:embed templates
@@ -32,9 +32,9 @@ var tmplFS embed.FS
 
 // pageTmpls holds one fully-parsed template set per page. Each set has its
 // own "body" definition (page-specific) plus shared layout / ui / feature
-// partials. We never Clone at render time — htmltemplate.Funcs registers
-// ctx-first helpers (urlFor / idFor / idTarget / args), so the request
-// context flows through the template data instead of mutating funcs.
+// partials. We never Clone at render time — the template funcs take ctx
+// as their first argument, so the request context flows through the
+// template data instead of mutating funcs.
 var pageTmpls = map[string]*template.Template{
 	"index":   parseSet("layout/public.html", "pages/index.html"),
 	"product": parseSet("layout/public.html", "pages/product.html"),
@@ -44,7 +44,10 @@ var pageTmpls = map[string]*template.Template{
 }
 
 func parseSet(layout, body string) *template.Template {
-	t := template.New("").Funcs(htmltemplate.Funcs())
+	t := template.New("").Funcs(template.FuncMap{
+		"urlFor": urlFor,
+		"args":   args,
+	})
 	patterns := []string{
 		"templates/" + layout,
 		"templates/ui/atoms/*.html",
@@ -55,10 +58,35 @@ func parseSet(layout, body string) *template.Template {
 	return template.Must(t.ParseFS(tmplFS, patterns...))
 }
 
+// urlFor is a tiny adapter so templates can call structpages.URLFor with
+// a string page reference: `{{ urlFor .Ctx "Product" }}`.
+func urlFor(ctx context.Context, name string, a ...any) (string, error) {
+	return structpages.URLFor(ctx, structpages.Ref(name), a...)
+}
+
+// args builds a map[string]any from alternating key/value pairs, used to
+// pass multiple inputs to a partial template:
+//
+//	{{ template "ui/molecules/card" (args "Title" .Data.Title "Body" .Data.Body) }}
+func args(kv ...any) (map[string]any, error) {
+	if len(kv)%2 != 0 {
+		return nil, fmt.Errorf("args: odd number of arguments (%d)", len(kv))
+	}
+	m := make(map[string]any, len(kv)/2)
+	for i := 0; i < len(kv); i += 2 {
+		k, ok := kv[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("args: key at position %d is %T, expected string", i, kv[i])
+		}
+		m[k] = kv[i+1]
+	}
+	return m, nil
+}
+
 // view is the example's chosen template-dot shape: ctx + page data.
-// Helpers like urlFor read ctx via .Ctx; templates read page state via
-// .Data. The htmltemplate package doesn't dictate this shape; pick your
-// own and pass ctx however suits.
+// urlFor reads ctx via .Ctx; templates read page state via .Data. There
+// is no library-imposed wrapper — pick your own and pass ctx however
+// suits.
 type view struct {
 	Ctx  context.Context //nolint:containedctx
 	Data any
