@@ -7,6 +7,7 @@
 | [`htmx/`](./htmx) | HTMX navigation with `hx-target` + a small `urlFor` wrapper |
 | [`htmx-render-target/`](./htmx-render-target) | Standalone-function components shared across pages, driven by `RenderTarget` for per-component data loading |
 | [`todo/`](./todo) | Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component |
+| [`blog/`](./blog) | Comprehensive blog + admin CMS with React-style per-feature packages, DI, page-level `Middlewares`, `Props` + `RenderTarget` widgets, custom error handler, cross-package component composition |
 
 ## Running an example
 
