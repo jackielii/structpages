@@ -1,12 +1,9 @@
 {{- /*
 post/comments-list — feature-local organism, HTMX-targetable.
 
-Receives a re-wrapped View via .Sub from the page, so it has access to
-.URL / .ID / .Target while seeing its own slice of state on .Data
-(a []string of comments).
-
-The wrapping <section> id matches the page's Comments() method, so an
-HTMX request targeting it is dispatched to that method by structpages's
+Receives {Ctx, Data} where Data is a []string of comments. The wrapping
+<section id="comments"> matches the page's Comments() method, so an HTMX
+request targeting #comments is dispatched to that method by structpages's
 HTMXv4RenderTarget selector.
 */ -}}
 {{ define "post/comments-list" -}}
@@ -17,7 +14,7 @@ HTMXv4RenderTarget selector.
   </ul>
   {{ template "ui/atoms/button" (args
       "Label"    "Refresh comments"
-      "HxGet"    (.URL "post")
+      "HxGet"    (urlFor .Ctx "post")
       "HxTarget" "section#comments") }}
 </section>
 {{- end }}

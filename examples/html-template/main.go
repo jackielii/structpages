@@ -5,8 +5,13 @@
 // structpages is render-engine agnostic: a Page() method can return any
 // value with a Render(ctx context.Context, w io.Writer) error method. The
 // `tpl` type here is a thin wrapper around an html/template set, and
-// htmltemplate.View is the request-scoped data wrapper that exposes
-// .URL / .ID / .Target inside templates without per-request Cloning.
+// htmltemplate.Funcs registers ctx-first helpers so the same parsed
+// *template.Template handles every request — no per-request Clone.
+//
+// The convention this example uses for exposing ctx in templates is a
+// `view` struct ({Ctx, Data}) passed as the template dot. Templates call
+// `{{ urlFor .Ctx "x" }}` and read page state via `.Data.X`. Pick whatever
+// shape suits you — the htmltemplate package doesn't dictate one.
 package main
 
 import (
@@ -27,8 +32,9 @@ var tmplFS embed.FS
 
 // pageTmpls holds one fully-parsed template set per page. Each set has its
 // own "body" definition (page-specific) plus shared layout / ui / feature
-// partials. We never Clone at render time — htmltemplate.View threads the
-// request context through the template data instead of mutating funcs.
+// partials. We never Clone at render time — htmltemplate.Funcs registers
+// ctx-first helpers (urlFor / idFor / idTarget / args), so the request
+// context flows through the template data instead of mutating funcs.
 var pageTmpls = map[string]*template.Template{
 	"index":   parseSet("layout/public.html", "pages/index.html"),
 	"product": parseSet("layout/public.html", "pages/product.html"),
@@ -38,9 +44,7 @@ var pageTmpls = map[string]*template.Template{
 }
 
 func parseSet(layout, body string) *template.Template {
-	t := template.New("").Funcs(template.FuncMap{
-		"args": htmltemplate.Args,
-	})
+	t := template.New("").Funcs(htmltemplate.Funcs())
 	patterns := []string{
 		"templates/" + layout,
 		"templates/ui/atoms/*.html",
@@ -51,10 +55,19 @@ func parseSet(layout, body string) *template.Template {
 	return template.Must(t.ParseFS(tmplFS, patterns...))
 }
 
+// view is the example's chosen template-dot shape: ctx + page data.
+// Helpers like urlFor read ctx via .Ctx; templates read page state via
+// .Data. The htmltemplate package doesn't dictate this shape; pick your
+// own and pass ctx however suits.
+type view struct {
+	Ctx  context.Context //nolint:containedctx
+	Data any
+}
+
 // tpl is a renderable component backed by one of the parsed page sets.
-// `entry` selects which named template to execute — "layout/public" for the
-// full page, "body" for the HTMX content swap, or e.g. "post/comments-list"
-// for an organism partial.
+// `entry` selects which named template to execute — "layout/public" for
+// the full page, "body" for the HTMX content swap, or e.g.
+// "post/comments-list" for an organism partial.
 type tpl struct {
 	page  string
 	entry string
@@ -66,7 +79,7 @@ func (p tpl) Render(ctx context.Context, w io.Writer) error {
 	if !ok {
 		return fmt.Errorf("unknown page %q", p.page)
 	}
-	return t.ExecuteTemplate(w, p.entry, htmltemplate.NewView(ctx, p.data))
+	return t.ExecuteTemplate(w, p.entry, view{Ctx: ctx, Data: p.data})
 }
 
 // --- simple pages: index / product / team / contact ---
