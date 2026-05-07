@@ -489,7 +489,172 @@ func (t myTarget) Component() component { return MyComponent(t.data) }
 
 ---
 
-## 10. Search Picklist with Positional Args
+## 10. html/template Instead of templ
+
+structpages is render-engine agnostic — any value with a `Render(ctx context.Context, w io.Writer) error` method works as a page output. The pattern below is what `examples/html-template/` demonstrates.
+
+### Atomic-design layout
+
+Slash-namespaced template names mirror the directory tree. Only `body` is reused (one per per-page parsed set):
+
+```
+templates/
+  layout/public.html         {{ define "layout/public" }}
+  ui/atoms/button.html       {{ define "ui/atoms/button" }}
+  ui/molecules/card.html     {{ define "ui/molecules/card" }}
+  post/comments-list.html    {{ define "post/comments-list" }}  (organism, HTMX-targetable)
+  post/page.html             {{ define "body" }}                (page-specific)
+  pages/home.html            {{ define "body" }}
+```
+
+### Renderable type + helpers
+
+```go
+//go:embed templates
+var tmplFS embed.FS
+var pageTmpls map[string]*template.Template // populated in main
+
+type tpl struct {
+    page  string
+    entry string
+    data  any
+}
+
+func (p tpl) Render(_ context.Context, w io.Writer) error {
+    t, ok := pageTmpls[p.page]
+    if !ok {
+        return fmt.Errorf("unknown page %q", p.page)
+    }
+    return t.ExecuteTemplate(w, p.entry, p.data)
+}
+
+// args is a Hugo/Sprig-style helper for passing multiple inputs to a
+// partial. Defined in user code (not provided by the framework).
+func args(kv ...any) (map[string]any, error) {
+    if len(kv)%2 != 0 {
+        return nil, fmt.Errorf("args: odd number of arguments (%d)", len(kv))
+    }
+    m := make(map[string]any, len(kv)/2)
+    for i := 0; i < len(kv); i += 2 {
+        k, ok := kv[i].(string)
+        if !ok {
+            return nil, fmt.Errorf("args: key at position %d is %T", i, kv[i])
+        }
+        m[k] = kv[i+1]
+    }
+    return m, nil
+}
+```
+
+### Parse in `main` after `Mount`
+
+The key move: parse templates AFTER `Mount` so `urlFor` can close over `sp.URLFor`. The FuncMap is bound once and the same parsed `*template.Template` serves every request — no Clone, no per-render rebinding.
+
+```go
+func main() {
+    mux := http.NewServeMux()
+    sp, err := structpages.Mount(mux, root{}, "/", "App",
+        structpages.WithTargetSelector(structpages.HTMXv4RenderTarget))
+    if err != nil { log.Fatal(err) }
+
+    funcs := template.FuncMap{
+        "urlFor": func(name string, a ...any) (string, error) {
+            return sp.URLFor(structpages.Ref(name), a...)
+        },
+        "args": args,
+    }
+    parseSet := func(body string) *template.Template {
+        return template.Must(template.New("").Funcs(funcs).ParseFS(tmplFS,
+            "templates/layout/public.html",
+            "templates/ui/atoms/*.html",
+            "templates/ui/molecules/*.html",
+            "templates/post/*.html",
+            "templates/"+body,
+        ))
+    }
+    pageTmpls = map[string]*template.Template{
+        "home": parseSet("pages/home.html"),
+        "post": parseSet("post/page.html"),
+    }
+
+    log.Fatal(http.ListenAndServe(":8080", mux))
+}
+```
+
+Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{id}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
+
+```go
+func (p tpl) Render(ctx context.Context, w io.Writer) error {
+    base := pageTmpls[p.page]
+    t, _ := base.Clone()
+    t.Funcs(template.FuncMap{
+        "urlFor": func(name string, a ...any) (string, error) {
+            return structpages.URLFor(ctx, structpages.Ref(name), a...)
+        },
+    })
+    return t.ExecuteTemplate(w, p.entry, p.data)
+}
+```
+
+### Pages, Props, organisms
+
+Page methods all return `tpl` with different `entry` names. Props loads once per request; the matched component method receives it as an argument.
+
+```go
+type postProps struct {
+    Title    string
+    Body     string
+    Comments []string
+}
+type post struct{}
+
+func (post) Props() postProps { /* load from store */ }
+
+func (post) Page(p postProps) tpl {
+    return tpl{page: "post", entry: "layout/public", data: p}
+}
+func (post) Main(p postProps) tpl {
+    return tpl{page: "post", entry: "body", data: p}
+}
+// HTMX-targetable organism — name matches <section id="comments">
+func (post) Comments(p postProps) tpl {
+    return tpl{page: "post", entry: "post/comments-list", data: p.Comments}
+}
+```
+
+`HTMXv4RenderTarget` resolves `HX-Target: section#comments` to the `Comments` method via kebab-cased name matching — same mechanism that works with templ.
+
+### Templates
+
+Atoms/molecules receive ad-hoc data via `args` (no framework helpers visible inside — pure presentation). Organisms get whatever data slice they need; `urlFor` is callable inside any template since the FuncMap is parse-time-bound.
+
+```html
+{{ define "layout/public" }}
+<!DOCTYPE html>
+<html><body>
+  <nav><a hx-get="{{ urlFor "post" }}" hx-target="main">Post</a></nav>
+  <main>{{ template "body" . }}</main>
+</body></html>
+{{ end }}
+
+{{ define "body" }}
+<h1>{{ .Title }}</h1>
+{{ range .Recent }}
+  {{ template "ui/molecules/card" (args "Title" .Title "Body" .Excerpt) }}
+{{ end }}
+{{ template "post/comments-list" .Comments }}
+{{ end }}
+
+{{ define "post/comments-list" }}
+<section id="comments">
+  <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+</section>
+{{ end }}
+```
+
+---
+
+## 11. Search Picklist with Positional Args
 
 Positional args fill placeholders left-to-right: `{field}` gets `props.Field`, `{q}` gets `props.Query`, `{page}` gets `props.Page+1`.
 
