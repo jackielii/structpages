@@ -399,6 +399,146 @@ func TestHTMXRenderTarget_FunctionTarget(t *testing.T) {
 	}
 }
 
+func TestHTMXv4RenderTarget(t *testing.T) {
+	tests := []struct {
+		name     string
+		headers  map[string]string
+		pageNode *PageNode
+		// expected: methodRenderTarget name; "" means expect Page (or fallback).
+		// expectFunction: true if a functionRenderTarget is expected.
+		expected       string
+		expectFunction bool
+	}{
+		{
+			name: "v4 tag#id matches component by id",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "main#content",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Content": {}},
+			},
+			expected: "Content",
+		},
+		{
+			name: "v4 tag#id with full prefix",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "div#index-todo-list",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"TodoList": {}},
+			},
+			expected: "TodoList",
+		},
+		{
+			name: "v4 tag-only target matches component by tag name",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "form", // no id - matches Form component
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Form": {}, "Page": {}},
+			},
+			expected: "Form",
+		},
+		{
+			name: "v4 tag-only target without matching component returns functionRenderTarget",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "div",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Page": {}},
+			},
+			expectFunction: true,
+		},
+		{
+			name: "v4 missing HX-Target falls back to Page",
+			headers: map[string]string{
+				"HX-Request": "true",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Page": {}},
+			},
+			expected: "Page",
+		},
+		{
+			name: "v4 unknown id returns functionRenderTarget",
+			headers: map[string]string{
+				"HX-Request": "true",
+				"HX-Target":  "span#nonexistent",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Page": {}},
+			},
+			expectFunction: true,
+		},
+		{
+			name:    "non-HTMX request returns Page",
+			headers: map[string]string{},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Page": {}},
+			},
+			expected: "Page",
+		},
+		{
+			name: "v4 HX-Request-Type=full overrides HX-Target",
+			headers: map[string]string{
+				"HX-Request":      "true",
+				"HX-Request-Type": "full",
+				"HX-Target":       "main#content",
+			},
+			pageNode: &PageNode{
+				Name:       "Index",
+				Title:      "Index",
+				Components: map[string]reflect.Method{"Content": {}, "Page": {}},
+			},
+			expected: "Page",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			target, err := HTMXv4RenderTarget(req, tt.pageNode)
+			if err != nil {
+				t.Fatalf("HTMXv4RenderTarget: %v", err)
+			}
+			if tt.expectFunction {
+				if _, ok := target.(*functionRenderTarget); !ok {
+					t.Errorf("expected functionRenderTarget, got %T", target)
+				}
+				return
+			}
+			mrt, ok := target.(*methodRenderTarget)
+			if !ok {
+				t.Fatalf("expected methodRenderTarget, got %T", target)
+			}
+			if mrt.name != tt.expected {
+				t.Errorf("got %q, want %q", mrt.name, tt.expected)
+			}
+		})
+	}
+}
+
 func TestHTMXRenderTarget_Default(t *testing.T) {
 	// Test that HTMXRenderTarget is the default target selector
 	sp, _ := Mount(nil, struct{}{}, "/", "Test")

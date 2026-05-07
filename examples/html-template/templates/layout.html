@@ -1,0 +1,26 @@
+{{ define "layout" -}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@4.0.0-beta2/dist/htmx.min.js"></script>  
+  <title>html/template Example</title>
+</head>
+<body>
+  <header class="navbar">
+    <nav>
+      <ul role="list">
+        <li><a hx-get="{{ urlFor "index"   }}" hx-target="main" hx-push-url="true">Home</a></li>
+        <li><a hx-get="{{ urlFor "product" }}" hx-target="main" hx-push-url="true">Product</a></li>
+        <li><a hx-get="{{ urlFor "team"    }}" hx-target="main" hx-push-url="true">Team</a></li>
+        <li><a hx-get="{{ urlFor "contact" }}" hx-target="main" hx-push-url="true">Contact</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    {{ template "body" . }}
+  </main>
+</body>
+</html>
+{{- end }}

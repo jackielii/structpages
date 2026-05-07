@@ -3,6 +3,7 @@
 | Directory | What it shows |
 |---|---|
 | [`simple/`](./simple) | Minimal struct-routed pages with templ — no HTMX, no DI |
+| [`html-template/`](./html-template) | Standard library `html/template` with htmx 4 partial swaps, using `htmltemplate.Funcs` for `urlFor` inside templates |
 | [`htmx/`](./htmx) | HTMX navigation with `hx-target` + a small `urlFor` wrapper |
 | [`htmx-render-target/`](./htmx-render-target) | Standalone-function components shared across pages, driven by `RenderTarget` for per-component data loading |
 | [`todo/`](./todo) | Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component |
@@ -28,4 +29,4 @@ templ generate --watch --proxy="http://localhost:8080" --cmd="go run ."
 
 You'll need:
 - Go 1.24+
-- `templ` CLI: `go install github.com/a-h/templ/cmd/templ@latest`
+- `templ` CLI: `go install github.com/a-h/templ/cmd/templ@latest` (not required for `html-template/`, which uses only the standard library)
