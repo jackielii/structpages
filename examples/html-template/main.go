@@ -36,26 +36,29 @@ var tmplFS embed.FS
 // as their first argument, so the request context flows through the
 // template data instead of mutating funcs.
 var pageTmpls = map[string]*template.Template{
-	"index":   parseSet("layout/public.html", "pages/index.html"),
-	"product": parseSet("layout/public.html", "pages/product.html"),
-	"team":    parseSet("layout/public.html", "pages/team.html"),
-	"contact": parseSet("layout/public.html", "pages/contact.html"),
-	"post":    parseSet("layout/public.html", "post/page.html"),
+	"index":   parseSet("pages/index.html"),
+	"product": parseSet("pages/product.html"),
+	"team":    parseSet("pages/team.html"),
+	"contact": parseSet("pages/contact.html"),
+	"post":    parseSet("post/page.html"),
 }
 
-func parseSet(layout, body string) *template.Template {
+// parseSet builds a parsed template set for one page: the page's own body
+// file (which defines "body") plus all shared partials — layout, ui atoms,
+// ui molecules, and the post-feature partials. Only the body varies per
+// page, so it is the only parameter.
+func parseSet(body string) *template.Template {
 	t := template.New("").Funcs(template.FuncMap{
 		"urlFor": urlFor,
 		"args":   args,
 	})
-	patterns := []string{
-		"templates/" + layout,
+	return template.Must(t.ParseFS(tmplFS,
+		"templates/layout/public.html",
 		"templates/ui/atoms/*.html",
 		"templates/ui/molecules/*.html",
 		"templates/post/*.html",
-		"templates/" + body,
-	}
-	return template.Must(t.ParseFS(tmplFS, patterns...))
+		"templates/"+body,
+	))
 }
 
 // urlFor is a tiny adapter so templates can call structpages.URLFor with
