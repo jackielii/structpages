@@ -1,0 +1,52 @@
+package blog
+
+import (
+	"net/http"
+
+	"github.com/jackielii/structpages/examples/blog/store"
+	"github.com/jackielii/structpages/examples/blog/ui/components"
+	"github.com/jackielii/structpages/examples/blog/ui/layout"
+)
+
+type homePage struct{}
+
+type homeProps struct {
+	Posts      []store.Post
+	Categories []store.Category
+}
+
+// Props demonstrates the simplest pattern: load data using a DI-injected
+// *store.Store. The framework passes *http.Request and *store.Store by
+// matching parameter types against the registry built in main.
+func (homePage) Props(_ *http.Request, s *store.Store) (homeProps, error) {
+	posts, _ := s.ListPosts(store.PostFilter{PageSize: 5})
+	return homeProps{Posts: posts, Categories: s.ListCategories()}, nil
+}
+
+// Page wraps the layout for full-document loads. HTMX nav links target
+// #content, which causes structpages to dispatch to Content() instead.
+templ (p homePage) Page(props homeProps) {
+	@layout.PublicShell("Home") {
+		@p.Content(props)
+	}
+}
+
+templ (homePage) Content(props homeProps) {
+	<h1 class="mb-4 text-2xl font-semibold">Recent Posts</h1>
+	<div class="space-y-4">
+		for _, post := range props.Posts {
+			@PostCard(post)
+		}
+	</div>
+	@components.Card("Browse by category") {
+		<ul class="flex flex-wrap gap-2">
+			for _, c := range props.Categories {
+				<li>
+					<a class="rounded-full border px-3 py-1 text-sm hover:bg-slate-50" href={ components.URL(ctx, categoryPage{}, "slug", c.Slug) }>
+						{ c.Name }
+					</a>
+				</li>
+			}
+		</ul>
+	}
+}
