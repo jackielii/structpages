@@ -1,0 +1,12 @@
+{{- /*
+ui/molecules/card — card with title + body.
+Inputs (via args helper):
+  Title string
+  Body  string
+*/ -}}
+{{ define "ui/molecules/card" -}}
+<article class="box">
+  <h3>{{ .Title }}</h3>
+  <p>{{ .Body }}</p>
+</article>
+{{- end }}

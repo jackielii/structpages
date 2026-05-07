@@ -3,7 +3,7 @@
 | Directory | What it shows |
 |---|---|
 | [`simple/`](./simple) | Minimal struct-routed pages with templ — no HTMX, no DI |
-| [`html-template/`](./html-template) | Standard library `html/template` with htmx 4 partial swaps, using `htmltemplate.Funcs` for `urlFor` inside templates |
+| [`html-template/`](./html-template) | Standard library `html/template` in an atomic-design layout (atoms / molecules / organisms), htmx 4 partial swaps, and a no-Clone `urlFor` template func wired up in user code |
 | [`htmx/`](./htmx) | HTMX navigation with `hx-target` + a small `urlFor` wrapper |
 | [`htmx-render-target/`](./htmx-render-target) | Standalone-function components shared across pages, driven by `RenderTarget` for per-component data loading |
 | [`todo/`](./todo) | Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component |

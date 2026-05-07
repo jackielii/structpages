@@ -1,0 +1,10 @@
+{{- /*
+ui/atoms/button — primitive presentational button.
+Inputs (via args helper):
+  Label   string
+  HxGet   string  (optional)
+  HxTarget string (optional)
+*/ -}}
+{{ define "ui/atoms/button" -}}
+<button{{ with .HxGet }} hx-get="{{ . }}"{{ end }}{{ with .HxTarget }} hx-target="{{ . }}"{{ end }}>{{ .Label }}</button>
+{{- end }}
