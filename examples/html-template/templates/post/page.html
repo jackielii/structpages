@@ -1,27 +1,27 @@
 {{- /*
 post/page — page body for /post.
 
-The dot is the example's view struct: {Ctx, Data}. Page state lives on
-.Data (a postProps); ctx is on .Ctx.
+The dot is the postProps struct passed by tpl.Render — fields are
+accessed directly as .Title, .Body, etc. urlFor needs no ctx argument;
+the closure was bound on the cloned template before Execute.
 
-Two partial conventions are exercised here:
+Two partial conventions:
 
   - Atoms / molecules take ad-hoc data via the args helper. They never
-    see the framework — pure presentation. ui/molecules/card receives
-    {Title, Body} and accesses fields directly.
+    see the framework — pure presentation.
 
-  - Organisms take a {Ctx, Data} shape (same as a page) so they keep
-    access to ctx-aware helpers like urlFor / idFor. We build that shape
-    inline using args, threading .Ctx through.
+  - Organisms receive whatever data slice they need; urlFor remains
+    callable inside them because the template-level binding is shared
+    across the whole cloned set.
 */ -}}
 {{ define "body" -}}
-<h1>{{ .Data.Title }}</h1>
-<p>{{ .Data.Body }}</p>
+<h1>{{ .Title }}</h1>
+<p>{{ .Body }}</p>
 
 <h2>Recent</h2>
-{{ range .Data.Recent }}
+{{ range .Recent }}
 {{ template "ui/molecules/card" (args "Title" .Title "Body" .Excerpt) }}
 {{ end }}
 
-{{ template "post/comments-list" (args "Ctx" $.Ctx "Data" .Data.Comments) }}
+{{ template "post/comments-list" .Comments }}
 {{- end }}

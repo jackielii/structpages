@@ -4,15 +4,15 @@
 //
 // structpages is render-engine agnostic: a Page() method can return any
 // value with a Render(ctx context.Context, w io.Writer) error method.
-// The `tpl` type here is a thin wrapper around an html/template set; two
-// small template funcs (urlFor and args) live right beside it. They take
-// ctx as their first argument so the FuncMap registers ONCE at parse
-// time and never needs Clone-rebinding per request.
+// The `tpl` type here is a thin wrapper around an html/template set, plus
+// two small template funcs (urlFor and args) defined right beside it.
 //
-// The convention this example uses for exposing ctx in templates is a
-// `view` struct ({Ctx, Data}) passed as the template dot. Templates call
-// `{{ urlFor .Ctx "x" }}` and read page state via `.Data.X`. Pick whatever
-// shape suits you — there is no library-imposed wrapper.
+// urlFor needs the request context, so each Render Clones the base
+// template, binds urlFor to the request ctx, and Executes. Clone is the
+// price for being able to write `{{ urlFor "Product" }}` without
+// threading ctx through every call site (and through every partial).
+// The page's data is passed as the template dot directly — no wrapper —
+// so templates read `.Title` rather than `.Data.Title`.
 package main
 
 import (
@@ -30,11 +30,10 @@ import (
 //go:embed templates
 var tmplFS embed.FS
 
-// pageTmpls holds one fully-parsed template set per page. Each set has its
-// own "body" definition (page-specific) plus shared layout / ui / feature
-// partials. We never Clone at render time — the template funcs take ctx
-// as their first argument, so the request context flows through the
-// template data instead of mutating funcs.
+// pageTmpls holds one base template set per page, parsed once at init.
+// Per request we Clone the relevant base and bind the request-scoped
+// urlFor before Execute — Clone is necessary for ctx-bound funcs to be
+// concurrent-safe across requests.
 var pageTmpls = map[string]*template.Template{
 	"index":   parseSet("pages/index.html"),
 	"product": parseSet("pages/product.html"),
@@ -43,13 +42,14 @@ var pageTmpls = map[string]*template.Template{
 	"post":    parseSet("post/page.html"),
 }
 
-// parseSet builds a parsed template set for one page: the page's own body
+// parseSet builds a base template set for one page: the page's own body
 // file (which defines "body") plus all shared partials — layout, ui atoms,
-// ui molecules, and the post-feature partials. Only the body varies per
-// page, so it is the only parameter.
+// ui molecules, and the post-feature partials. urlFor is registered as a
+// placeholder so the parser accepts references to it; the real ctx-bound
+// urlFor is bound on each Clone in Render. Only the body varies per page.
 func parseSet(body string) *template.Template {
 	t := template.New("").Funcs(template.FuncMap{
-		"urlFor": urlFor,
+		"urlFor": urlForPlaceholder,
 		"args":   args,
 	})
 	return template.Must(t.ParseFS(tmplFS,
@@ -61,10 +61,11 @@ func parseSet(body string) *template.Template {
 	))
 }
 
-// urlFor is a tiny adapter so templates can call structpages.URLFor with
-// a string page reference: `{{ urlFor .Ctx "Product" }}`.
-func urlFor(ctx context.Context, name string, a ...any) (string, error) {
-	return structpages.URLFor(ctx, structpages.Ref(name), a...)
+// urlForPlaceholder satisfies parse-time func resolution. It is replaced
+// with a ctx-bound closure on the cloned template before Execute; if it
+// is ever invoked, it indicates Render forgot to rebind.
+func urlForPlaceholder(string, ...any) (string, error) {
+	return "", fmt.Errorf("urlFor invoked without per-request rebinding")
 }
 
 // args builds a map[string]any from alternating key/value pairs, used to
@@ -86,15 +87,6 @@ func args(kv ...any) (map[string]any, error) {
 	return m, nil
 }
 
-// view is the example's chosen template-dot shape: ctx + page data.
-// urlFor reads ctx via .Ctx; templates read page state via .Data. There
-// is no library-imposed wrapper — pick your own and pass ctx however
-// suits.
-type view struct {
-	Ctx  context.Context //nolint:containedctx
-	Data any
-}
-
 // tpl is a renderable component backed by one of the parsed page sets.
 // `entry` selects which named template to execute — "layout/public" for
 // the full page, "body" for the HTMX content swap, or e.g.
@@ -106,11 +98,20 @@ type tpl struct {
 }
 
 func (p tpl) Render(ctx context.Context, w io.Writer) error {
-	t, ok := pageTmpls[p.page]
+	base, ok := pageTmpls[p.page]
 	if !ok {
 		return fmt.Errorf("unknown page %q", p.page)
 	}
-	return t.ExecuteTemplate(w, p.entry, view{Ctx: ctx, Data: p.data})
+	t, err := base.Clone()
+	if err != nil {
+		return err
+	}
+	t.Funcs(template.FuncMap{
+		"urlFor": func(name string, a ...any) (string, error) {
+			return structpages.URLFor(ctx, structpages.Ref(name), a...)
+		},
+	})
+	return t.ExecuteTemplate(w, p.entry, p.data)
 }
 
 // --- simple pages: index / product / team / contact ---

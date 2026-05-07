@@ -1,20 +1,22 @@
 {{- /*
 post/comments-list — feature-local organism, HTMX-targetable.
 
-Receives {Ctx, Data} where Data is a []string of comments. The wrapping
-<section id="comments"> matches the page's Comments() method, so an HTMX
-request targeting #comments is dispatched to that method by structpages's
-HTMXv4RenderTarget selector.
+The dot is the comments slice ([]string). urlFor is callable inside any
+template in the cloned set — it was bound by tpl.Render when Cloning.
+
+The wrapping <section id="comments"> matches the page's Comments() method,
+so an HTMX request targeting #comments is dispatched to that method by
+structpages's HTMXv4RenderTarget selector.
 */ -}}
 {{ define "post/comments-list" -}}
 <section id="comments">
-  <h3>Comments ({{ len .Data }})</h3>
+  <h3>Comments ({{ len . }})</h3>
   <ul>
-    {{ range .Data }}<li>{{ . }}</li>{{ end }}
+    {{ range . }}<li>{{ . }}</li>{{ end }}
   </ul>
   {{ template "ui/atoms/button" (args
       "Label"    "Refresh comments"
-      "HxGet"    (urlFor .Ctx "post")
+      "HxGet"    (urlFor "post")
       "HxTarget" "section#comments") }}
 </section>
 {{- end }}
