@@ -1,0 +1,20 @@
+{{- /*
+post/page — page body for /post.
+
+Composes:
+  - ui/molecules/card  (one per recent post, via the args helper)
+  - post/comments-list (organism, re-wrapped via .Sub)
+
+.Data is the postProps struct from main.go.
+*/ -}}
+{{ define "body" -}}
+<h1>{{ .Data.Title }}</h1>
+<p>{{ .Data.Body }}</p>
+
+<h2>Recent</h2>
+{{ range .Data.Recent }}
+{{ template "ui/molecules/card" (args "Title" .Title "Body" .Excerpt) }}
+{{ end }}
+
+{{ template "post/comments-list" (.Sub .Data.Comments) }}
+{{- end }}
