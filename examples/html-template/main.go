@@ -7,10 +7,12 @@
 // The `tpl` type here is a thin wrapper around an html/template set, plus
 // two small template funcs (urlFor and args) defined right beside it.
 //
-// urlFor needs the request context, so each Render Clones the base
-// template, binds urlFor to the request ctx, and Executes. Clone is the
-// price for being able to write `{{ urlFor "Product" }}` without
-// threading ctx through every call site (and through every partial).
+// urlFor closes over the StructPages instance returned by Mount, so it
+// resolves page references without a request ctx. That lets the FuncMap
+// be bound once when templates are parsed, with no per-request Clone.
+// (Routes that need URL parameters extracted from the current request
+// would need ctx-bound funcs; the example only uses top-level routes.)
+//
 // The page's data is passed as the template dot directly — no wrapper —
 // so templates read `.Title` rather than `.Data.Title`.
 package main
@@ -30,48 +32,15 @@ import (
 //go:embed templates
 var tmplFS embed.FS
 
-// pageTmpls holds one base template set per page, parsed once at init.
-// Per request we Clone the relevant base and bind the request-scoped
-// urlFor before Execute — Clone is necessary for ctx-bound funcs to be
-// concurrent-safe across requests.
-var pageTmpls = map[string]*template.Template{
-	"index":   parseSet("pages/index.html"),
-	"product": parseSet("pages/product.html"),
-	"team":    parseSet("pages/team.html"),
-	"contact": parseSet("pages/contact.html"),
-	"post":    parseSet("post/page.html"),
-}
-
-// parseSet builds a base template set for one page: the page's own body
-// file (which defines "body") plus all shared partials — layout, ui atoms,
-// ui molecules, and the post-feature partials. urlFor is registered as a
-// placeholder so the parser accepts references to it; the real ctx-bound
-// urlFor is bound on each Clone in Render. Only the body varies per page.
-func parseSet(body string) *template.Template {
-	t := template.New("").Funcs(template.FuncMap{
-		"urlFor": urlForPlaceholder,
-		"args":   args,
-	})
-	return template.Must(t.ParseFS(tmplFS,
-		"templates/layout/public.html",
-		"templates/ui/atoms/*.html",
-		"templates/ui/molecules/*.html",
-		"templates/post/*.html",
-		"templates/"+body,
-	))
-}
-
-// urlForPlaceholder satisfies parse-time func resolution. It is replaced
-// with a ctx-bound closure on the cloned template before Execute; if it
-// is ever invoked, it indicates Render forgot to rebind.
-func urlForPlaceholder(string, ...any) (string, error) {
-	return "", fmt.Errorf("urlFor invoked without per-request rebinding")
-}
+// pageTmpls is populated in main() once the StructPages instance exists,
+// so urlFor can be bound directly into the FuncMap. Render only needs to
+// look up the right base and Execute — no Clone, no rebinding.
+var pageTmpls map[string]*template.Template
 
 // args builds a map[string]any from alternating key/value pairs, used to
 // pass multiple inputs to a partial template:
 //
-//	{{ template "ui/molecules/card" (args "Title" .Data.Title "Body" .Data.Body) }}
+//	{{ template "ui/molecules/card" (args "Title" .Title "Body" .Body) }}
 func args(kv ...any) (map[string]any, error) {
 	if len(kv)%2 != 0 {
 		return nil, fmt.Errorf("args: odd number of arguments (%d)", len(kv))
@@ -97,20 +66,11 @@ type tpl struct {
 	data  any
 }
 
-func (p tpl) Render(ctx context.Context, w io.Writer) error {
-	base, ok := pageTmpls[p.page]
+func (p tpl) Render(_ context.Context, w io.Writer) error {
+	t, ok := pageTmpls[p.page]
 	if !ok {
 		return fmt.Errorf("unknown page %q", p.page)
 	}
-	t, err := base.Clone()
-	if err != nil {
-		return err
-	}
-	t.Funcs(template.FuncMap{
-		"urlFor": func(name string, a ...any) (string, error) {
-			return structpages.URLFor(ctx, structpages.Ref(name), a...)
-		},
-	})
 	return t.ExecuteTemplate(w, p.entry, p.data)
 }
 
@@ -206,11 +166,38 @@ func (post) Comments(props postProps) tpl {
 
 func main() {
 	mux := http.NewServeMux()
-	if _, err := structpages.Mount(mux, index{}, "/", "Index",
+	sp, err := structpages.Mount(mux, index{}, "/", "Index",
 		structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
-	); err != nil {
+	)
+	if err != nil {
 		log.Fatalf("mount: %v", err)
 	}
+
+	// urlFor closes over sp so templates can resolve page references
+	// without a request ctx. Bound once at parse — no per-request Clone.
+	funcs := template.FuncMap{
+		"urlFor": func(name string, a ...any) (string, error) {
+			return sp.URLFor(structpages.Ref(name), a...)
+		},
+		"args": args,
+	}
+	parseSet := func(body string) *template.Template {
+		return template.Must(template.New("").Funcs(funcs).ParseFS(tmplFS,
+			"templates/layout/public.html",
+			"templates/ui/atoms/*.html",
+			"templates/ui/molecules/*.html",
+			"templates/post/*.html",
+			"templates/"+body,
+		))
+	}
+	pageTmpls = map[string]*template.Template{
+		"index":   parseSet("pages/index.html"),
+		"product": parseSet("pages/product.html"),
+		"team":    parseSet("pages/team.html"),
+		"contact": parseSet("pages/contact.html"),
+		"post":    parseSet("post/page.html"),
+	}
+
 	log.Println("Listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
