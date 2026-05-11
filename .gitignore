@@ -32,3 +32,5 @@ go.work.sum
 examples/simple/simple
 examples/htmx/htmx
 examples/todo/todo
+examples/blog/blog
+examples/htmx-render-target/htmx-render-target-example
