@@ -15,6 +15,12 @@ type parseContext struct {
 	args           argRegistry
 	segmentCache   map[string][]segment
 	segmentCacheMu sync.RWMutex
+	// urlPrefix, if non-empty, is prepended to every URL produced by URLFor.
+	// Set by WithURLPrefix when structpages is deployed behind something that
+	// strips a path prefix (e.g., http.StripPrefix or a reverse proxy). It
+	// does NOT affect route registration — that is controlled by Mount's
+	// route argument.
+	urlPrefix string
 }
 
 func parsePageTree(route string, page any, args ...any) (*parseContext, error) {

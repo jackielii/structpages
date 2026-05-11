@@ -108,7 +108,34 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("urlfor: %w", err)
 	}
-	return strings.Replace(path, "{$}", "", 1), nil
+	result := strings.Replace(path, "{$}", "", 1)
+	return applyURLPrefix(pc.urlPrefix, result), nil
+}
+
+// applyURLPrefix prepends the configured URL prefix to a generated path.
+// The prefix comes from WithURLPrefix and is the externally visible path
+// under which structpages is served, when something upstream (StripPrefix
+// or a reverse proxy) removes the prefix before requests reach the
+// registered routes.
+//
+// Normalization rules:
+//   - empty prefix or "/" is a no-op (returns path unchanged)
+//   - a missing leading slash is auto-added so callers can write "admin" or "/admin"
+//   - any trailing slash is stripped so the result never has "//" in the middle
+//   - a path of "" or "/" returns just the prefix (so "/admin" + "/" → "/admin",
+//     consistent with how Mount(mux, page, "/admin", ...) renders the root page)
+func applyURLPrefix(prefix, path string) string {
+	if prefix == "" || prefix == "/" {
+		return path
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	prefix = strings.TrimRight(prefix, "/")
+	if path == "" || path == "/" {
+		return prefix
+	}
+	return prefix + path
 }
 
 // formatPathSegments formats URL pattern segments with provided arguments,

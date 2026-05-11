@@ -35,6 +35,7 @@ type StructPages struct {
 	targetSelector TargetSelector
 	warnEmptyRoute func(*PageNode)
 	args           []any
+	urlPrefix      string
 }
 
 // ID generates a raw HTML ID for a component method (without "#" prefix).
@@ -138,6 +139,7 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 		return nil, err
 	}
 	pc.root.Title = title
+	pc.urlPrefix = sp.urlPrefix
 	sp.pc = pc
 
 	// Register all pages
@@ -154,6 +156,30 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 func WithArgs(args ...any) func(*StructPages) {
 	return func(r *StructPages) {
 		r.args = append(r.args, args...)
+	}
+}
+
+// WithURLPrefix tells structpages that it is being served behind a path
+// prefix that has been stripped before requests reach the registered routes
+// (for example by http.StripPrefix or an upstream reverse proxy). The prefix
+// is prepended to every URL returned by URLFor — both the *StructPages.URLFor
+// method and the request-context URLFor function — so generated URLs point
+// at the externally visible path.
+//
+// This option only affects URL generation. Route registration is still
+// controlled by the route argument to Mount.
+//
+// Example: app registered at "/" internally, served at "/admin" externally:
+//
+//	inner := http.NewServeMux()
+//	sp, _ := structpages.Mount(inner, pages{}, "/", "App",
+//	    structpages.WithURLPrefix("/admin"))
+//	outer := http.NewServeMux()
+//	outer.Handle("/admin/", http.StripPrefix("/admin", inner))
+//	// sp.URLFor(home{}) now returns "/admin"
+func WithURLPrefix(prefix string) func(*StructPages) {
+	return func(r *StructPages) {
+		r.urlPrefix = prefix
 	}
 }
 
