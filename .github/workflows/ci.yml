@@ -95,27 +95,24 @@ jobs:
         with:
           go-version: "1.25"
 
-      - name: Install Templ
-        run: go install github.com/a-h/templ/cmd/templ@latest
-
       - name: Test simple example
         working-directory: ./examples/simple
         run: |
           go mod download
-          templ generate -include-version=false
+          go tool templ generate -include-version=false
           go build
 
       - name: Test htmx example
         working-directory: ./examples/htmx
         run: |
           go mod download
-          templ generate -include-version=false
+          go tool templ generate -include-version=false
           go build
 
       - name: Test todo example
         working-directory: ./examples/todo
         run: |
           go mod download
-          templ generate -include-version=false
+          go tool templ generate -include-version=false
           go build
 

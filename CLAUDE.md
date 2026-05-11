@@ -34,18 +34,19 @@ cd examples/simple  # or examples/htmx or examples/todo
 go mod download
 
 # Generate Go code from Templ files (required before running)
-templ generate -include-version=false
+# Each example pins the templ CLI as a `tool` dep, so `go tool` resolves the
+# correct version automatically — no global install needed.
+go tool templ generate -include-version=false
 
 # Run the example server (typically on :8080)
 go run main.go
 
 # Watch mode for Templ files during development
-templ generate -include-version=false --watch
+go tool templ generate -include-version=false --watch
 ```
 
 ### Required Tools
-- Go 1.24.3 or later
-- Templ CLI: `go install github.com/a-h/templ/cmd/templ@latest`
+- Go 1.24 or later (for the `tool` directive in example go.mod files)
 
 ## Architecture Overview
 
