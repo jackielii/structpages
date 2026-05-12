@@ -672,3 +672,92 @@ The `URLFor` argument forms (in order of detection):
 - **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"id", 123, "slug", "x"`.)
 - **Map**: a single `map[string]any` first arg.
 - **Auto-fill from request**: any unfilled placeholders that match the *current request's* path params get filled automatically.
+
+---
+
+## 12. Module-Owned Static Assets
+
+When a feature package owns a chunk of CSS/JS/images, mount its file server **as a field on the same struct as its pages** instead of in a separate `mux.Handle` call. The whole module — pages and assets — wires up by one struct field on the root type, and the static URL prefix tracks the module's mount path automatically.
+
+### The pattern
+
+```go
+// modules/profile/profile.go
+package profile
+
+import (
+    "embed"
+    "io/fs"
+    "net/http"
+)
+
+// Root is what the root struct embeds with `route:"/profile Profile"`.
+// Listing Assets here means /profile and /profile/static/* register
+// together — no separate pub.Handle("/profile/static/", …) in main.
+type Root struct {
+    Me     mePage      `route:"GET /me Me"`
+    View   viewPage    `route:"GET /{userID} Profile"`
+    Assets staticFiles `route:"GET /static/{path...} Assets"`
+}
+
+//go:embed all:static
+var staticFS embed.FS
+
+// fs.Sub strips the leading "static/" so the request path resolves
+// directly. Computed once at init.
+var staticRoot = func() fs.FS {
+    sub, err := fs.Sub(staticFS, "static")
+    if err != nil {
+        panic(err) // unreachable: directory is //go:embed'd above
+    }
+    return sub
+}()
+
+// staticFiles serves the embedded /static/ directory. The {path...}
+// wildcard in the route tag captures everything after /profile/static/,
+// so r.PathValue("path") IS the file path inside the embedded FS — no
+// http.StripPrefix needed, no need for the handler to know it's mounted
+// under /profile.
+type staticFiles struct{}
+
+func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    http.ServeFileFS(w, r, staticRoot, r.PathValue("path"))
+}
+```
+
+### Why `{path...}` and not a trailing slash
+
+`route:"GET /static/"` would *look* right (Go ServeMux treats trailing-slash patterns as prefix matches), but structpages joins parent and child routes with `path.Join`, which strips trailing slashes. The resulting pattern becomes `GET /admin/static` — an exact match, not a prefix — and subpath requests get 404. **Always use `{path...}` for prefix subtrees.**
+
+### Linking to an asset from a templ page
+
+There is no `URLFor` for arbitrary asset filenames — assets aren't pages. Use a plain string in the template:
+
+```templ
+<link rel="stylesheet" href="/profile/static/profile.css"/>
+<img src="/profile/static/avatar-default.svg" alt=""/>
+```
+
+The pattern eliminates the *handler-side* duplication (no second mount call in main). Link-side duplication (knowing the URL string) is a separate concern, typically handled by a build-time manifest (e.g. Vite/esbuild fingerprinting).
+
+### Middleware applies to assets too
+
+If the module has `Middlewares()` (e.g. `RequireAdmin`), it gates the static subtree as well — Assets is just another child of the page struct. Move Assets out of the gated struct (sibling instead of child) if you want public assets under a private module's URL space.
+
+### Mounting in main
+
+The root struct treats every module identically — pages and assets are bundled:
+
+```go
+type webPages struct {
+    Home    home.Index   `route:"/{$} HIS"`
+    Patient patient.Root `route:"/patient Patient"`
+    Profile profile.Root `route:"/profile Profile"`  // brings /profile/static/* with it
+}
+
+// main.go:
+structpages.Mount(pub, webPages{}, "/", "HIS",
+    structpages.WithArgs(profiles),
+)
+// No separate pub.Handle("/profile/static/", ...) needed.
+```

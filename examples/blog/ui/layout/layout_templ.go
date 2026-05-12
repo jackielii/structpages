@@ -158,27 +158,27 @@ func AdminShell(title string, current store.User) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</title><script src=\"https://cdn.tailwindcss.com\"></script><script src=\"https://unpkg.com/htmx.org@2.0.4\"></script></head><body class=\"bg-slate-100 text-slate-900\"><header class=\"border-b bg-slate-900 text-slate-100\"><div class=\"mx-auto flex max-w-5xl items-center justify-between px-4 py-3\"><a class=\"text-lg font-semibold\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</title><script src=\"https://cdn.tailwindcss.com\"></script><script src=\"https://unpkg.com/htmx.org@2.0.4\"></script></head><body class=\"bg-slate-100 text-slate-900\"><header class=\"border-b bg-slate-900 text-slate-100\"><div class=\"mx-auto flex max-w-5xl items-center justify-between px-4 py-3\"><a class=\"flex items-center gap-2 text-lg font-semibold\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 templ.SafeURL
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("dashboard")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 57, Col: 94}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 57, Col: 118}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\">blog admin</a><nav class=\"flex items-center gap-4 text-sm\"><a class=\"hover:underline\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\"><img src=\"/admin/static/admin-logo.svg\" alt=\"\" class=\"h-5 w-5\"> blog admin</a><nav class=\"flex items-center gap-4 text-sm\"><a class=\"hover:underline\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 templ.SafeURL
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("dashboard")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 59, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 62, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -191,7 +191,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var11 templ.SafeURL
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("postList")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 60, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 63, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -204,7 +204,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var12 templ.SafeURL
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("userList")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 61, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 64, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -217,7 +217,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(current.Username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 63, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 66, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -230,7 +230,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var14 templ.SafeURL
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("logout")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 64, Col: 81}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 67, Col: 81}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {

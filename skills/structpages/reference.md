@@ -301,6 +301,8 @@ route:"[METHOD] /path [Title]"
 - Path: Go 1.22+ mux patterns. `{param}` for path params, `{param...}` for wildcards, `{$}` for exact match
 - Title: remaining text after path
 
+**Prefix subtrees use `{path...}`, not trailing slashes.** `FullRoute()` uses `path.Join`, which strips trailing slashes when concatenating with parent paths — so `route:"/static/"` under `/admin` registers as `GET /admin/static` (exact match), not `GET /admin/static/` (prefix match). Use `route:"/static/{path...}"` and read `r.PathValue("path")` to capture the subpath. See SKILL.md "Mounting a module's static-asset subtree" and examples.md §12.
+
 ## Buffered Response
 
 Error-returning `ServeHTTP` uses buffered writer. On error, buffer is discarded and error handler renders instead. Supports `Flush()` for streaming/SSE.

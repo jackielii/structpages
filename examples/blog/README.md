@@ -39,7 +39,9 @@ posts, comments, and sessions.
 │   ├── comment.go             ServeHTTP for POST /posts/{slug}/comments
 │   └── components.templ       PostCard, PostMeta, CommentsList (feature-local)
 └── admin/                     authenticated CMS feature
-    ├── routes.go              admin.Pages with Middlewares() returning RequireAdmin
+    ├── routes.go              admin.Pages with Middlewares() returning RequireAdmin,
+    │                          plus an Assets field that owns /admin/static/*
+    ├── static/                module-scoped assets (admin-logo.svg)
     ├── login.go + login.templ LoginPage — sibling of admin.Pages, not a child
     ├── logout.go
     ├── dashboard.templ        Props + RenderTarget refreshing widgets independently
@@ -69,6 +71,7 @@ header pointing at `/admin/login`) use `structpages.Ref("loginPage")` so the
 | `ID`/`IDTarget` wiring for `hx-target` | throughout |
 | Cross-package component composition (`admin` imports `ui/layout` + `ui/components`) | every `.templ` |
 | `Ref("loginPage")` for cross-feature links to avoid import cycles | `ui/layout/layout.templ` |
+| Module-owned `/static/` subtree — `staticFiles` field on `admin.Pages` with `route:"/static/{path...}"` and `http.ServeFileFS(w, r, fs, r.PathValue("path"))` (no separate `pub.Handle("/admin/static/", …)` in `main`, no `StripPrefix`, handler is unaware of its mount path) | `admin/routes.go`, `admin/static/admin-logo.svg`, `ui/layout/layout.templ` |
 
 ## Quick verification (server running)
 
@@ -86,6 +89,10 @@ curl -s http://localhost:8080/posts/nope | grep -q "couldn't find"
 curl -si http://localhost:8080/admin/ | head -1                # expect 303 → /admin/login
 curl -sc cookies -d "username=admin&password=admin" http://localhost:8080/admin/login
 curl -sb cookies http://localhost:8080/admin/ | grep -q "Dashboard"
+
+# Module-owned static assets — admin.Pages.Assets serves /admin/static/{path...}
+curl -sIb cookies http://localhost:8080/admin/static/admin-logo.svg | head -1   # expect HTTP/1.1 200
+curl -si http://localhost:8080/admin/static/admin-logo.svg | head -1            # expect HTTP/1.1 303 (RequireAdmin → login)
 
 # HTMX partials (each refreshes only its widget — check Network tab in DevTools)
 curl -sb cookies -H "HX-Request: true" -H "HX-Target: stats-grid" http://localhost:8080/admin/

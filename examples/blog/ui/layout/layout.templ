@@ -54,7 +54,10 @@ templ AdminShell(title string, current store.User) {
 		<body class="bg-slate-100 text-slate-900">
 			<header class="border-b bg-slate-900 text-slate-100">
 				<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-					<a class="text-lg font-semibold" href={ components.URL(ctx, structpages.Ref("dashboard")) }>blog admin</a>
+					<a class="flex items-center gap-2 text-lg font-semibold" href={ components.URL(ctx, structpages.Ref("dashboard")) }>
+						<img src="/admin/static/admin-logo.svg" alt="" class="h-5 w-5"/>
+						blog admin
+					</a>
 					<nav class="flex items-center gap-4 text-sm">
 						<a class="hover:underline" href={ components.URL(ctx, structpages.Ref("dashboard")) }>Dashboard</a>
 						<a class="hover:underline" href={ components.URL(ctx, structpages.Ref("postList")) }>Posts</a>
