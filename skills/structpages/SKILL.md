@@ -46,6 +46,27 @@ type adminPages struct {
 }
 ```
 
+**Mounting a module's static-asset subtree alongside its pages.** Use the wildcard form for prefix subtrees — `path.Join` strips trailing slashes when computing the full route, so `route:"/static/"` registers as an exact `GET /admin/static` (no prefix match). Use `{path...}` instead:
+
+```go
+type adminPages struct {
+    dashboard `route:"/{$} Dashboard"`
+    users     `route:"/users Users"`
+    Assets    staticFiles `route:"GET /static/{path...} Assets"`
+}
+
+//go:embed all:static
+var staticFS embed.FS
+var staticRoot = must(fs.Sub(staticFS, "static"))
+
+type staticFiles struct{}
+func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    http.ServeFileFS(w, r, staticRoot, r.PathValue("path"))
+}
+```
+
+This keeps the module self-contained: `/admin` and `/admin/static/*` register together, with no separate `pub.Handle("/admin/static/", …)` call to keep in sync. See examples.md §12 for the full pattern, including middleware and link-side considerations.
+
 ### 2. Page Handler Patterns
 
 There are three main patterns — choose based on what the page does.
