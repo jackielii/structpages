@@ -377,10 +377,7 @@ For sections that load independently:
 
 ```go
 sp, err := structpages.Mount(mux, ui.TopPages{}, "/", "App",
-    structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-        log.Printf("error: %v", err)
-        http.Error(w, "Something went wrong", http.StatusInternalServerError)
-    }),
+    structpages.WithErrorHandler(errorHandler), // see §13 for the status-aware version
     structpages.WithMiddlewares(
         loggingMiddleware,
         sessionMiddleware,
@@ -761,3 +758,176 @@ structpages.Mount(pub, webPages{}, "/", "HIS",
 )
 // No separate pub.Handle("/profile/static/", ...) needed.
 ```
+
+---
+
+## 13. Error Handling in `ServeHTTP` and `Props`
+
+The error-returning forms of `ServeHTTP` and every `Props` method run against a **buffered** `http.ResponseWriter`. When the method returns a non-nil error the framework **discards the buffer** and hands the error to the `WithErrorHandler` callback. This has three consequences that decide how you write handlers.
+
+### Rule 1 — never call `http.Error` (or otherwise write `w`) in an error-returning handler
+
+This AI-generated style is wrong:
+
+```go
+// ANTI-PATTERN — do not do this
+func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, "invalid form", http.StatusBadRequest)
+        return nil
+    }
+    patient, err := svc.GetPatientByMRN(r.Context(), mrn)
+    switch {
+    case errors.Is(err, ErrNotFound):
+        http.Error(w, "patient not found", http.StatusNotFound)
+        return nil
+    case err != nil:
+        return fmt.Errorf("GetPatientByMRN: %w", err)
+    }
+    // ...
+}
+```
+
+It is broken either way the control flow goes:
+
+- `http.Error(w, …); return nil` — the write *does* land (the buffer flushes on `nil`), but it bypasses `WithErrorHandler` entirely: no consistent HTML/HTMX error page, no `HX-Retarget`, no tracing. The framework also thinks the handler *succeeded*.
+- `http.Error(w, …); return err` — the buffer is **reset before the error handler runs**, so your `http.Error` write is silently thrown away. Pure dead code.
+
+The error-returning handler's only job is to **return an error**. Rendering is the error handler's job.
+
+### Rule 2 — for a specific status code, return a typed error
+
+Define one error type that carries the status, and have the global handler inspect it with `errors.As`. This is the only thing that gives a handler control over the status code.
+
+```go
+// errors.go
+type ErrorWithStatus struct {
+    Status  int
+    Title   string
+    Message string
+}
+
+func (e ErrorWithStatus) Error() string {
+    return fmt.Sprintf("Error %d: %s", e.Status, e.Title)
+}
+```
+
+The corrected handler — no `w` writes, just typed returns:
+
+```go
+func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
+    if err := r.ParseForm(); err != nil {
+        return ErrorWithStatus{Status: http.StatusBadRequest, Title: "Bad request", Message: "invalid form"}
+    }
+
+    patient, err := svc.GetPatientByMRN(r.Context(), mrn)
+    switch {
+    case errors.Is(err, ErrNotFound):
+        return ErrorWithStatus{Status: http.StatusNotFound, Title: "Not found", Message: "patient not found at this facility"}
+    case errors.Is(err, authz.ErrDenied):
+        return ErrorWithStatus{Status: http.StatusForbidden, Title: "Forbidden", Message: "patient at a different facility"}
+    case err != nil:
+        return fmt.Errorf("scheduling.book: GetPatientByMRN: %w", err) // plain error -> 500
+    }
+    // ... success path writes normally; the buffer flushes when we return nil
+    http.Redirect(w, r, detailURL, http.StatusSeeOther)
+    return nil
+}
+```
+
+The matching global handler, wired once at `Mount`:
+
+```go
+structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+    if errors.Is(err, context.Canceled) || r.Context().Err() != nil {
+        w.WriteHeader(499) // client closed request — expected, don't log as error
+        return
+    }
+    status, title, message := http.StatusInternalServerError, "Server error", err.Error()
+    var se ErrorWithStatus
+    if errors.As(err, &se) {
+        status, title, message = se.Status, se.Title, se.Message
+    } else {
+        slog.Error("unhandled error rendering page", "error", err, "path", r.URL.Path)
+    }
+    // One place that knows how to render: HTMX-aware retarget, AppShell vs bare page, tracing.
+    renderHTTPError(w, r, status, title, message)
+})
+```
+
+`errors.As` unwraps, so `fmt.Errorf("...: %w", ErrorWithStatus{...})` still resolves to its status. A plain `error` (a wrapped DB failure, say) falls through to a logged 500 — exactly what you want for an unexpected fault.
+
+### Rule 3 — API endpoints use the *no-error* `ServeHTTP` form
+
+For endpoints that serve JSON (or any non-HTML response), do **not** use the error-returning form. Two reasons:
+
+1. The error-returning form buffers the whole response in memory before anything reaches the client.
+2. `WithErrorHandler` renders an **HTML** error page. An API client expects a JSON body or a bare status code, not an AppShell document.
+
+Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself. Here `http.Error` *is* the right tool — the Rule 1 prohibition only applies to the buffered, error-returning form.
+
+```go
+type TrackTime struct{}
+
+// No error return: direct unbuffered writes, framework's HTML error handler stays out of it.
+func (TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
+    var body struct {
+        ViewID    int64 `json:"view_id"`
+        TimeSpent int32 `json:"time_spent"`
+    }
+    if err := json.UnmarshalRead(r.Body, &body); err != nil {
+        http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+        return
+    }
+    if err := appCtx.Store.UpdateTimeSpent(r.Context(), body.ViewID, body.TimeSpent); err != nil {
+        http.Error(w, "update failed", http.StatusInternalServerError)
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+}
+```
+
+For a JSON error body instead of `http.Error`'s plain text, set the header and encode your own error shape — still in the no-return form.
+
+### Rule 4 — for streaming (SSE), flush with `http.ResponseController`
+
+Picking the no-return form is *not* enough to guarantee writes reach the client immediately: the `w` you get may still be wrapped by upstream middleware (observability, response-writer wrappers, etc.). For **truly guaranteed unbuffered delivery** — Server-Sent Events, progress streams — use `http.ResponseController`, which walks the `Unwrap()` chain to find a flusher and drains everything in its path.
+
+This also means you *can* stream from the error-returning DI form: structpages' buffering wrapper implements `FlushError()` and `Unwrap()`, so `http.ResponseController.Flush()` pushes the buffer straight to the wire. That lets a handler validate-and-error-render up front (Rules 1–2), then commit to streaming:
+
+```go
+func (p EdmImportUpload) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
+    if err := r.ParseMultipartForm(32 << 20); err != nil {
+        // still buffered here — render an HTML error partial and return
+        return renderImportError(w, r, "Failed to parse upload form", err)
+    }
+    // ... more validation that returns errors ...
+
+    // commit to streaming
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("X-Accel-Buffering", "no")
+
+    rc := http.NewResponseController(w) // works through the buffered wrapper via FlushError/Unwrap
+    fmt.Fprint(w, ": connected\n\n")
+    rc.Flush()                          // drains the buffer to the client now
+
+    for update := range progressChan {
+        fmt.Fprintf(w, "event: progress\ndata: %s\n\n", update)
+        rc.Flush()                      // each event reaches the client immediately
+    }
+    return nil
+}
+```
+
+Once you've started flushing a stream, returning a non-nil error can no longer produce a clean error page (headers and body bytes are already on the wire) — send an `event: error` SSE frame instead and `return nil`.
+
+### Which form to use
+
+| Handler does…                                  | `ServeHTTP` signature              | Errors via                          |
+|-------------------------------------------------|------------------------------------|-------------------------------------|
+| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err` |
+| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | `http.Error` / JSON body, write `w` directly |
+| Streams (SSE, progress)                         | either form, flush via `http.NewResponseController(w)` | SSE `event: error` frame, then `return nil` |
+
+`Props` methods always follow the first row — they are buffered and their error flows to `WithErrorHandler`, so return `ErrorWithStatus{…}` for status-coded failures, never write `w`.
