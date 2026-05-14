@@ -362,3 +362,73 @@ func TestStructPages_asHandler_extendedServeHTTPNoReturn(t *testing.T) {
 		t.Errorf("Expected 'no return: extra', got %s", rec.Body.String())
 	}
 }
+
+// Asserts the documented contract (skills/structpages/reference.md:146-149):
+// the bare ServeHTTP(w, r) and the DI no-return ServeHTTP(w, r, deps...) forms
+// must receive the original http.ResponseWriter, not the *buffered wrapper that
+// the error-returning forms use. The check runs inside the handler so a future
+// regression that introduces buffering on these paths would be caught even if
+// the final response body still looks correct.
+
+type bareNoReturnAssertsUnbuffered struct {
+	gotBuffered bool
+	flushOK     bool
+}
+
+func (p *bareNoReturnAssertsUnbuffered) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	if _, ok := w.(*buffered); ok {
+		p.gotBuffered = true
+	}
+	_, p.flushOK = w.(http.Flusher)
+	_, _ = w.Write([]byte("ok"))
+}
+
+type extendedNoReturnAssertsUnbuffered struct {
+	gotBuffered bool
+}
+
+func (p *extendedNoReturnAssertsUnbuffered) ServeHTTP(w http.ResponseWriter, _ *http.Request, _ ExtendedArg1) {
+	if _, ok := w.(*buffered); ok {
+		p.gotBuffered = true
+	}
+	_, _ = w.Write([]byte("ok"))
+}
+
+func TestAsHandler_NoReturnIsUnbuffered(t *testing.T) {
+	t.Run("bare ServeHTTP(w, r)", func(t *testing.T) {
+		p := &bareNoReturnAssertsUnbuffered{}
+		sp, _ := Mount(nil, struct{}{}, "/", "Test")
+		sp.pc = &parseContext{args: make(argRegistry)}
+
+		handler := sp.asHandler(&PageNode{Name: "bare", Value: reflect.ValueOf(p)})
+		if handler == nil {
+			t.Fatal("expected handler")
+		}
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", http.NoBody))
+
+		if p.gotBuffered {
+			t.Errorf("bare ServeHTTP(w, r) must receive raw ResponseWriter, got *buffered wrapper")
+		}
+		if !p.flushOK {
+			t.Errorf("bare ServeHTTP(w, r) must preserve http.Flusher capability of the underlying writer")
+		}
+	})
+
+	t.Run("extended ServeHTTP(w, r, deps...) no return", func(t *testing.T) {
+		p := &extendedNoReturnAssertsUnbuffered{}
+		sp, _ := Mount(nil, struct{}{}, "/", "Test")
+		pc := &parseContext{args: make(argRegistry)}
+		_ = pc.args.addArg(ExtendedArg1("v"))
+		sp.pc = pc
+
+		handler := sp.asHandler(&PageNode{Name: "ext", Value: reflect.ValueOf(p)})
+		if handler == nil {
+			t.Fatal("expected handler")
+		}
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", http.NoBody))
+
+		if p.gotBuffered {
+			t.Errorf("extended no-return ServeHTTP must receive raw ResponseWriter, got *buffered wrapper")
+		}
+	})
+}

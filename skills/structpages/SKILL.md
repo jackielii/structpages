@@ -131,7 +131,39 @@ func (p SubmitForm) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *Ap
 }
 ```
 
+**Pattern D: ServeHTTP for API/JSON endpoints (no error return)**
+
+API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it:
+
+```go
+type TrackTime struct{}
+
+func (p TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
+    var body trackTimeRequest
+    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+    if err := appCtx.Store.UpdateTime(r.Context(), body); err != nil {
+        http.Error(w, "update failed", http.StatusInternalServerError)
+        return
+    }
+    w.WriteHeader(http.StatusOK)
+}
+```
+
 `ServeHTTP` supports four signatures (see reference.md for details). The DI form (extra arg types beyond `w, r`) buffers the response only when the method has a return value.
+
+### Error handling in handlers
+
+The error-returning forms of `ServeHTTP` — and **every** `Props` method — run against a *buffered* response writer. On a non-nil error the buffer is discarded and the error goes to the `WithErrorHandler` callback. So:
+
+- **Never call `http.Error` (or write `w`) in an error-returning handler or in `Props`.** If you write then `return err`, the write is discarded; if you write then `return nil`, you bypass the error handler. Just return the error.
+- **For a specific status code, return a typed error** (e.g. `ErrorWithStatus{Status, Title, Message}`) that the global handler unwraps with `errors.As`. Plain errors fall through to a logged 500.
+- **API/JSON endpoints use Pattern D** (no error return) — there `http.Error` and direct `w` writes are correct, because you own the status code and skip the buffering wrapper.
+- **For streaming (SSE), flush with `http.NewResponseController(w)`** — it works from either `ServeHTTP` form (the buffered wrapper implements `FlushError()`/`Unwrap()`) and is the only way to *guarantee* unbuffered delivery through other middleware.
+
+See examples.md §13 for the full pattern, including the `WithErrorHandler` wiring.
 
 ### 3. URL Generation
 
@@ -279,3 +311,4 @@ Generic types and interface types are supported as well — see `generics_inject
 10. **Type aliases break URLFor's type-based lookup** — use `structpages.Ref("FieldName")` to disambiguate.
 11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`.
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
+13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).

@@ -80,11 +80,16 @@ To register two values of the same underlying type, define named types to disamb
 
 ```go
 structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-    // handle error
+    status := http.StatusInternalServerError
+    var se ErrorWithStatus
+    if errors.As(err, &se) {
+        status = se.Status
+    }
+    // render an HTML/HTMX error page with `status`
 })
 ```
 
-Called when Props or error-returning ServeHTTP fails.
+Called when `Props` or an error-returning `ServeHTTP` returns a non-nil error (the response buffer is discarded first). This is the single place that turns errors into responses, so handlers should *return* errors rather than writing `w` themselves. Define a typed error carrying a status code and unwrap it here with `errors.As`; plain errors default to a logged 500. The writer passed in is still the buffered one — writing to it here is fine because no handler runs after. See examples.md §13.
 
 ### WithMiddlewares
 
@@ -157,6 +162,13 @@ func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, target stru
 ```
 
 `ServeHTTP` takes precedence over the Props/Component flow — if defined, `Props` and component methods are not consulted.
+
+**Choosing a form, and the `http.Error` anti-pattern.** The buffered (error-returning) forms exist so that on error the framework can discard a partial response and render through `WithErrorHandler` instead. Therefore:
+
+- In signatures 2 and 4 (and in any `Props` method) **never write `w` directly** — no `http.Error`, no `w.WriteHeader`. Writing then `return err` discards the write when the buffer resets; writing then `return nil` bypasses the error handler. Return the error and let `WithErrorHandler` render it. For a specific status code, return a typed error (e.g. `ErrorWithStatus{Status, Title, Message}`) that the handler unwraps via `errors.As`.
+- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. There `http.Error` and direct `w` writes are the correct tools — you own the status code.
+
+See examples.md §13 for the full worked pattern.
 
 ### Middlewares
 
@@ -305,4 +317,6 @@ route:"[METHOD] /path [Title]"
 
 ## Buffered Response
 
-Error-returning `ServeHTTP` uses buffered writer. On error, buffer is discarded and error handler renders instead. Supports `Flush()` for streaming/SSE.
+Error-returning `ServeHTTP` (and every `Props` method) uses a buffered writer. On a non-nil error the buffer is discarded and `WithErrorHandler` renders instead — so do **not** write `w` directly in these forms; return the error (typed, e.g. `ErrorWithStatus`, when a specific status is needed). The no-return `ServeHTTP(w, r, deps...)` form skips the structpages buffering wrapper — use it for one-shot JSON/API endpoints where you write directly and own the status code.
+
+For streaming (SSE, progress), flush with `http.NewResponseController(w)`: the buffered wrapper implements `FlushError()` and `Unwrap()`, so the controller drains the buffer to the client and reaches any underlying flusher. This works from *either* `ServeHTTP` form — and unlike grabbing the raw `w`, it is the only way to *guarantee* an unbuffered write through whatever middleware also wraps the writer. See examples.md §13.
