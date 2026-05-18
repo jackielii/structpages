@@ -75,16 +75,26 @@ func (sp *StructPages) IDTarget(v any) (string, error) {
 // pre-extracted URL parameters from the current request, so all required parameters
 // must be provided as args.
 //
-// If multiple page type matches are found, the first one is returned.
-// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
+// Type-based lookup is strict: if the same page type is mounted under
+// multiple parents, URLFor returns an error listing every match
+// instead of silently choosing one. Disambiguate with the []any chain
+// form (recommended; type-safe), Ref("Parent.Field") for cross-package
+// callers, or a func(*PageNode) bool predicate.
 //
-// Additionally, you can pass []any to page to join multiple path segments together.
-// Strings will be joined as is. Example:
+// Path and query parameters are passed via a map[string]any (preferred
+// — explicit and resilient to route changes):
 //
-//	sp.URLFor([]any{Page{}, "?foo={bar}"}, "bar", "baz")
+//	sp.URLFor(Page{}, map[string]any{"id": 42})
+//	sp.URLFor([]any{Page{}, "?foo={bar}"}, map[string]any{"bar": "baz"})
 //
-// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
-// It can be useful when you have multiple pages with the same type but different routes.
+// Positional and key/value-pairs forms also work (see formatPathSegments
+// in url_for.go for the full detection order) but require the call site
+// to track parameter position or name conventions.
+//
+// You can pass []any as the page to join multiple path segments
+// together — strings are concatenated as-is. You can also pass a
+// func(*PageNode) bool predicate to match a specific page when
+// type-based lookup isn't enough.
 func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
 	// Create a context with parseContext and call the context-based URLFor
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)

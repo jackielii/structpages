@@ -171,18 +171,148 @@ See examples.md §13 for the full pattern, including the `WithErrorHandler` wiri
 
 ```templ
 <a href={ structpages.URLFor(ctx, MyPage{}) }>Link</a>
-<a href={ structpages.URLFor(ctx, DetailPage{}, item.ID) }>Detail</a>
-<form action={ structpages.URLFor(ctx, SavePage{}, item.ID) } method="POST">
+<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"id": item.ID}) }>Detail</a>
+<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"id": item.ID}) } method="POST">
 ```
 
-For appending query strings, pass a `[]any` of segments:
+**Prefer `map[string]any` for path parameters.** It's explicit at the call site, survives route changes, and reads as a single value rather than a sequence of positional or alternating args. Positional and key/value-pair forms also work (see reference.md §URLFor Args Formats) but are easier to misalign during refactors.
+
+For appending query strings, pass a `[]any` of segments — the strings are concatenated as the URL template, and the `map[string]any` fills both path and query placeholders:
 
 ```go
 url, err := structpages.URLFor(ctx,
     []any{MyList{}, "?page={page}&q={q}"},
-    "page", pageNum, "q", query,
+    map[string]any{"page": pageNum, "q": query},
 )
 ```
+
+**The recommended URLFor shape is two arguments**: `URLFor(ctx, page, params)`. Pick the right `page` form, hand off path/query placeholders in a `map[string]any` for `params`.
+
+| form | shape | use when |
+|---|---|---|
+| bare typed page | `URLFor(ctx, MyPage{}, params)` | the type is mounted exactly once |
+| typed chain | `URLFor(ctx, []any{Parent{}, Leaf{}}, params)` | same leaf type mounted under multiple parents — parent disambiguates |
+| chain + URL fragment | `URLFor(ctx, []any{Parent{}, Leaf{}, "?tab={t}"}, params)` | need to append a query template or path suffix |
+| Ref by qualified name | `URLFor(ctx, Ref("Parent.Field"), params)` | can't import the page type (cross-package import cycle) |
+| Ref by route | `URLFor(ctx, Ref("/components/{slug}"), params)` | you have the route string and want a literal match |
+
+**Always strict.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory.
+
+**Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. This is the same as the existing composition slice — the new bit is that *multiple* typed values form a chain.
+
+**Wrong shape — interleaving fails.** The slice is positional: all chain steps first, then all URL fragments. Mixing them rejects at runtime:
+
+```go
+// Wrong — typed value after a string fragment:
+url, _ := structpages.URLFor(ctx,
+    []any{componentsRoot{}, "?tab={tab}", entryPage{}},
+    map[string]any{"slug": "x", "tab": "props"})
+// → error: URLFor: typed value at slice position 2 follows a string
+//   fragment; chain steps must all come before any string fragment
+
+// Right — chain first, fragments after:
+url, _ := structpages.URLFor(ctx,
+    []any{componentsRoot{}, entryPage{}, "?tab={tab}"},
+    map[string]any{"slug": "x", "tab": "props"})
+// → "/components/x?tab=props"
+```
+
+```go
+type root struct {
+    Components componentsRoot `route:"/components Components"`
+    Patterns   patternsRoot   `route:"/patterns Patterns"`
+}
+type componentsRoot struct { Detail entryPage `route:"/{slug} Component"` }
+type patternsRoot   struct { Detail entryPage `route:"/{slug} Pattern"` }
+
+// Bare URLFor errors — entryPage matches two nodes.
+url, err := structpages.URLFor(ctx, entryPage{}, map[string]any{"slug": "button"})
+
+// Chain anchors at the parent struct; descends into the entryPage child.
+url, err := structpages.URLFor(ctx,
+    []any{componentsRoot{}, entryPage{}},
+    map[string]any{"slug": "button"})
+// → "/components/button"
+```
+
+#### Validating URLs (no dangling URLs in production)
+
+Both the chain form (field-name strings show up as type identity once compiled — but page names, route strings, and Ref strings remain stringly typed) and `Ref` carry strings somewhere. Strings are fine — they just need to be validated. Two complementary guards:
+
+**1. Init-time validator — fails the boot, not the first request.**
+
+```go
+// validate.go
+func validateURLs(sp *structpages.StructPages) error {
+    var errs []error
+    check := func(label string, gen func() (string, error)) {
+        if _, err := gen(); err != nil {
+            errs = append(errs, fmt.Errorf("%s: %w", label, err))
+        }
+    }
+    check("home", func() (string, error) { return sp.URLFor(homePage{}) })
+    check("components detail", func() (string, error) {
+        return sp.URLFor([]any{componentsRoot{}, entryPage{}},
+            map[string]any{"slug": "sample"})
+    })
+    // For Refs (cross-package, where importing would cycle):
+    check("admin settings", func() (string, error) {
+        return sp.URLFor(structpages.Ref("Admin.Settings"))
+    })
+    return errors.Join(errs...)
+}
+
+// main.go
+sp, err := structpages.Mount(mux, &root{}, "/", "App")
+if err != nil { log.Fatal(err) }
+if err := validateURLs(sp); err != nil {
+    log.Fatalf("URL validation failed:\n%v", err)
+}
+```
+
+A renamed field, moved route, or broken Ref now kills the boot with the inventory of what's dangling. Same dynamic as a database migration check: refuse to start serving if the world doesn't look right.
+
+**2. Wrap URL generation in typed helpers + an integration test.**
+
+```go
+// urls.go — one helper per URL family. The only strings live here.
+func urlForGroupIndex(ctx context.Context, group string) (string, error) {
+    parent, ok := groupParent(group)
+    if !ok { return "", fmt.Errorf("unknown group %q", group) }
+    return structpages.URLFor(ctx, []any{parent, groupIndex{}})
+}
+
+// integration_test.go — mount, render, assert URLs in the body.
+func TestRenderedURLsResolve(t *testing.T) {
+    mux := http.NewServeMux()
+    structpages.Mount(mux, &root{}, "/", "App")
+    cases := []struct{ path string; wantContains []string }{
+        {"/",            []string{`href="/foundations/"`, `href="/components/"`}},
+        {"/components/", []string{`href="/components/button"`}},
+    }
+    for _, tc := range cases {
+        rec := httptest.NewRecorder()
+        mux.ServeHTTP(rec, httptest.NewRequest("GET", tc.path, nil))
+        for _, want := range tc.wantContains {
+            if !strings.Contains(rec.Body.String(), want) {
+                t.Errorf("%s body missing %q", tc.path, want)
+            }
+        }
+    }
+}
+```
+
+The helper layer narrows the surface of refactorable strings; the integration test catches drift in helpers, parents, fields, routes, or accidental ambiguity, exercised end-to-end through the real renderer.
+
+**Why both?** The validator runs at boot — safety net for production deploys, even if CI was skipped. The integration test runs in CI — fast feedback during development, with a clearer diff when something breaks. A `TestValidateURLs` in your test file that just calls the validator gives you the validator's coverage in CI too, for one extra line.
+
+What this catches:
+- **Renamed field** in a parent struct → chain step errors with the parent's available children listed.
+- **Renamed route or page** referenced by `Ref` → `no page found with route/name "..."`.
+- **New page type introducing strict-mode ambiguity** → URLFor errors at the bare lookup.
+- **Call site bypassing helpers** → the rendered body lacks the URL the test asserts.
+
+See `examples/url-validation/` for the full pattern: `urls.go` (helpers), `validate.go` (init-time inventory), `integration_test.go` (end-to-end). The library's `chain_test.go` covers the URL-shape mechanics at the unit level.
 
 When you need a plain string (not in a templ attribute that handles errors), wrap with a small `must` helper:
 
@@ -308,7 +438,7 @@ Generic types and interface types are supported as well — see `generics_inject
 7. **Promoted (embedded) methods are skipped** — only methods defined directly on the struct count.
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
 9. **`ErrSkipPageRender` is only honored from `Props`** (e.g. after writing a redirect). Returning it from `ServeHTTP` does nothing special.
-10. **Type aliases break URLFor's type-based lookup** — use `structpages.Ref("FieldName")` to disambiguate.
+10. **Disambiguation primitives:** when the same page type is mounted under multiple parents, use the `[]any{ParentPage{}, LeafPage{}}` chain form — strict `URLFor` (the default) errors on bare lookups. Use `structpages.Ref("Parent.Field")` (qualified path), `Ref("PageName")`, or `Ref("/route")` when a package needs to URL-to a page it can't import (importing would cycle); Ref also handles Go type aliases that collapse to one `reflect.Type`. Ref strings are validated at startup via the init-time validator pattern (see §3 "Validating URLs").
 11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`.
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
 13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).

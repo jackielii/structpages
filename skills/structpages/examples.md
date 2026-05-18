@@ -13,12 +13,12 @@ func must[T any](v T, err error) T {
 }
 ```
 
-For appending query strings to a generated URL, the framework accepts a `[]any` slice as the page argument. There is no `join()` function — pass the slice directly:
+For appending query strings to a generated URL, the framework accepts a `[]any` slice as the page argument. There is no `join()` function — pass the slice directly. Use `map[string]any` for placeholders (recommended over positional or key/value-pair forms):
 
 ```go
 url, err := structpages.URLFor(ctx,
     []any{MyPage{}, "?page={page}&q={q}"},
-    "page", pageNum, "q", query,
+    map[string]any{"page": pageNum, "q": query},
 )
 ```
 
@@ -28,7 +28,7 @@ Some apps wrap this into a small `join` helper to read more nicely:
 func join(parts ...any) []any { return parts }
 
 // then:
-structpages.URLFor(ctx, join(MyPage{}, "?page={page}"), "page", pageNum)
+structpages.URLFor(ctx, join(MyPage{}, "?page={page}"), map[string]any{"page": pageNum})
 ```
 
 ---
@@ -653,21 +653,25 @@ Atoms/molecules receive ad-hoc data via `args` (no framework helpers visible ins
 
 ## 11. Search Picklist with Positional Args
 
-Positional args fill placeholders left-to-right: `{field}` gets `props.Field`, `{q}` gets `props.Query`, `{page}` gets `props.Page+1`.
+Prefer a `map[string]any` — explicit and refactor-safe — over positional fills:
 
 ```go
 <button hx-get={ structpages.URLFor(ctx,
     []any{SearchPicklist{}, "?field={field}&q={q}&page={page}"},
-    props.Field, props.Query, props.Page+1) }>
+    map[string]any{
+        "field": props.Field,
+        "q":     props.Query,
+        "page":  props.Page + 1,
+    }) }>
     Load More
 </button>
 ```
 
 The `URLFor` argument forms (in order of detection):
 
-- **Positional**: arg count exactly matches placeholder count.
-- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"id", 123, "slug", "x"`.)
-- **Map**: a single `map[string]any` first arg.
+- **Map** (recommended): a single `map[string]any` first arg. Refactor-safe and self-documenting.
+- **Positional**: arg count exactly matches placeholder count. Brittle if placeholders are added or reordered.
+- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"id", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
 - **Auto-fill from request**: any unfilled placeholders that match the *current request's* path params get filled automatically.
 
 ---

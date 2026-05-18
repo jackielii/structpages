@@ -70,39 +70,42 @@ func extractURLParams(next http.Handler, node *PageNode) http.Handler {
 }
 
 // URLFor returns the URL for a given page type. If args is provided, it'll replace
-// the path segments. Supported format is similar to http.ServeMux
+// the path segments. Supported format is similar to http.ServeMux.
 //
-// If multiple page type matches are found, the first one is returned.
-// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
+// Type-based lookup is strict: if the same page type is mounted under
+// multiple parents, URLFor returns an error listing every match
+// instead of silently choosing one. Disambiguate with the []any chain
+// form (recommended; type-safe), Ref("Parent.Field") for cross-package
+// callers, or a func(*PageNode) bool predicate.
 //
-// Additionally, you can pass []any to page to join multiple path segments together.
-// Strings will be joined as is. Example:
+// Path and query parameters are passed via a map[string]any (preferred
+// — explicit and resilient to route changes):
 //
-//	URLFor(ctx, []any{Page{}, "?foo={bar}"}, "bar", "baz")
+//	URLFor(ctx, Page{}, map[string]any{"id": 42})
+//	URLFor(ctx, []any{Page{}, "?foo={bar}"}, map[string]any{"bar": "baz"})
 //
-// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
-// It can be useful when you have multiple pages with the same type but different routes.
+// Positional and key/value-pairs forms also work (see formatPathSegments
+// in url_for.go for the full detection order) but require the call site
+// to track parameter position or name conventions.
+//
+// You can pass []any as the page to join multiple path segments
+// together — strings are concatenated as-is, which is the form used to
+// append a query-string template to a typed page lookup. You can also
+// pass a func(*PageNode) bool predicate to match a specific page when
+// type-based lookup isn't enough.
 func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	pc := pcCtx.Value(ctx)
 	if pc == nil {
 		return "", errors.New("parse context not found in context")
 	}
 
-	var pattern string
 	parts, ok := page.([]any)
 	if !ok {
 		parts = []any{page}
 	}
-	for _, page := range parts {
-		if s, ok := page.(string); ok {
-			pattern += s
-		} else {
-			p, err := pc.urlFor(page)
-			if err != nil {
-				return "", err
-			}
-			pattern += p
-		}
+	pattern, err := pc.resolveParts(parts)
+	if err != nil {
+		return "", err
 	}
 	path, err := formatPathSegments(ctx, pattern, args...)
 	if err != nil {
