@@ -1378,23 +1378,3 @@ func TestURLFor_ambiguousTypeErrorsByDefault(t *testing.T) {
 		t.Errorf("predicate lookup: got %q, want %q", got, "/foundations/")
 	}
 }
-
-// TestURLFor_ambiguousTypeLenientReturnsFirstMatch pins the
-// WithLenientURLFor escape hatch: callers who opt in get the pre-fix
-// behaviour of returning the first node encountered during traversal.
-func TestURLFor_ambiguousTypeLenientReturnsFirstMatch(t *testing.T) {
-	pc, err := parsePageTree("/", &ambiguousRoot{})
-	if err != nil {
-		t.Fatalf("parsePageTree: %v", err)
-	}
-	pc.lenientURLFor = true
-	ctx := pcCtx.WithValue(context.Background(), pc)
-
-	got, err := URLFor(ctx, sharedIndex{})
-	if err != nil {
-		t.Fatalf("URLFor(sharedIndex{}): unexpected error %v", err)
-	}
-	if got != "/foundations/" {
-		t.Errorf("lenient first-match: got %q, want %q", got, "/foundations/")
-	}
-}

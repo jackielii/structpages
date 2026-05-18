@@ -2356,12 +2356,9 @@ func TestAliasTypeMount(t *testing.T) {
 // TestAliasTypeMount_URLFor demonstrates Go type alias behavior with URLFor.
 //
 // Go type aliases (type X = Y) are identical at runtime — reflect.TypeOf(aliasPage{})
-// returns the same type as reflect.TypeOf(aliasOriginalPage{}). With strict
-// URLFor (the default), mounting both at distinct routes is ambiguous and the
-// call errors. Callers must disambiguate via Ref("fieldName") or a predicate.
-//
-// Pass WithLenientURLFor() to Mount to restore the pre-fix first-match
-// behaviour (covered by the lenient subtest).
+// returns the same type as reflect.TypeOf(aliasOriginalPage{}). Mounting
+// both at distinct routes is ambiguous and URLFor errors. Callers must
+// disambiguate via Ref("fieldName") or a predicate.
 func TestAliasTypeMount_URLFor(t *testing.T) {
 	type parentWithAlias struct {
 		original aliasOriginalPage `route:"/original/{id} Original"`
@@ -2400,23 +2397,6 @@ func TestAliasTypeMount_URLFor(t *testing.T) {
 		}
 		if url != "/alias/789" {
 			t.Errorf("URLFor Ref = %q, want %q", url, "/alias/789")
-		}
-	}
-
-	// WithLenientURLFor() preserves the pre-fix first-match behaviour for
-	// callers migrating from older versions.
-	{
-		muxL := http.NewServeMux()
-		spL, err := Mount(muxL, &parentWithAlias{}, "/", "Parent", WithLenientURLFor())
-		if err != nil {
-			t.Fatalf("Mount (lenient) failed: %v", err)
-		}
-		url, err := spL.URLFor(aliasOriginalPage{}, "123")
-		if err != nil {
-			t.Errorf("URLFor (lenient) error: %v", err)
-		}
-		if url != "/original/123" {
-			t.Errorf("URLFor (lenient) = %q, want %q", url, "/original/123")
 		}
 	}
 

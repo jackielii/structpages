@@ -171,26 +171,14 @@ func Test_pc_UrlFor(t *testing.T) {
 	if pc.root == nil {
 		t.Fatal("parsePageTree returned nil")
 	}
-	// Two fields of the same type — strict mode (the default) errors here.
+	// Two fields of the same type — always strict, so URLFor errors.
 	{
 		_, err := pc.urlFor(&TestHandlerPage{})
 		if err == nil {
-			t.Fatal("urlFor expected ambiguous error under strict default")
+			t.Fatal("urlFor expected ambiguous error")
 		}
 	}
-	// Lenient mode (opt-in) preserves the pre-fix first-match behaviour.
-	{
-		pc.lenientURLFor = true
-		url, err := pc.urlFor(&TestHandlerPage{})
-		if err != nil {
-			t.Fatalf("urlFor (lenient) failed: %v", err)
-		}
-		if url != "/f1" {
-			t.Errorf("Expected URL '/f1', got '%s'", url)
-		}
-		pc.lenientURLFor = false
-	}
-	// Root struct type only matches once, so strict mode resolves it cleanly.
+	// Root struct type only matches once, so it resolves cleanly.
 	{
 		url, err := pc.urlFor(&topPage{})
 		if err != nil {

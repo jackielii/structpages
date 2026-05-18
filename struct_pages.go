@@ -36,7 +36,6 @@ type StructPages struct {
 	warnEmptyRoute func(*PageNode)
 	args           []any
 	urlPrefix      string
-	lenientURLFor  bool
 }
 
 // ID generates a raw HTML ID for a component method (without "#" prefix).
@@ -76,13 +75,11 @@ func (sp *StructPages) IDTarget(v any) (string, error) {
 // pre-extracted URL parameters from the current request, so all required parameters
 // must be provided as args.
 //
-// Type-based lookup is strict by default: if the same page type is
-// mounted under multiple parents, URLFor returns an error listing
-// every match instead of silently choosing one. Disambiguate with the
-// []any chain form (recommended; type-safe), Ref("Parent.Field") for
-// cross-package callers, or a func(*PageNode) bool predicate. Pass
-// WithLenientURLFor() to Mount to restore the pre-fix first-match
-// behaviour.
+// Type-based lookup is strict: if the same page type is mounted under
+// multiple parents, URLFor returns an error listing every match
+// instead of silently choosing one. Disambiguate with the []any chain
+// form (recommended; type-safe), Ref("Parent.Field") for cross-package
+// callers, or a func(*PageNode) bool predicate.
 //
 // Path and query parameters are passed via a map[string]any (preferred
 // — explicit and resilient to route changes):
@@ -153,7 +150,6 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	}
 	pc.root.Title = title
 	pc.urlPrefix = sp.urlPrefix
-	pc.lenientURLFor = sp.lenientURLFor
 	sp.pc = pc
 
 	// Register all pages
@@ -194,30 +190,6 @@ func WithArgs(args ...any) func(*StructPages) {
 func WithURLPrefix(prefix string) func(*StructPages) {
 	return func(r *StructPages) {
 		r.urlPrefix = prefix
-	}
-}
-
-// WithLenientURLFor opts out of the strict type-match check in URLFor.
-//
-// By default, URLFor errors when a type argument matches more than one
-// node in the page tree — same-typed pages mounted under multiple
-// parents silently resolved to the first match in older versions,
-// producing wrong-but-syntactically-valid URLs with no signal at the
-// call site. Strict mode surfaces those cases at the first call.
-//
-// Pass this option to restore the pre-fix first-match-wins behaviour,
-// either during migration or when the ambiguity is intentional and
-// callers genuinely don't care which match is used.
-//
-// Disambiguate without disabling strict mode by either:
-//   - []any{ParentPage{}, LeafPage{}} chain — recommended; type-safe
-//     all the way down, descends the page tree by child type,
-//   - Ref("Parent.Field") qualified path — for cross-package callers
-//     that can't import the typed page, or
-//   - a func(*PageNode) bool predicate.
-func WithLenientURLFor() func(*StructPages) {
-	return func(r *StructPages) {
-		r.lenientURLFor = true
 	}
 }
 

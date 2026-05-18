@@ -72,13 +72,11 @@ func extractURLParams(next http.Handler, node *PageNode) http.Handler {
 // URLFor returns the URL for a given page type. If args is provided, it'll replace
 // the path segments. Supported format is similar to http.ServeMux.
 //
-// Type-based lookup is strict by default: if the same page type is
-// mounted under multiple parents, URLFor returns an error listing
-// every match instead of silently choosing one. Disambiguate with the
-// []any chain form (recommended; type-safe), Ref("Parent.Field") for
-// cross-package callers, or a func(*PageNode) bool predicate. Pass
-// WithLenientURLFor() to Mount to restore the pre-fix first-match
-// behaviour.
+// Type-based lookup is strict: if the same page type is mounted under
+// multiple parents, URLFor returns an error listing every match
+// instead of silently choosing one. Disambiguate with the []any chain
+// form (recommended; type-safe), Ref("Parent.Field") for cross-package
+// callers, or a func(*PageNode) bool predicate.
 //
 // Path and query parameters are passed via a map[string]any (preferred
 // — explicit and resilient to route changes):

@@ -196,7 +196,7 @@ url, err := structpages.URLFor(ctx,
 | Ref by qualified name | `URLFor(ctx, Ref("Parent.Field"), params)` | can't import the page type (cross-package import cycle) |
 | Ref by route | `URLFor(ctx, Ref("/components/{slug}"), params)` | you have the route string and want a literal match |
 
-**Strict by default.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. `WithLenientURLFor()` on `Mount` restores the pre-fix first-match behaviour during migration.
+**Always strict.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory.
 
 **Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. This is the same as the existing composition slice — the new bit is that *multiple* typed values form a chain.
 

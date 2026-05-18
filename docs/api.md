@@ -66,7 +66,7 @@ func (sp *StructPages) URLFor(page any, args ...any) (string, error)
 
 Generate a URL for a page. Recommended shape: `URLFor(page, params)` with `params` as `map[string]any`.
 
-**Strict by default.** If the page type is mounted under multiple parents, a bare type lookup errors instead of silently returning the first match. Disambiguate with the `[]any{ParentType{}, LeafType{}}` chain form or `Ref("Parent.Field")`. Pass `WithLenientURLFor()` to `Mount` to restore the pre-fix first-match behaviour for migration.
+**Strict.** If the page type is mounted under multiple parents, a bare type lookup errors instead of silently returning the first match. Disambiguate with the `[]any{ParentType{}, LeafType{}}` chain form or `Ref("Parent.Field")`. No opt-out.
 
 **Example:**
 ```go

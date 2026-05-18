@@ -21,13 +21,6 @@ type parseContext struct {
 	// does NOT affect route registration — that is controlled by Mount's
 	// route argument.
 	urlPrefix string
-	// lenientURLFor opts out of strict type-match checking in URLFor. When
-	// false (the default), URLFor returns an error if a type argument matches
-	// more than one node in the tree, listing every match so the caller can
-	// disambiguate via Ref or a predicate. When true, URLFor reverts to the
-	// pre-fix behaviour of silently returning the first match encountered
-	// during tree traversal. Set by WithLenientURLFor.
-	lenientURLFor bool
 }
 
 func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
@@ -351,12 +344,6 @@ func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 		pt := pointerType(node.Value.Type())
 		if ptv == pt {
 			matches = append(matches, node)
-			// Short-circuit in lenient mode: callers opted into the
-			// pre-fix first-match-wins behaviour, so we can skip the
-			// full traversal and the bookkeeping below.
-			if p.lenientURLFor {
-				return node, nil
-			}
 		}
 	}
 	switch len(matches) {
@@ -372,8 +359,7 @@ func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 		return nil, fmt.Errorf(
 			"ambiguous: type %s matches %d nodes: %s; "+
 				"disambiguate with []any{ParentType{}, %s{}} chain (recommended), "+
-				"Ref(\"Parent.Field\") for cross-package, or a func(*PageNode) bool predicate "+
-				"(to restore the pre-fix first-match behaviour, pass WithLenientURLFor() to Mount)",
+				"Ref(\"Parent.Field\") for cross-package, or a func(*PageNode) bool predicate",
 			ptv.String(), len(matches), strings.Join(routes, ", "), ptv.Elem().Name())
 	}
 }
