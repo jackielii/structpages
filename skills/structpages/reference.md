@@ -36,18 +36,26 @@ func IDTarget(ctx context.Context, v any) (string, error)
 
 ### URLFor Page Argument Types
 
-1. **Struct instance**: `URLFor(ctx, MyPage{})` — matches by type
-2. **Ref string**: `URLFor(ctx, Ref("pageName"))` — by name, or `Ref("/route")` by route
-3. **Predicate**: `URLFor(ctx, func(*PageNode) bool { ... })`
-4. **`[]any` slice**: `URLFor(ctx, []any{MyPage{}, "?page={page}"}, "page", 5)` — concatenates a route and a query-string template
+Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[string]any`.
+
+1. **Struct instance**: `URLFor(ctx, MyPage{}, params)` — matches by type. Strict: errors if the type matches multiple nodes (use the chain or Ref form below).
+2. **`[]any` chain / composition**: `URLFor(ctx, []any{ParentPage{}, LeafPage{}}, params)` — typed values form a chain (descend by child type). Trailing strings concat as literal URL fragments: `[]any{Page{}, "?q={q}"}`. Mixing typed values after a string fragment is rejected.
+3. **Ref string**: `URLFor(ctx, Ref("Parent.Field"), params)` — qualified path (walks down by `PageNode.Name`). `Ref("PageName")` matches the first node with that name; `Ref("/route")` matches by full route. Use Ref when the typed page can't be imported (cross-package cycle) or for type aliases.
+4. **Predicate**: `URLFor(ctx, func(*PageNode) bool { ... })` — escape hatch for custom matching.
 
 ### URLFor Args Formats
 
-In order of detection inside `formatPathSegments`:
+**Recommended: `map[string]any`** — explicit, position-independent, refactor-safe.
 
-- **Positional**: arg count exactly matches placeholder count → `URLFor(ctx, page{}, "val1", "val2")` fills left to right.
-- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "id", 123, "slug", "hello")`.
-- **Map**: `URLFor(ctx, page{}, map[string]any{"id": 123})`.
+```go
+URLFor(ctx, page{}, map[string]any{"id": 123, "slug": "hello"})
+```
+
+The other forms are also supported. Order of detection inside `formatPathSegments`:
+
+- **Map**: a single `map[string]any` first arg. Recommended; values are looked up by placeholder name.
+- **Positional**: arg count exactly matches placeholder count → `URLFor(ctx, page{}, "val1", "val2")` fills left to right. Brittle if placeholders are reordered.
+- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "id", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
 - **Auto-fill from request**: unfilled placeholders that match path params from the *current request's route* are filled automatically. Other routes' params do not auto-fill.
 
 ### ID / IDTarget Input Types

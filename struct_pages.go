@@ -36,6 +36,7 @@ type StructPages struct {
 	warnEmptyRoute func(*PageNode)
 	args           []any
 	urlPrefix      string
+	lenientURLFor  bool
 }
 
 // ID generates a raw HTML ID for a component method (without "#" prefix).
@@ -75,16 +76,28 @@ func (sp *StructPages) IDTarget(v any) (string, error) {
 // pre-extracted URL parameters from the current request, so all required parameters
 // must be provided as args.
 //
-// If multiple page type matches are found, the first one is returned.
-// In such situation, use a func(*PageNode) bool as page argument to match a specific page.
+// Type-based lookup is strict by default: if the same page type is
+// mounted under multiple parents, URLFor returns an error listing
+// every match instead of silently choosing one. Disambiguate with the
+// []any chain form (recommended; type-safe), Ref("Parent.Field") for
+// cross-package callers, or a func(*PageNode) bool predicate. Pass
+// WithLenientURLFor() to Mount to restore the pre-fix first-match
+// behaviour.
 //
-// Additionally, you can pass []any to page to join multiple path segments together.
-// Strings will be joined as is. Example:
+// Path and query parameters are passed via a map[string]any (preferred
+// — explicit and resilient to route changes):
 //
-//	sp.URLFor([]any{Page{}, "?foo={bar}"}, "bar", "baz")
+//	sp.URLFor(Page{}, map[string]any{"id": 42})
+//	sp.URLFor([]any{Page{}, "?foo={bar}"}, map[string]any{"bar": "baz"})
 //
-// It also supports a func(*PageNode) bool as the Page argument to match a specific page.
-// It can be useful when you have multiple pages with the same type but different routes.
+// Positional and key/value-pairs forms also work (see formatPathSegments
+// in url_for.go for the full detection order) but require the call site
+// to track parameter position or name conventions.
+//
+// You can pass []any as the page to join multiple path segments
+// together — strings are concatenated as-is. You can also pass a
+// func(*PageNode) bool predicate to match a specific page when
+// type-based lookup isn't enough.
 func (sp *StructPages) URLFor(page any, args ...any) (string, error) {
 	// Create a context with parseContext and call the context-based URLFor
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)
@@ -140,6 +153,7 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	}
 	pc.root.Title = title
 	pc.urlPrefix = sp.urlPrefix
+	pc.lenientURLFor = sp.lenientURLFor
 	sp.pc = pc
 
 	// Register all pages
@@ -180,6 +194,30 @@ func WithArgs(args ...any) func(*StructPages) {
 func WithURLPrefix(prefix string) func(*StructPages) {
 	return func(r *StructPages) {
 		r.urlPrefix = prefix
+	}
+}
+
+// WithLenientURLFor opts out of the strict type-match check in URLFor.
+//
+// By default, URLFor errors when a type argument matches more than one
+// node in the page tree — same-typed pages mounted under multiple
+// parents silently resolved to the first match in older versions,
+// producing wrong-but-syntactically-valid URLs with no signal at the
+// call site. Strict mode surfaces those cases at the first call.
+//
+// Pass this option to restore the pre-fix first-match-wins behaviour,
+// either during migration or when the ambiguity is intentional and
+// callers genuinely don't care which match is used.
+//
+// Disambiguate without disabling strict mode by either:
+//   - []any{ParentPage{}, LeafPage{}} chain — recommended; type-safe
+//     all the way down, descends the page tree by child type,
+//   - Ref("Parent.Field") qualified path — for cross-package callers
+//     that can't import the typed page, or
+//   - a func(*PageNode) bool predicate.
+func WithLenientURLFor() func(*StructPages) {
+	return func(r *StructPages) {
+		r.lenientURLFor = true
 	}
 }
 

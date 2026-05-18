@@ -71,11 +71,17 @@ Generate a URL for a page type with optional path parameters.
 // Simple path
 url, _ := sp.URLFor(homePage{})  // "/"
 
-// With path parameter
-url, _ := sp.URLFor(userPage{}, "123")  // "/users/123"
+// With path parameter (preferred: map[string]any — explicit and refactor-safe)
+url, _ := sp.URLFor(userPage{}, map[string]any{"id": "123"})  // "/users/123"
 
-// With named parameters
-url, _ := sp.URLFor(postPage{}, "year", 2024, "slug", "hello")  // "/blog/2024/hello"
+// Multiple parameters
+url, _ := sp.URLFor(postPage{}, map[string]any{
+    "year": 2024,
+    "slug": "hello",
+})  // "/blog/2024/hello"
+
+// Positional and key/value-pair forms also work (see reference.md
+// §URLFor Args Formats) but are brittle under route changes.
 ```
 
 #### ID and IDTarget

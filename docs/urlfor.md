@@ -38,20 +38,23 @@ url, err := structpages.URLFor(ctx, userProfile{}, "123")
 ```
 
 ```templ
-// Single parameter - positional
-<a href={ urlFor(ctx, userProfile{}, "123") }>View User</a>
-
-// Multiple parameters - as key-value pairs
-<a href={ urlFor(ctx, blogPost{}, "year", "2024", "month", "06", "slug", "my-post") }>
-    Read Post
-</a>
-
-// Using a map
+// Preferred: map[string]any — explicit, refactor-safe, reads as a
+// single value rather than a sequence of positional args.
 <a href={ urlFor(ctx, blogPost{}, map[string]any{
     "year": "2024",
     "month": "06",
     "slug": "my-post",
 }) }>Read Post</a>
+
+// Positional fills left-to-right — concise for one-shot single-param
+// calls, brittle once a route gains placeholders.
+<a href={ urlFor(ctx, userProfile{}, "123") }>View User</a>
+
+// Key-value pairs — equivalent to the map form but spread across
+// positional args; harder to scan in templ attribute values.
+<a href={ urlFor(ctx, blogPost{}, "year", "2024", "month", "06", "slug", "my-post") }>
+    Read Post
+</a>
 ```
 
 ### With Query Parameters
@@ -67,21 +70,23 @@ func join(page any, pattern string) []any {
 
 ```templ
 // Add query parameters with template placeholders
-<a href={ urlFor(ctx, join(product{}, "?page={page}"), "page", "2") }>
+<a href={ urlFor(ctx, join(product{}, "?page={page}"), map[string]any{"page": "2"}) }>
     Page 2
 </a>
 
 // Multiple query parameters
-<form hx-post={ urlFor(ctx, join(toggle{}, "?redirect={url}"), 
-    "id", todoId, 
-    "url", currentURL) }>
+<form hx-post={ urlFor(ctx, join(toggle{}, "?redirect={url}"), map[string]any{
+    "id":  todoId,
+    "url": currentURL,
+}) }>
     <button>Toggle</button>
 </form>
 
-// Complex example with path and query parameters
-<a href={ urlFor(ctx, join(jobDetail{}, "?tab={tab}"), 
-    "id", jobId, 
-    "tab", "overview") }>
+// Path + query parameters together — the map fills both.
+<a href={ urlFor(ctx, join(jobDetail{}, "?tab={tab}"), map[string]any{
+    "id":  jobId,
+    "tab": "overview",
+}) }>
     Job Overview
 </a>
 ```
