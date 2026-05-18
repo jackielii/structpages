@@ -148,6 +148,52 @@ func TestChain_errors(t *testing.T) {
 			t.Errorf("error %q missing 'first chain step' hint", err.Error())
 		}
 	})
+
+}
+
+// TestChain_nilGuards pins that nil inputs at any position never
+// panic — they were a real foot-gun pre-fix because pointerType(reflect
+// .TypeOf(nil)) segfaults. Split from TestChain_errors to keep gocyclo
+// happy.
+func TestChain_nilGuards(t *testing.T) {
+	pc, err := parsePageTree("/", &ambiguousRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	cases := []struct {
+		name     string
+		page     any
+		wantHint string
+	}{
+		{
+			name:     "bare nil page argument",
+			page:     nil,
+			wantHint: "nil",
+		},
+		{
+			name:     "nil first chain element",
+			page:     []any{nil, sharedDetail{}},
+			wantHint: "nil",
+		},
+		{
+			name:     "nil descent chain element",
+			page:     []any{ambiguousComponentsRoot{}, nil},
+			wantHint: "chain step 1",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := URLFor(ctx, tc.page)
+			if err == nil {
+				t.Fatalf("expected error, not panic")
+			}
+			if !strings.Contains(err.Error(), tc.wantHint) {
+				t.Errorf("error %q missing hint %q", err.Error(), tc.wantHint)
+			}
+		})
+	}
 }
 
 func TestRef_qualifiedPath(t *testing.T) {

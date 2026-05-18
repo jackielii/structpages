@@ -75,5 +75,25 @@ func validateURLs(sp *structpages.StructPages) error {
 		return sp.URLFor(structpages.Ref("Foundations"))
 	})
 
+	// Uncomment any of the following to see the boot fail with the
+	// exact dangling-URL message you'd hit in production. Each one
+	// simulates a class of refactor regression this validator catches:
+	//
+	// // Renamed/removed leaf type — bare lookup fails:
+	// check("removed page", func() (string, error) {
+	//     return sp.URLFor(removedPage{})
+	// })
+	//
+	// // Renamed field "Detail" → "Item" on componentsRoot:
+	// check("renamed field", func() (string, error) {
+	//     return sp.URLFor(structpages.Ref("Components.Detail"))
+	// })
+	//
+	// // Moved route "/components" → "/widgets":
+	// check("moved route", func() (string, error) {
+	//     return sp.URLFor(structpages.Ref("/components/{slug}"),
+	//         map[string]any{"slug": "button"})
+	// })
+
 	return errors.Join(errs...)
 }

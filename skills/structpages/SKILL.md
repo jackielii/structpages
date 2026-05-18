@@ -200,6 +200,23 @@ url, err := structpages.URLFor(ctx,
 
 **Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. This is the same as the existing composition slice — the new bit is that *multiple* typed values form a chain.
 
+**Wrong shape — interleaving fails.** The slice is positional: all chain steps first, then all URL fragments. Mixing them rejects at runtime:
+
+```go
+// Wrong — typed value after a string fragment:
+url, _ := structpages.URLFor(ctx,
+    []any{componentsRoot{}, "?tab={tab}", entryPage{}},
+    map[string]any{"slug": "x", "tab": "props"})
+// → error: URLFor: typed value at slice position 2 follows a string
+//   fragment; chain steps must all come before any string fragment
+
+// Right — chain first, fragments after:
+url, _ := structpages.URLFor(ctx,
+    []any{componentsRoot{}, entryPage{}, "?tab={tab}"},
+    map[string]any{"slug": "x", "tab": "props"})
+// → "/components/x?tab=props"
+```
+
 ```go
 type root struct {
     Components componentsRoot `route:"/components Components"`

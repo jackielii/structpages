@@ -325,6 +325,10 @@ func (p *parseContext) urlFor(v any) (string, error) {
 }
 
 func (p *parseContext) findPageNode(v any) (*PageNode, error) {
+	if v == nil {
+		return nil, fmt.Errorf("URLFor: page argument is nil")
+	}
+
 	// Handle Ref type for dynamic page references
 	if ref, ok := v.(Ref); ok {
 		return p.findPageNodeByRef(string(ref))
@@ -446,6 +450,9 @@ func (p *parseContext) resolveChain(steps []any) (*PageNode, error) {
 	for i, step := range steps[1:] {
 		// Subsequent chain steps must be plain typed values — Refs
 		// and predicates only make sense at the top-level lookup.
+		if step == nil {
+			return nil, fmt.Errorf("URLFor: chain step %d is nil", i+1)
+		}
 		if _, isRef := step.(Ref); isRef {
 			return nil, fmt.Errorf(
 				"URLFor: chain step %d is a Ref; Ref is only valid as the first chain step "+
