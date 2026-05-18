@@ -318,6 +318,10 @@ func (p *parseContext) urlFor(v any) (string, error) {
 }
 
 func (p *parseContext) findPageNode(v any) (*PageNode, error) {
+	if v == nil {
+		return nil, fmt.Errorf("URLFor: page argument is nil")
+	}
+
 	// Handle Ref type for dynamic page references
 	if ref, ok := v.(Ref); ok {
 		return p.findPageNodeByRef(string(ref))
@@ -335,17 +339,173 @@ func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 
 	// Handle static type reference
 	ptv := pointerType(reflect.TypeOf(v))
+	var matches []*PageNode
 	for node := range p.root.All() {
 		pt := pointerType(node.Value.Type())
 		if ptv == pt {
-			return node, nil
+			matches = append(matches, node)
 		}
 	}
-	return nil, fmt.Errorf("no page node found for type %s", ptv.String())
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("no page node found for type %s", ptv.String())
+	case 1:
+		return matches[0], nil
+	default:
+		routes := make([]string, len(matches))
+		for i, m := range matches {
+			routes[i] = m.FullRoute()
+		}
+		return nil, fmt.Errorf(
+			"ambiguous: type %s matches %d nodes: %s; "+
+				"disambiguate with []any{ParentType{}, %s{}} chain (recommended), "+
+				"Ref(\"Parent.Field\") for cross-package, or a func(*PageNode) bool predicate",
+			ptv.String(), len(matches), strings.Join(routes, ", "), ptv.Elem().Name())
+	}
 }
 
-// findPageNodeByRef finds a page node by name or route from a Ref string.
-// If the ref starts with "/", it matches by route; otherwise by page name.
+// resolveParts walks a parsed []any (or a single-element list synthesized
+// from a bare page argument) and returns the final URL pattern.
+//
+// The slice is split into two phases by the first string element:
+//
+//  1. Chain prefix — every leading non-string element is a chain step.
+//     The first step is resolved via findPageNode (accepts any
+//     page-identifier form: typed value, Ref, predicate). Each
+//     subsequent step must be a typed value, descended from the
+//     previous node by child type. The pattern is the last node's
+//     FullRoute.
+//
+//  2. String suffix — once the first string appears, everything from
+//     that point on is concatenated to the pattern as a literal URL
+//     fragment ("?q={q}", "&extra=1", "/sub/{x}", etc.). Typed values
+//     are NOT allowed after a string fragment; this would be ambiguous
+//     (is the typed value a chain step continuation or a new lookup?)
+//     and we reject it explicitly.
+//
+// This is the only entry point that knows about the slice form's
+// internal grammar. URLFor itself just dispatches here.
+func (p *parseContext) resolveParts(parts []any) (string, error) {
+	if len(parts) == 0 {
+		return "", nil
+	}
+
+	// Phase 1: collect chain-step prefix.
+	chainEnd := len(parts)
+	for i, part := range parts {
+		if _, isString := part.(string); isString {
+			chainEnd = i
+			break
+		}
+	}
+	chain := parts[:chainEnd]
+	fragments := parts[chainEnd:]
+
+	var pattern string
+	if len(chain) > 0 {
+		node, err := p.resolveChain(chain)
+		if err != nil {
+			return "", err
+		}
+		pattern = node.FullRoute()
+	}
+
+	// Phase 2: append string fragments. Reject typed values mixed in.
+	for i, part := range fragments {
+		s, isString := part.(string)
+		if !isString {
+			return "", fmt.Errorf(
+				"URLFor: typed value at slice position %d follows a string fragment; "+
+					"chain steps must all come before any string fragment in []any composition",
+				chainEnd+i)
+		}
+		pattern += s
+	}
+	return pattern, nil
+}
+
+// resolveChain resolves a sequence of page identifiers to a single
+// PageNode by walking down the page tree. The first step is resolved
+// against the whole tree; subsequent steps must be typed values and
+// are matched against the previous node's children by type.
+func (p *parseContext) resolveChain(steps []any) (*PageNode, error) {
+	node, err := p.findPageNode(steps[0])
+	if err != nil {
+		return nil, err
+	}
+	for i, step := range steps[1:] {
+		// Subsequent chain steps must be plain typed values — Refs
+		// and predicates only make sense at the top-level lookup.
+		if step == nil {
+			return nil, fmt.Errorf("URLFor: chain step %d is nil", i+1)
+		}
+		if _, isRef := step.(Ref); isRef {
+			return nil, fmt.Errorf(
+				"URLFor: chain step %d is a Ref; Ref is only valid as the first chain step "+
+					"(use Ref(\"Parent.Field\") for qualified lookup instead)",
+				i+1)
+		}
+		if _, isPred := step.(func(*PageNode) bool); isPred {
+			return nil, fmt.Errorf(
+				"URLFor: chain step %d is a predicate; predicates are only valid as the first chain step",
+				i+1)
+		}
+		next, err := p.descendByType(node, step)
+		if err != nil {
+			return nil, err
+		}
+		node = next
+	}
+	return node, nil
+}
+
+// descendByType finds the unique child of parent whose value type
+// matches step's pointer-normalised type. Errors with the available
+// children listed if zero or more than one match.
+func (p *parseContext) descendByType(parent *PageNode, step any) (*PageNode, error) {
+	want := pointerType(reflect.TypeOf(step))
+	var matches []*PageNode
+	for _, c := range parent.Children {
+		if pointerType(c.Value.Type()) == want {
+			matches = append(matches, c)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		names := make([]string, len(parent.Children))
+		for i, c := range parent.Children {
+			names[i] = fmt.Sprintf("%s (%s)", c.Name, c.Value.Type().String())
+		}
+		return nil, fmt.Errorf(
+			"URLFor chain: parent %s has no child of type %s; available children: %s",
+			parent.Name, want.String(), strings.Join(names, ", "))
+	default:
+		fields := make([]string, len(matches))
+		for i, m := range matches {
+			fields[i] = m.Name
+		}
+		return nil, fmt.Errorf(
+			"URLFor chain: parent %s has multiple children of type %s: %s; "+
+				"use Ref(%q) with the specific field name to pick one",
+			parent.Name, want.String(), strings.Join(fields, ", "),
+			parent.Name+"."+fields[0])
+	}
+}
+
+// findPageNodeByRef finds a page node by name, qualified path, or
+// route from a Ref string.
+//
+// Forms recognised, in order:
+//   - "/route" — full route match (e.g. "/components/{slug}")
+//   - "Parent.Field" or "Grand.Parent.Field" — qualified path; walks
+//     down by PageNode.Name from an anchor segment found at the top
+//     level. Use this when the same page name appears under multiple
+//     parents and you need to disambiguate, or when the parent's type
+//     isn't importable from the caller's package.
+//   - "Name" — single name; matches the first node whose Name equals
+//     this string (top-down walk order).
 func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 	if strings.HasPrefix(ref, "/") {
 		// Match by route
@@ -357,6 +517,10 @@ func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 		return nil, fmt.Errorf("no page found with route %q", ref)
 	}
 
+	if strings.Contains(ref, ".") {
+		return p.findPageNodeByQualifiedRef(ref)
+	}
+
 	// Match by page name
 	for node := range p.root.All() {
 		if node.Name == ref {
@@ -364,6 +528,67 @@ func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 		}
 	}
 	return nil, fmt.Errorf("no page found with name %q", ref)
+}
+
+// findPageNodeByQualifiedRef resolves a dotted Ref like
+// "Parent.Field" or "Grand.Parent.Field" by anchoring on the first
+// segment (matched against the root or any top-level child by Name)
+// and walking down through subsequent segments by child Name.
+//
+// Errors list available siblings at the level the walk failed, so
+// renaming a field surfaces "available: Index, Detail" instead of a
+// silent 404.
+func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error) {
+	segments := strings.Split(ref, ".")
+	if len(segments) == 0 || segments[0] == "" {
+		return nil, fmt.Errorf("Ref: empty qualified path %q", ref)
+	}
+
+	// Anchor: match the first segment against the root or its direct
+	// children by Name. The root itself is included so callers can
+	// write "Root.Foo" if they want the explicit form.
+	var current *PageNode
+	if p.root.Name == segments[0] {
+		current = p.root
+	} else {
+		for _, c := range p.root.Children {
+			if c.Name == segments[0] {
+				current = c
+				break
+			}
+		}
+	}
+	if current == nil {
+		names := []string{p.root.Name}
+		for _, c := range p.root.Children {
+			names = append(names, c.Name)
+		}
+		return nil, fmt.Errorf(
+			"Ref %q: anchor %q not found at root or top level; available: %s",
+			ref, segments[0], strings.Join(names, ", "))
+	}
+
+	// Walk down: each subsequent segment must match a child Name.
+	for i, name := range segments[1:] {
+		var next *PageNode
+		for _, c := range current.Children {
+			if c.Name == name {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			childNames := make([]string, len(current.Children))
+			for j, c := range current.Children {
+				childNames[j] = c.Name
+			}
+			return nil, fmt.Errorf(
+				"Ref %q: segment %d (%q) not found as child of %q; available children: %s",
+				ref, i+1, name, current.Name, strings.Join(childNames, ", "))
+		}
+		current = next
+	}
+	return current, nil
 }
 
 // getSegmentsCached returns cached segments for a pattern, parsing and caching if not already cached

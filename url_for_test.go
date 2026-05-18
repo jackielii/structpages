@@ -182,8 +182,11 @@ func TestUrlFor(t *testing.T) {
 			expected: "/team",
 		},
 		{
+			// `contact` is mounted at /contact AND /contact/{f1...},
+			// so a bare contact{} lookup is ambiguous under strict URLFor.
+			// Disambiguate via a predicate against the bare route.
 			name:     "Contact page",
-			page:     contact{},
+			page:     func(p *PageNode) bool { return p.FullRoute() == "/contact" },
 			args:     nil,
 			expected: "/contact",
 		},
@@ -1288,5 +1291,90 @@ func TestURLFor_withQueryStringComposition(t *testing.T) {
 				t.Errorf("formatPathSegments() = %q, want %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+// Shared page types reused across sibling routes — a common pattern when
+// the same render logic backs e.g. /foundations/, /components/, /patterns/.
+type sharedIndex struct{}
+type sharedDetail struct{}
+
+func (sharedIndex) Page() component  { return testComponent{"index"} }
+func (sharedDetail) Page() component { return testComponent{"detail"} }
+
+// Test fixture mirroring the his-project design-system preview shape:
+// a single page type mounted under three sibling parents. Defined at
+// package scope so the strict and lenient subtests share it.
+type ambiguousFoundationsRoot struct {
+	Index  sharedIndex  `route:"/{$} Foundations"`
+	Detail sharedDetail `route:"/{slug} Foundation"`
+}
+type ambiguousComponentsRoot struct {
+	Index  sharedIndex  `route:"/{$} Components"`
+	Detail sharedDetail `route:"/{slug} Component"`
+}
+type ambiguousPatternsRoot struct {
+	Index  sharedIndex  `route:"/{$} Patterns"`
+	Detail sharedDetail `route:"/{slug} Pattern"`
+}
+type ambiguousRoot struct {
+	Foundations ambiguousFoundationsRoot `route:"/foundations Foundations"`
+	Components  ambiguousComponentsRoot  `route:"/components Components"`
+	Patterns    ambiguousPatternsRoot    `route:"/patterns Patterns"`
+}
+
+// TestURLFor_ambiguousTypeErrorsByDefault pins strict-by-default for
+// type-based URLFor lookups: when the same page type is mounted under
+// multiple parents, the lookup must error and name every match so the
+// caller can disambiguate at the call site, rather than silently
+// returning a wrong-but-syntactically-valid URL.
+//
+// Regression guard for github.com/jackielii/structpages issue #8.
+func TestURLFor_ambiguousTypeErrorsByDefault(t *testing.T) {
+	pc, err := parsePageTree("/", &ambiguousRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	_, err = URLFor(ctx, sharedIndex{})
+	if err == nil {
+		t.Fatal("URLFor(sharedIndex{}) returned nil error; expected ambiguous-match error")
+	}
+	for _, want := range []string{"/foundations/{$}", "/components/{$}", "/patterns/{$}"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing route %q", err.Error(), want)
+		}
+	}
+
+	// Documented disambiguation paths must still resolve cleanly.
+
+	// 1. Parent-anchored composition.
+	got, err := URLFor(ctx, []any{ambiguousComponentsRoot{}, "/{$}"})
+	if err != nil {
+		t.Fatalf("URLFor([]any{ambiguousComponentsRoot{}, \"/{$}\"}): %v", err)
+	}
+	if got != "/components/" {
+		t.Errorf("composed lookup: got %q, want %q", got, "/components/")
+	}
+
+	// 2. Route-string Ref.
+	got, err = URLFor(ctx, Ref("/patterns/{$}"))
+	if err != nil {
+		t.Fatalf("URLFor(Ref(\"/patterns/{$}\")): %v", err)
+	}
+	if got != "/patterns/" {
+		t.Errorf("Ref lookup: got %q, want %q", got, "/patterns/")
+	}
+
+	// 3. Predicate.
+	got, err = URLFor(ctx, func(n *PageNode) bool {
+		return n.FullRoute() == "/foundations/{$}"
+	})
+	if err != nil {
+		t.Fatalf("URLFor(predicate): %v", err)
+	}
+	if got != "/foundations/" {
+		t.Errorf("predicate lookup: got %q, want %q", got, "/foundations/")
 	}
 }

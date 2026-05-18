@@ -64,7 +64,9 @@ Returned by `Mount()`, StructPages provides methods for type-safe URL generation
 func (sp *StructPages) URLFor(page any, args ...any) (string, error)
 ```
 
-Generate a URL for a page type with optional path parameters.
+Generate a URL for a page. Recommended shape: `URLFor(page, params)` with `params` as `map[string]any`.
+
+**Strict.** If the page type is mounted under multiple parents, a bare type lookup errors instead of silently returning the first match. Disambiguate with the `[]any{ParentType{}, LeafType{}}` chain form or `Ref("Parent.Field")`. No opt-out.
 
 **Example:**
 ```go
@@ -72,11 +74,28 @@ Generate a URL for a page type with optional path parameters.
 url, _ := sp.URLFor(homePage{})  // "/"
 
 // With path parameter
-url, _ := sp.URLFor(userPage{}, "123")  // "/users/123"
+url, _ := sp.URLFor(userPage{}, map[string]any{"id": "123"})  // "/users/123"
 
-// With named parameters
-url, _ := sp.URLFor(postPage{}, "year", 2024, "slug", "hello")  // "/blog/2024/hello"
+// Multiple parameters
+url, _ := sp.URLFor(postPage{}, map[string]any{
+    "year": 2024,
+    "slug": "hello",
+})  // "/blog/2024/hello"
+
+// Chain disambiguation when the same leaf type is mounted under multiple parents
+url, _ := sp.URLFor([]any{componentsRoot{}, entryPage{}},
+    map[string]any{"slug": "button"})  // "/components/button"
+
+// Composition: chain + literal URL fragment
+url, _ := sp.URLFor([]any{componentsRoot{}, entryPage{}, "?tab={tab}"},
+    map[string]any{"slug": "button", "tab": "props"})  // "/components/button?tab=props"
+
+// Ref fallback (cross-package callers that can't import the typed page)
+url, _ := sp.URLFor(structpages.Ref("Components.Detail"),
+    map[string]any{"slug": "button"})
 ```
+
+See `skills/structpages/SKILL.md` §3 "URL Generation" for the full pattern including the recommended validation strategy (typed helpers + boot-time `validateURLs` + integration test). The `examples/url-validation/` directory ships the end-to-end demo.
 
 #### ID and IDTarget
 
@@ -318,7 +337,7 @@ For use within handlers:
 func URLFor(ctx context.Context, page any, args ...any) (string, error)
 ```
 
-Generate URLs using context (available during request handling).
+Generate URLs using context (available during request handling). Same `page` and `args` semantics as `(*StructPages).URLFor` above — strict by default, supports `[]any` chain composition, `Ref` qualified paths, and `map[string]any` params.
 
 ### ID and IDTarget
 

@@ -171,15 +171,14 @@ func Test_pc_UrlFor(t *testing.T) {
 	if pc.root == nil {
 		t.Fatal("parsePageTree returned nil")
 	}
+	// Two fields of the same type — always strict, so URLFor errors.
 	{
-		url, err := pc.urlFor(&TestHandlerPage{})
-		if err != nil {
-			t.Fatalf("urlFor failed: %v", err)
-		}
-		if url != "/f1" {
-			t.Errorf("Expected URL '/f1', got '%s'", url)
+		_, err := pc.urlFor(&TestHandlerPage{})
+		if err == nil {
+			t.Fatal("urlFor expected ambiguous error")
 		}
 	}
+	// Root struct type only matches once, so it resolves cleanly.
 	{
 		url, err := pc.urlFor(&topPage{})
 		if err != nil {

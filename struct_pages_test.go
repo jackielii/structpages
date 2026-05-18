@@ -2355,12 +2355,10 @@ func TestAliasTypeMount(t *testing.T) {
 
 // TestAliasTypeMount_URLFor demonstrates Go type alias behavior with URLFor.
 //
-// Go type aliases (type X = Y) are identical at runtime - reflect.TypeOf(aliasPage{})
-// returns the same type as reflect.TypeOf(aliasOriginalPage{}). This means URLFor
-// cannot distinguish between them and will return the first matching route.
-//
-// Use Ref("fieldName") to target a specific route when the same type is used
-// for multiple routes.
+// Go type aliases (type X = Y) are identical at runtime — reflect.TypeOf(aliasPage{})
+// returns the same type as reflect.TypeOf(aliasOriginalPage{}). Mounting
+// both at distinct routes is ambiguous and URLFor errors. Callers must
+// disambiguate via Ref("fieldName") or a predicate.
 func TestAliasTypeMount_URLFor(t *testing.T) {
 	type parentWithAlias struct {
 		original aliasOriginalPage `route:"/original/{id} Original"`
@@ -2373,31 +2371,25 @@ func TestAliasTypeMount_URLFor(t *testing.T) {
 		t.Fatalf("Mount failed: %v", err)
 	}
 
-	// URLFor with original type - returns the first matching route
+	// Strict default: original type matches two nodes, so URLFor errors.
 	{
-		url, err := sp.URLFor(aliasOriginalPage{}, "123")
-		if err != nil {
-			t.Errorf("URLFor original type error: %v", err)
-		}
-		if url != "/original/123" {
-			t.Errorf("URLFor original type = %q, want %q", url, "/original/123")
+		_, err := sp.URLFor(aliasOriginalPage{}, "123")
+		if err == nil {
+			t.Errorf("URLFor original type: expected ambiguous error under strict default")
 		}
 	}
 
-	// URLFor with alias type - ALSO returns /original because Go type aliases
-	// are identical at runtime. This is a Go language limitation, not a bug.
+	// Strict default: alias type resolves to the same reflect.Type as the
+	// original, so the same ambiguity surfaces — both /original and /alias
+	// match.
 	{
-		url, err := sp.URLFor(aliasPage{}, "456")
-		if err != nil {
-			t.Errorf("URLFor alias type error: %v", err)
-		}
-		if url != "/original/456" {
-			t.Errorf("URLFor alias type = %q, want %q", url, "/original/456")
+		_, err := sp.URLFor(aliasPage{}, "456")
+		if err == nil {
+			t.Errorf("URLFor alias type: expected ambiguous error under strict default")
 		}
 	}
 
-	// WORKAROUND: Use Ref("fieldName") to target a specific route
-	// This uses the struct field name instead of type matching
+	// Ref("fieldName") is the documented disambiguation path.
 	{
 		url, err := sp.URLFor(Ref("child"), "789")
 		if err != nil {
