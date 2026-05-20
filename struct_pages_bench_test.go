@@ -418,6 +418,132 @@ func BenchmarkURLGeneration(b *testing.B) {
 	})
 }
 
+// BenchmarkURLGenerationStrict covers the v0.2.0 surface:
+//   - strict ambiguity check on bare typed lookups (the hot path
+//     before the type matches a single node — we want to know the
+//     cost of the tree walk + match collection in the common case
+//     where there is exactly one match);
+//   - the []any chain form for disambiguation (2-level and 3-level);
+//   - chain + literal URL fragment composition;
+//   - Ref qualified path (dotted walk by PageNode.Name);
+//   - the strict ambiguity error path (full traversal + match list +
+//     error allocation — should not be hot, but the cost matters
+//     for users who hit it during development).
+func BenchmarkURLGenerationStrict(b *testing.B) {
+	// Tree shape mirrors the his-project bug case: shared leaf types
+	// (sharedIndex, sharedDetail) mounted under three sibling parents.
+	pc, err := parsePageTree("/", &ambiguousRoot{})
+	if err != nil {
+		b.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+	params := map[string]any{"slug": "button"}
+
+	b.Run("Bare_UniqueType", func(b *testing.B) {
+		// Unique type (ambiguousFoundationsRoot is mounted once).
+		// Measures: strict tree walk + bookkeeping when there is
+		// exactly one match. This is the everyday hot path.
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, ambiguousFoundationsRoot{})
+		}
+	})
+
+	b.Run("Chain_TwoLevel_NoParams", func(b *testing.B) {
+		// []any{parent, leaf} — the recommended disambiguation form
+		// for same-leaf-type-under-multiple-parents.
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, []any{ambiguousComponentsRoot{}, sharedIndex{}})
+		}
+	})
+
+	b.Run("Chain_TwoLevel_WithMap", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, []any{ambiguousComponentsRoot{}, sharedDetail{}}, params)
+		}
+	})
+
+	b.Run("Chain_PlusFragment", func(b *testing.B) {
+		// Composition: chain + URL fragment + params filling both.
+		paramsWithTab := map[string]any{"slug": "button", "tab": "props"}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx,
+				[]any{ambiguousComponentsRoot{}, sharedDetail{}, "?tab={tab}"},
+				paramsWithTab)
+		}
+	})
+
+	b.Run("Ref_Qualified_TwoSegments", func(b *testing.B) {
+		// Ref("Parent.Field") — cross-package fallback, dotted walk.
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, Ref("Components.Index"))
+		}
+	})
+
+	b.Run("Ref_Qualified_WithMap", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, Ref("Components.Detail"), params)
+		}
+	})
+
+	b.Run("Ref_SingleName", func(b *testing.B) {
+		// Existing Ref form (top-down walk).
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, Ref("Foundations"))
+		}
+	})
+
+	b.Run("StrictAmbiguity_ErrorPath", func(b *testing.B) {
+		// The failure case: bare sharedIndex{} matches 3 nodes.
+		// Measures the cost of the full tree walk + match list +
+		// error message construction. Should never be in the hot
+		// path of a real app (caller fixes the call site), but the
+		// cost matters during development and tests.
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, sharedIndex{})
+		}
+	})
+
+	b.Run("Chain_ThreeLevel", func(b *testing.B) {
+		// Multi-level chain: build a deeper tree on the fly.
+		type leaf struct{}
+		type mid struct {
+			L leaf `route:"/{$} Leaf"`
+		}
+		type parent struct {
+			M mid `route:"/m Mid"`
+		}
+		type deepRoot struct {
+			P parent `route:"/p Parent"`
+		}
+		dpc, err := parsePageTree("/", &deepRoot{})
+		if err != nil {
+			b.Fatalf("parsePageTree: %v", err)
+		}
+		dctx := pcCtx.WithValue(context.Background(), dpc)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(dctx, []any{parent{}, mid{}, leaf{}})
+		}
+	})
+}
+
 // ============================================================================
 // 5. ID GENERATION BENCHMARKS
 // ============================================================================
