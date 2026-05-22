@@ -40,7 +40,7 @@ Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[str
 
 1. **Struct instance**: `URLFor(ctx, MyPage{}, params)` — matches by type. Strict: errors if the type matches multiple nodes (use the chain or Ref form below).
 2. **`[]any` chain / composition**: `URLFor(ctx, []any{ParentPage{}, LeafPage{}}, params)` — typed values form a chain (descend by child type). Trailing strings concat as literal URL fragments: `[]any{Page{}, "?q={q}"}`. Mixing typed values after a string fragment is rejected.
-3. **Ref string**: `URLFor(ctx, Ref("Parent.Field"), params)` — qualified path (walks down by `PageNode.Name`). `Ref("PageName")` matches the first node with that name; `Ref("/route")` matches by full route. Use Ref when the typed page can't be imported (cross-package cycle) or for type aliases.
+3. **Ref string**: `URLFor(ctx, Ref("Parent.Field"), params)` — qualified path (walks down by `PageNode.Name`). `Ref("PageName")` matches the first node with that name. Use Ref when the typed page can't be imported (cross-package cycle) or for type aliases.
 4. **Predicate**: `URLFor(ctx, func(*PageNode) bool { ... })` — escape hatch for custom matching.
 
 ### URLFor Args Formats
@@ -298,7 +298,7 @@ type Ref string
 ```
 
 Dynamic references for URLFor/ID/IDTarget:
-- URLFor: `Ref("pageName")` by name, `Ref("/path")` by route
+- URLFor: `Ref("PageName")` by name, `Ref("Parent.Field")` qualified path
 - ID: `Ref("PageName.MethodName")` qualified, `Ref("MethodName")` if unambiguous
 
 ## Mux Interface
