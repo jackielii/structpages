@@ -1,0 +1,26 @@
+coverage:
+  status:
+    project:
+      default:
+        # Allow the overall coverage to dip by up to 1% per PR; large
+        # additions of code paths that are exercised by integration
+        # fixtures rather than unit tests can otherwise pull the
+        # number down enough to fail by a fraction.
+        threshold: 1%
+    patch:
+      default:
+        # New code in this PR must hit at least 50% line coverage —
+        # generous enough that integration-tested code with a few
+        # uncovered helper branches passes, strict enough to catch a
+        # PR that adds an untested feature outright.
+        target: 50%
+
+# The linter and its CLI are exercised end-to-end by the dogfood
+# fixture in examples/lint-misuse rather than unit-tested line by
+# line. Excluding them from the coverage signal avoids gating
+# library PRs on dev-tool coverage that the integration test
+# already proves correct.
+ignore:
+  - "lint/"
+  - "cmd/"
+  - "examples/"
