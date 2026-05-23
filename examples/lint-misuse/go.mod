@@ -1,4 +1,4 @@
-module github.com/jackielii/structpages/examples/html-template
+module github.com/jackielii/structpages/examples/lint-misuse
 
 go 1.25.0
 
