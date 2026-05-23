@@ -1,6 +1,6 @@
 module github.com/jackielii/structpages
 
-go 1.25.0
+go 1.24.0
 
 require (
 	github.com/google/go-cmp v0.7.0
@@ -9,6 +9,6 @@ require (
 )
 
 require (
-	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 )
