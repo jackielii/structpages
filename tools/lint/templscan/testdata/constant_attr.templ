@@ -1,0 +1,9 @@
+package fixture
+
+templ ConstantBad() {
+	<a href="/login">Log in</a>
+	<a href="https://example.com/x">External (allowed)</a>
+	<a href="#anchor">Anchor (allowed)</a>
+	<a href="">Empty (allowed)</a>
+	<a href="//cdn.example.com/img.png">Protocol-relative (allowed)</a>
+}
