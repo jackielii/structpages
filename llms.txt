@@ -1,0 +1,33 @@
+# structpages
+
+> A Go web framework that defines routes via struct tags and methods on top of `http.ServeMux`. Built-in support for the Templ templating engine, HTMX partial rendering (`HTMXRenderTarget`, `ID`/`IDTarget`), type-safe URL generation (`URLFor`, `Ref`), standard Go middleware, and type-based dependency injection (`WithArgs`). Status: alpha.
+
+Module path: `github.com/jackielii/structpages`. Go reference: <https://pkg.go.dev/github.com/jackielii/structpages>.
+
+Read these files in order to learn the library: `README.md` for the elevator pitch, `docs/routing.md` and `docs/supported-flows.md` for the routing model, then `skills/structpages/SKILL.md` (the authoritative API/idiom summary used by the Claude Code skill).
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/jackielii/structpages/main/README.md): Overview, features, install, quick-start, and links to documentation and examples.
+- [API reference](https://raw.githubusercontent.com/jackielii/structpages/main/docs/api.md): Signatures for `Mount`, `StructPages`, options (`WithMiddlewares`, `WithArgs`, `WithErrorHandler`, `WithURLPrefix`), and methods (`Page`, `Content`, `Props`, `ServeHTTP`, `Middlewares`, `Init`).
+- [Routing patterns](https://raw.githubusercontent.com/jackielii/structpages/main/docs/routing.md): Route tag syntax (`route:"[METHOD] /path [Title]"`), nested routes, path parameters, and registration order.
+- [Supported request flows](https://raw.githubusercontent.com/jackielii/structpages/main/docs/supported-flows.md): How requests dispatch to handlers and components (`Page`/`Content`/partial methods, `Props`-only pages, `ServeHTTP` pages, render targets).
+- [Middleware](https://raw.githubusercontent.com/jackielii/structpages/main/docs/middleware.md): Global vs per-page middleware, the `MiddlewareFunc` signature, and using the `*PageNode` argument.
+- [HTMX integration](https://raw.githubusercontent.com/jackielii/structpages/main/docs/htmx.md): `HTMXRenderTarget`, partial rendering via `hx-target`, and how component selection works.
+- [URLFor & ID generation](https://raw.githubusercontent.com/jackielii/structpages/main/docs/urlfor.md): Type-safe URLs and HTML ids — pointer signatures, `[]any` chain disambiguation, `Ref` for dynamic/qualified paths, strict-by-default behaviour, and boot-time URL validation.
+- [Templ patterns](https://raw.githubusercontent.com/jackielii/structpages/main/docs/templ.md): Page/Content/partial method patterns when using Templ.
+- [Advanced features](https://raw.githubusercontent.com/jackielii/structpages/main/docs/advanced.md): Custom handlers, `Init`, dependency injection (`WithArgs`), generic types, dynamic refs, and type aliases.
+
+## Claude Code skill
+
+- [SKILL.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/SKILL.md): Authoritative summary of the public API and idioms for consumers of the library (`Props`/`RenderTarget`, HTMX partials, `URLFor`/`ID`/`IDTarget`, middleware, DI). Kept in sync with source.
+- [reference.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/reference.md): Extended reference material the skill loads on demand.
+- [examples.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/examples.md): Worked examples that pair with the skill.
+
+## Optional
+
+- [Examples index](https://raw.githubusercontent.com/jackielii/structpages/main/examples/README.md): Tour of `examples/` (simple, htmx, htmx-render-target, todo, blog, html-template, lint-misuse, url-validation).
+- [Blog example](https://raw.githubusercontent.com/jackielii/structpages/main/examples/blog/README.md): Larger sample wiring routing, middleware, and module-owned static subtrees.
+- [Performance notes](https://raw.githubusercontent.com/jackielii/structpages/main/PERFORMANCE.md): Benchmark methodology and results.
+- [Contributing guide](https://raw.githubusercontent.com/jackielii/structpages/main/CONTRIBUTING.md): Development setup for contributors to the library itself.
+- [CLAUDE.md](https://raw.githubusercontent.com/jackielii/structpages/main/CLAUDE.md): Repo-level guidance for Claude Code when editing the library source.
