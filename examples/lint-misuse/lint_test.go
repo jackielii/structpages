@@ -31,6 +31,12 @@ pages.go:LINE:COL: [urlfor] URLFor chain: parent Items has no child of type home
 pages.go:LINE:COL: [urlfor] URLFor: typed value at slice position 2 follows a string fragment; chain steps must all come before any string fragment
 pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/items/{slug}" (known: slug)
 pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: receiver type unmountedPage is not mounted as a page
+pages.templ:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value "/admin" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value ` + "`" + `"/items/" + strconv.Itoa(id)` + "`" + ` builds an internal URL by string concatenation; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value ` + "`" + `fmt.Sprintf("/users/%s", name)` + "`" + ` builds an internal URL via fmt.Sprint*; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] hx-get value "/api/items" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] action value "/submit" is a hard-coded internal URL; use structpages.URLFor instead
 `)
 	if got != want {
 		t.Errorf("linter output mismatch.\n--- got ---\n%s\n--- want ---\n%s", got, want)
@@ -66,8 +72,10 @@ func normaliseOutput(s string) string {
 		if line == "" {
 			continue
 		}
-		// Drop absolute path prefix up to "pages.go".
+		// Drop absolute path prefix up to "pages.go" / "pages.templ".
 		if i := strings.Index(line, "pages.go"); i > 0 {
+			line = line[i:]
+		} else if i := strings.Index(line, "pages.templ"); i > 0 {
 			line = line[i:]
 		}
 		// Replace ":N:M:" with ":LINE:COL:".
