@@ -5,6 +5,7 @@ package templscan
 
 import (
 	"fmt"
+	"go/token"
 	"strings"
 
 	parser "github.com/a-h/templ/parser/v2"
@@ -67,11 +68,50 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		}
 		return nil
 	}
+	v.ExpressionAttribute = func(n *parser.ExpressionAttribute) error {
+		key, ok := n.Key.(parser.ConstantAttributeKey)
+		if !ok {
+			return nil
+		}
+		if !urlAttrs[strings.ToLower(key.Name)] {
+			return nil
+		}
+		for _, f := range checkGoExpr(key.Name, n.Expression.Value) {
+			emit(Diagnostic{
+				Filename: filename,
+				Line:     mapLine(n.Expression.Range, f.pos),
+				Col:      mapCol(n.Expression.Range, f.pos),
+				Category: categoryURLAttr,
+				Message:  f.message,
+			})
+		}
+		return nil
+	}
 
 	if err := v.VisitTemplateFile(tf); err != nil {
 		return diags, fmt.Errorf("walk %s: %w", filename, err)
 	}
 	return diags, nil
+}
+
+// mapLine maps a 1-indexed snippet line back to the 1-indexed
+// .templ source line. Snippet line 1 sits on the templ line that
+// contains the `{` of the expression block (templ Range is
+// 0-indexed; we convert to 1-indexed).
+func mapLine(r parser.Range, p token.Position) int {
+	return int(r.From.Line) + p.Line
+}
+
+// mapCol maps a snippet column back to the .templ source column.
+// On the snippet's first line the snippet text starts a fixed
+// distance past the `{` in the templ source — we offset by the
+// templ column. On subsequent snippet lines the snippet column is
+// the templ column (no offset).
+func mapCol(r parser.Range, p token.Position) int {
+	if p.Line == 1 {
+		return int(r.From.Col) + p.Column
+	}
+	return p.Column
 }
 
 const categoryURLAttr = "url-attr"
