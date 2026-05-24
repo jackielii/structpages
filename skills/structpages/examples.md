@@ -64,17 +64,17 @@ func (p NcrAnalyticsPage) Props(r *http.Request, appCtx *AppContext, sel structp
     props.Filter = filter
 
     // HTMX partial: table only
-    if sel.Is(NcrAnalyticsPage.NcrTable) {
+    if sel.Is(p.NcrTable) {
         p.loadTableData(r.Context(), appCtx.Store, filter, &props)
-        return props, structpages.RenderComponent(NcrAnalyticsPage.NcrTable, props)
+        return props, structpages.RenderComponent(p.NcrTable(props))
     }
 
     // Load full data (charts, totals, table)
     p.loadAllData(r.Context(), appCtx.Store, filter, &props)
 
     // HTMX partial: content area (filters + table + charts)
-    if sel.Is(NcrAnalyticsPage.NcrContent) {
-        return props, structpages.RenderComponent(NcrAnalyticsPage.NcrContent, props)
+    if sel.Is(p.NcrContent) {
+        return props, structpages.RenderComponent(p.NcrContent(props))
     }
 
     // Full page render
@@ -175,17 +175,17 @@ type TeamManagementPages struct {
 // Note: userListData / groupListData are plain helper methods, NOT auto-resolved by the framework.
 func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (TeamManagementProps, error) {
     switch {
-    case sel.Is(TeamManagementView.GroupList):
+    case sel.Is(p.GroupList):
         groups, err := p.groupListData(r, appCtx)
         if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(TeamManagementView.GroupList, groups)
+        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groups))
 
-    case sel.Is(TeamManagementView.UserList):
+    case sel.Is(p.UserList):
         users, err := p.userListData(r, appCtx)
         if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(TeamManagementView.UserList, users)
+        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
 
-    case sel.Is(TeamManagementView.Page), sel.Is(TeamManagementView.Content):
+    case sel.Is(p.Page), sel.Is(p.Content):
         users, _ := p.userListData(r, appCtx)
         groups, _ := p.groupListData(r, appCtx)
         return TeamManagementProps{
@@ -278,10 +278,10 @@ func (p *IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *Ap
 func (p IndexPage) renderTable(r *http.Request, appCtx *AppContext, target structpages.RenderTarget) error {
     tableProps, err := p.buildTableViewProps(r, appCtx)
     if err != nil { return err }
-    if target.Is(IndexPage.TableView) {
-        return structpages.RenderComponent(IndexPage.TableView, tableProps)
+    if target.Is(p.TableView) {
+        return structpages.RenderComponent(p.TableView(tableProps))
     }
-    return structpages.RenderComponent(IndexPage.TablePage, tableProps)
+    return structpages.RenderComponent(p.TablePage(tableProps))
 }
 ```
 
@@ -459,25 +459,48 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
 
 ## 9. RenderComponent Variants
 
-```go
-// 1. Method expression (cross-page or same-page)
-return structpages.RenderComponent(MyPage.ItemList, items)
+`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction when you have the receiver in scope; reach for reflective dispatch only when you don't.
 
-// 2. Pre-built templ component (no args allowed when passing a component instance)
+### Preferred: direct construction
+
+```go
+// Same-page method — receiver is in scope, just call it.
+return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
+
+// Standalone function component — call it directly.
+return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(stats))
+
+// Pre-built templ component captured in a variable.
 comp := p.Dialog(entityType, entityID, users)
 return nil, structpages.RenderComponent(comp)
 
-// 3. Via RenderTarget (after target.Is() matched)
-return MyPageProps{}, structpages.RenderComponent(sel, users)
-
-// 4. Render a literal nothing
+// Render literally nothing.
 return structpages.RenderComponent(templ.NopComponent)
+```
 
-// 5. Bound method expression on receiver (works the same as the unbound form)
-return structpages.RenderComponent(p.EditSection, props)
+### Reflective dispatch (when you don't have the receiver)
 
-// 6. Custom RenderTarget that implements Component() — framework calls Component()
-//    automatically when no args are given. Useful for custom TargetSelectors.
+```go
+// Cross-page method expression — framework finds the page and applies DI.
+// Use this from ServeHTTP handlers that re-render a sibling page's component.
+return structpages.RenderComponent(MyPage.ItemList, items)
+
+// Bound method expression — equivalent to the unbound form; useful when the
+// receiver came from somewhere other than `p` (e.g. a parent's child field).
+return structpages.RenderComponent(other.EditSection, props)
+
+// Via RenderTarget — still works, but `RenderComponent(p.X(args))` is usually
+// clearer when `p` is in scope. Required only if the target was produced by a
+// custom TargetSelector and the call site genuinely doesn't know which method
+// it refers to.
+return MyPageProps{}, structpages.RenderComponent(sel, users)
+```
+
+### Extension point: custom `RenderTarget` with `Component()`
+
+```go
+// A custom TargetSelector can return a RenderTarget that also implements
+// Component() — RenderComponent(target) will then call Component() directly.
 type myTarget struct{ data string }
 func (t myTarget) Is(method any) bool   { /* ... */ }
 func (t myTarget) Component() component { return MyComponent(t.data) }

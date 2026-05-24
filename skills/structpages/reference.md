@@ -231,17 +231,22 @@ func RenderComponent(targetOrMethod any, args ...any) error
 
 Returns a sentinel-typed error (`*errRenderComponent`) that instructs the framework to render a specific component. Detected in both the Props error path and the buffered-`ServeHTTP` error path.
 
-Patterns:
+Patterns, split by whether they go through reflection:
 
-1. **Direct component**: `RenderComponent(myTemplComponent)` — render a pre-built templ component (no args allowed).
-2. **componentGetter**: `RenderComponent(customTarget)` where `customTarget` implements `Component() component` (no args).
-3. **Same-page via target**: `RenderComponent(target, args...)` after `target.Is()` matched (required for function targets).
-4. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, and calls it with `items`.
-5. **Bound method value**: `RenderComponent(p.EditSection, props)` — same as #4 with the receiver already bound.
+**Direct (no reflection — preferred when applicable)**
+
+1. **Pre-built component**: `RenderComponent(myTemplComponent)` — render a templ component already constructed by the caller. No args allowed. Use this whenever you have (or can construct) the component value yourself; it's compile-time-checked end-to-end. The same-page idiom is `RenderComponent(p.X(args))` and the standalone-function idiom is `RenderComponent(MyWidget(args))`.
+2. **componentGetter**: `RenderComponent(customTarget)` where `customTarget` implements `Component() component`. No args. Calls `Component()` to get the component to render.
+
+**Reflective dispatch (framework looks up the method and applies DI)**
+
+3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Necessary when the caller doesn't have the target page's receiver in scope (typical `ServeHTTP` handlers re-rendering a sibling page's partial).
+4. **Bound method value**: `RenderComponent(p.EditSection, props)` — same as #3 with the receiver already bound. Equivalent to direct form #1 (`RenderComponent(p.EditSection(props))`), but goes through reflection; prefer the direct form when `p` is in scope.
+5. **Via target**: `RenderComponent(target, args...)` after `target.Is()` matched (required for function targets — `Is()` stores the function pointer). Works for method targets too, but if the receiver is in scope, `RenderComponent(p.X(args))` is clearer and faster.
 
 When returned from `Props`, the other return values are ignored.
 
-Argument-count and assignability are validated *before* the call (in `executeRenderOp`) — mismatches surface as readable errors instead of panics.
+Argument-count and assignability are validated *before* the call (in `executeRenderOp`) — mismatches surface as readable errors instead of panics. Direct-form callers get the same checks from the Go compiler at build time.
 
 ## HTMXRenderTarget (Default TargetSelector)
 
