@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jackielii/structpages/lint"
+	"github.com/jackielii/structpages/tools/lint"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/packages"
 )

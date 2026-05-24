@@ -25,6 +25,9 @@ go.work.sum
 .env
 .claude/
 
+# Superpowers / in-progress design docs — local-only
+docs/superpowers/
+
 /coverage.txt
 /coverage.out
 /coverage.html

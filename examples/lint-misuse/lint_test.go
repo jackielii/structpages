@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestLintMisuse builds cmd/structpages-lint, runs it against this
+// TestLintMisuse builds tools/lint/cmd/structpages-lint, runs it against this
 // fixture, and snapshot-compares the output. It pins the exact
 // diagnostic wording so any drift in messages requires an
 // intentional update to the want literal below.
@@ -38,9 +38,9 @@ pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: rece
 }
 
 // buildLinter compiles cmd/structpages-lint into a temp file and
-// returns the path. The build runs in the main structpages module
-// (../..) because the example's own go.sum does not have x/tools
-// entries — they're not used by example code, only by the linter.
+// returns the path. The build runs in the tools/lint sub-module
+// (../../tools/lint) because the linter and the example live in
+// separate modules.
 func buildLinter(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "structpages-lint")
@@ -48,7 +48,7 @@ func buildLinter(t *testing.T) string {
 		out += ".exe"
 	}
 	cmd := exec.Command("go", "build", "-o", out, "./cmd/structpages-lint")
-	cmd.Dir = filepath.Join("..", "..")
+	cmd.Dir = filepath.Join("..", "..", "tools", "lint")
 	if buf, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, buf)
 	}
