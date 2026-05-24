@@ -44,11 +44,23 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 	}
 
 	var diags []Diagnostic
+	ds := newDirectiveSet()
 	emit := func(d Diagnostic) {
+		if ds.suppressed(d.Line, d.Category) {
+			return
+		}
 		diags = append(diags, d)
 	}
 
 	v := visitor.New()
+	v.HTMLComment = func(n *parser.HTMLComment) error {
+		cats, ok := parseDirective(n.Contents)
+		if !ok {
+			return nil
+		}
+		ds.add(commentLine(n), cats)
+		return nil
+	}
 	v.ConstantAttribute = func(n *parser.ConstantAttribute) error {
 		key, ok := n.Key.(parser.ConstantAttributeKey)
 		if !ok {
