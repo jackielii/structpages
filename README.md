@@ -110,14 +110,15 @@ Categories:
 - `urlfor`, `ref`, `id`, `idtarget`, `params` — checks `structpages.URLFor` / `Ref` / `ID` / `IDTarget` call sites against the reconstructed page tree.
 - `url-attr` — scans `.templ` files for URL-bearing HTML attributes (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concatenations, or `fmt.Sprint*` calls — i.e. cases where you should have called `structpages.URLFor`. Allows `https://`, `mailto:`, `#`, protocol-relative `//`.
 
-Suppress a single diagnostic with a comment:
+Suppress a single diagnostic with a comment. Prefer `//` in both file types — Go-style comments are stripped from the generated HTML; `<!-- … -->` HTML comments render into every response.
 
 ```go
 //structpages:lint:ignore url-attr           // in .go files
 ```
 
-```html
-<!-- structpages:lint:ignore url-attr -->    <!-- in .templ files -->
+```templ
+// structpages:lint:ignore url-attr          // in .templ files (preferred)
+<!-- structpages:lint:ignore url-attr -->    <!-- also works in .templ -->
 ```
 
 ## Claude Code Skill
