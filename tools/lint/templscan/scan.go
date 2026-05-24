@@ -61,6 +61,19 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		ds.add(commentLine(n), cats)
 		return nil
 	}
+	v.GoComment = func(n *parser.GoComment) error {
+		// Multi-line /* */ comments may span multiple source
+		// lines; the directive only suppresses the line the
+		// comment starts on plus the following line, matching
+		// the // form's semantics. Authors who want to suppress
+		// a block should put the directive on its own line.
+		cats, ok := parseDirective(n.Contents)
+		if !ok {
+			return nil
+		}
+		ds.add(goCommentLine(n), cats)
+		return nil
+	}
 	v.ConstantAttribute = func(n *parser.ConstantAttribute) error {
 		key, ok := n.Key.(parser.ConstantAttributeKey)
 		if !ok {
