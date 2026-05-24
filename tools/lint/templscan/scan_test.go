@@ -69,3 +69,18 @@ func TestScan_ExpressionAttribute_FlagsConcat(t *testing.T) {
 		}
 	}
 }
+
+func TestScan_ExpressionAttribute_FlagsSprintf(t *testing.T) {
+	diags, err := Scan("testdata/expr_sprintf.templ", nil)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(diags) != 3 {
+		t.Fatalf("want 3 diagnostics, got %d: %#v", len(diags), diags)
+	}
+	for _, d := range diags {
+		if !strings.Contains(d.Message, "fmt.Sprint") {
+			t.Errorf("message %q does not describe sprintf", d.Message)
+		}
+	}
+}

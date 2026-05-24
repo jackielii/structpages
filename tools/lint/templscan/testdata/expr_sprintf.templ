@@ -1,0 +1,11 @@
+package fixture
+
+import "fmt"
+
+templ SprintfBad(id int, name string) {
+	<a href={ fmt.Sprintf("/items/%d", id) }>Sprintf (bad)</a>
+	<a href={ fmt.Sprint("/x/", id) }>Sprint (bad)</a>
+	<a href={ fmt.Sprintln("/y/", id) }>Sprintln (bad)</a>
+	<a href={ fmt.Sprintf("https://api.example.com/%s", name) }>External (allowed)</a>
+	<a href={ fmt.Sprintf("%s/details", name) }>Format does not start with / (allowed)</a>
+}
