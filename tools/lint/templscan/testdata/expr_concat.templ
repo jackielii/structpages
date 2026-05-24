@@ -1,0 +1,10 @@
+package fixture
+
+import "strconv"
+
+templ ConcatBad(id int) {
+	<a href={ "/items/" + strconv.Itoa(id) }>Left literal (bad)</a>
+	<a href={ strconv.Itoa(id) + "/details" }>Right literal (bad)</a>
+	<a href={ "/x/" + strconv.Itoa(id) + "/y" }>Multi (bad)</a>
+	<a href={ "https://example.com/" + strconv.Itoa(id) }>External (allowed)</a>
+}

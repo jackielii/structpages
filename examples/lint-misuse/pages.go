@@ -1,5 +1,5 @@
 // Package main is a deliberately-broken structpages app used as the
-// dogfood fixture for cmd/structpages-lint. Every "BAD" comment marks
+// dogfood fixture for tools/lint/cmd/structpages-lint. Every "BAD" comment marks
 // a call the linter is expected to flag; lint_test.go snapshots the
 // exact diagnostic output so regressions in message wording surface
 // in CI.

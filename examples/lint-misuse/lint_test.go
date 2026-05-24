@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// TestLintMisuse builds cmd/structpages-lint, runs it against this
+// TestLintMisuse builds tools/lint/cmd/structpages-lint, runs it against this
 // fixture, and snapshot-compares the output. It pins the exact
 // diagnostic wording so any drift in messages requires an
 // intentional update to the want literal below.
@@ -31,6 +31,12 @@ pages.go:LINE:COL: [urlfor] URLFor chain: parent Items has no child of type home
 pages.go:LINE:COL: [urlfor] URLFor: typed value at slice position 2 follows a string fragment; chain steps must all come before any string fragment
 pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/items/{slug}" (known: slug)
 pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: receiver type unmountedPage is not mounted as a page
+pages.templ:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value "/admin" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value ` + "`" + `"/items/" + strconv.Itoa(id)` + "`" + ` builds an internal URL by string concatenation; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] href value ` + "`" + `fmt.Sprintf("/users/%s", name)` + "`" + ` builds an internal URL via fmt.Sprint*; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] hx-get value "/api/items" is a hard-coded internal URL; use structpages.URLFor instead
+pages.templ:LINE:COL: [url-attr] action value "/submit" is a hard-coded internal URL; use structpages.URLFor instead
 `)
 	if got != want {
 		t.Errorf("linter output mismatch.\n--- got ---\n%s\n--- want ---\n%s", got, want)
@@ -38,9 +44,9 @@ pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: rece
 }
 
 // buildLinter compiles cmd/structpages-lint into a temp file and
-// returns the path. The build runs in the main structpages module
-// (../..) because the example's own go.sum does not have x/tools
-// entries — they're not used by example code, only by the linter.
+// returns the path. The build runs in the tools/lint sub-module
+// (../../tools/lint) because the linter and the example live in
+// separate modules.
 func buildLinter(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "structpages-lint")
@@ -48,7 +54,7 @@ func buildLinter(t *testing.T) string {
 		out += ".exe"
 	}
 	cmd := exec.Command("go", "build", "-o", out, "./cmd/structpages-lint")
-	cmd.Dir = filepath.Join("..", "..")
+	cmd.Dir = filepath.Join("..", "..", "tools", "lint")
 	if buf, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, buf)
 	}
@@ -66,8 +72,10 @@ func normaliseOutput(s string) string {
 		if line == "" {
 			continue
 		}
-		// Drop absolute path prefix up to "pages.go".
+		// Drop absolute path prefix up to "pages.go" / "pages.templ".
 		if i := strings.Index(line, "pages.go"); i > 0 {
+			line = line[i:]
+		} else if i := strings.Index(line, "pages.templ"); i > 0 {
 			line = line[i:]
 		}
 		// Replace ":N:M:" with ":LINE:COL:".
