@@ -96,6 +96,30 @@ Check out the [examples directory](./examples) for complete working applications
 - [HTMX RenderTarget](./examples/htmx-render-target) - Standalone-function components shared across pages, with per-component data loading via `RenderTarget`
 - [Todo](./examples/todo) - Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component (in-memory store)
 
+## Lint Tool
+
+`structpages-lint` is a static analyzer that checks the most common ways `structpages` calls go wrong.
+
+```shell
+go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+structpages-lint ./...
+```
+
+Categories:
+
+- `urlfor`, `ref`, `id`, `idtarget`, `params` — checks `structpages.URLFor` / `Ref` / `ID` / `IDTarget` call sites against the reconstructed page tree.
+- `url-attr` — scans `.templ` files for URL-bearing HTML attributes (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concatenations, or `fmt.Sprint*` calls — i.e. cases where you should have called `structpages.URLFor`. Allows `https://`, `mailto:`, `#`, protocol-relative `//`.
+
+Suppress a single diagnostic with a comment:
+
+```go
+//structpages:lint:ignore url-attr           // in .go files
+```
+
+```html
+<!-- structpages:lint:ignore url-attr -->    <!-- in .templ files -->
+```
+
 ## Claude Code Skill
 
 This repo ships a [Claude Code](https://claude.com/claude-code) plugin that teaches Claude the structpages idioms (`Props`/`RenderTarget`, HTMX partials, `URLFor`/`ID`/`IDTarget`, middleware, DI). Inside Claude Code:

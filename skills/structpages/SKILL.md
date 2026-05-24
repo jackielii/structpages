@@ -313,6 +313,35 @@ What this catches:
 
 See `examples/url-validation/` for the full pattern: `urls.go` (helpers), `validate.go` (init-time inventory), `integration_test.go` (end-to-end). The library's `chain_test.go` covers the URL-shape mechanics at the unit level.
 
+#### Lint your templates and URL calls
+
+`structpages-lint ./...` catches three classes of bug in CI:
+
+- Dangling `URLFor` / `Ref` calls — renamed routes, ambiguous lookups, wrong params (`urlfor`, `ref`, `params`).
+- Bad `ID` / `IDTarget` method expressions — receiver not mounted as a page (`id`, `idtarget`).
+- **URL-bearing HTML attributes** in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` — i.e. cases where you should have called `structpages.URLFor` (`url-attr`). Allows `https://`, `mailto:`, `#`, `//cdn.example.com/...`.
+
+Install once, then wire into CI alongside `go test`:
+
+```shell
+go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+structpages-lint ./...
+```
+
+Suppress a single diagnostic with a comment:
+
+```go
+//structpages:lint:ignore url-attr
+url := structpages.URLFor(...)            // in .go files
+```
+
+```html
+<!-- structpages:lint:ignore url-attr -->
+<a href="/legacy">…</a>                    <!-- in .templ files -->
+```
+
+The directive applies to its own line and the line immediately below, so placing it above an element works the same as inline. Multiple categories are comma-separated; bare `structpages:lint:ignore` suppresses every category on that line.
+
 When you need a plain string (not in a templ attribute that handles errors), wrap with a small `must` helper:
 
 ```go

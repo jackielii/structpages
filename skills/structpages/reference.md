@@ -333,3 +333,31 @@ route:"[METHOD] /path [Title]"
 Error-returning `ServeHTTP` (and every `Props` method) uses a buffered writer. On a non-nil error the buffer is discarded and `WithErrorHandler` renders instead — so do **not** write `w` directly in these forms; return the error (typed, e.g. `ErrorWithStatus`, when a specific status is needed). The no-return `ServeHTTP(w, r, deps...)` form skips the structpages buffering wrapper — use it for one-shot JSON/API endpoints where you write directly and own the status code.
 
 For streaming (SSE, progress), flush with `http.NewResponseController(w)`: the buffered wrapper implements `FlushError()` and `Unwrap()`, so the controller drains the buffer to the client and reaches any underlying flusher. This works from *either* `ServeHTTP` form — and unlike grabbing the raw `w`, it is the only way to *guarantee* an unbuffered write through whatever middleware also wraps the writer. See examples.md §13.
+
+## Lint Tool
+
+`structpages-lint` is a static analyzer for `structpages` projects.
+
+```shell
+go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+structpages-lint ./...
+```
+
+Diagnostic categories:
+
+| Category | What it flags |
+|---|---|
+| `urlfor` | `structpages.URLFor` chain/composition errors (unknown child type, fragment-before-step). |
+| `ref` | `structpages.Ref(...)` strings that don't resolve to a page tree node. |
+| `id`, `idtarget` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted. |
+| `params` | `URLFor` params that don't appear in the route pattern. |
+| `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. |
+
+Suppression syntax:
+
+| Source | Directive |
+|---|---|
+| `.go` files | `//structpages:lint:ignore <category>[,…]` on the line above the call (or same line). |
+| `.templ` files | `<!-- structpages:lint:ignore <category>[,…] -->` on the line above the element (or same line). |
+
+A bare directive with no category suppresses every category on the targeted line. Categories are comma-separated.
