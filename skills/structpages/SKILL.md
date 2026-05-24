@@ -328,17 +328,19 @@ go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@late
 structpages-lint ./...
 ```
 
-Suppress a single diagnostic with a comment:
+Suppress a single diagnostic with a comment. **Prefer `//` in both `.go` and `.templ`** — Go-style comments are stripped from the generated HTML, while `<!-- … -->` HTML comments render into every response.
 
 ```go
 //structpages:lint:ignore url-attr
 url := structpages.URLFor(...)            // in .go files
 ```
 
-```html
-<!-- structpages:lint:ignore url-attr -->
-<a href="/legacy">…</a>                    <!-- in .templ files -->
+```templ
+// structpages:lint:ignore url-attr
+<a href="/legacy">…</a>                    // in .templ files (preferred)
 ```
+
+`<!-- structpages:lint:ignore url-attr -->` also works in `.templ` for the rare case where you actually want the directive visible to anyone viewing source, but the `//` form is the default.
 
 The directive applies to its own line and the line immediately below, so placing it above an element works the same as inline. Multiple categories are comma-separated; bare `structpages:lint:ignore` suppresses every category on that line.
 

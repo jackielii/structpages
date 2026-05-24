@@ -353,11 +353,11 @@ Diagnostic categories:
 | `params` | `URLFor` params that don't appear in the route pattern. |
 | `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. |
 
-Suppression syntax:
+Suppression syntax (place above the call/element, or on the same line):
 
-| Source | Directive |
-|---|---|
-| `.go` files | `//structpages:lint:ignore <category>[,…]` on the line above the call (or same line). |
-| `.templ` files | `<!-- structpages:lint:ignore <category>[,…] -->` on the line above the element (or same line). |
+| Source | Preferred | Also supported |
+|---|---|---|
+| `.go` files | `//structpages:lint:ignore <category>[,…]` | — |
+| `.templ` files | `// structpages:lint:ignore <category>[,…]` (Go-style; stripped from HTML output) | `<!-- structpages:lint:ignore <category>[,…] -->` (renders into HTML, prefer only when intentional) |
 
 A bare directive with no category suppresses every category on the targeted line. Categories are comma-separated.

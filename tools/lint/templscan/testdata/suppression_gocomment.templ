@@ -1,0 +1,14 @@
+package fixture
+
+templ SuppressedGoComment() {
+	// structpages:lint:ignore url-attr
+	<a href="/login">Suppressed (Go-comment above)</a>
+
+	// structpages:lint:ignore
+	<a href="/admin">Suppressed (all categories)</a>
+
+	// structpages:lint:ignore url-attr,ref
+	<a href="/help">Suppressed (multi-category)</a>
+
+	<a href="/dashboard">Not suppressed</a>
+}
