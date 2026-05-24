@@ -13,8 +13,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/jackielii/structpages/tools/lint"
+	"github.com/jackielii/structpages/tools/lint/templscan"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/packages"
 )
@@ -73,9 +75,35 @@ func main() {
 	}
 	for _, pkg := range pkgs {
 		runPass(analyzer, pkg, emit)
+		runTemplScan(pkg, emit)
 	}
 	if emitted > 0 {
 		os.Exit(1)
+	}
+}
+
+// runTemplScan finds every .templ file in pkg's directory and emits
+// diagnostics from templscan.Scan via emit. Each package is scanned
+// once even though packages.Load may surface it multiple times
+// (e.g. `pkg` and `pkg.test`); dedup happens in emit.
+func runTemplScan(pkg *packages.Package, emit func(string)) {
+	if len(pkg.GoFiles) == 0 {
+		return
+	}
+	dir := filepath.Dir(pkg.GoFiles[0])
+	matches, err := filepath.Glob(filepath.Join(dir, "*.templ"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		diags, err := templscan.Scan(m, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "templscan %s: %v\n", m, err)
+			continue
+		}
+		for _, d := range diags {
+			emit(fmt.Sprintf("%s:%d:%d: %s", d.Filename, d.Line, d.Col, d.Message))
+		}
 	}
 }
 
