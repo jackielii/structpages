@@ -1,0 +1,17 @@
+{
+  "name": "structpages",
+  "owner": {
+    "name": "Jackie Li"
+  },
+  "description": "Marketplace for the structpages Claude Code plugin",
+  "plugins": [
+    {
+      "name": "structpages",
+      "source": "./",
+      "description": "Patterns and guidance for the structpages Go web framework (struct-based routing + templ + HTMX)",
+      "homepage": "https://github.com/jackielii/structpages",
+      "repository": "https://github.com/jackielii/structpages",
+      "license": "MIT"
+    }
+  ]
+}

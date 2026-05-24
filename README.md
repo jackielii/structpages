@@ -96,6 +96,17 @@ Check out the [examples directory](./examples) for complete working applications
 - [HTMX RenderTarget](./examples/htmx-render-target) - Standalone-function components shared across pages, with per-component data loading via `RenderTarget`
 - [Todo](./examples/todo) - Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component (in-memory store)
 
+## Claude Code Skill
+
+This repo ships a [Claude Code](https://claude.com/claude-code) plugin that teaches Claude the structpages idioms (`Props`/`RenderTarget`, HTMX partials, `URLFor`/`ID`/`IDTarget`, middleware, DI). Inside Claude Code:
+
+```text
+/plugin marketplace add jackielii/structpages
+/plugin install structpages@structpages
+```
+
+Restart Claude Code when prompted. The skill loads automatically when you work on a structpages project; you can also invoke it explicitly with `/structpages:structpages`.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
