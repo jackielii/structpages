@@ -54,3 +54,18 @@ func TestScan_ExpressionAttribute_FlagsInternalLiteral(t *testing.T) {
 		t.Errorf("message %q does not mention the literal", d.Message)
 	}
 }
+
+func TestScan_ExpressionAttribute_FlagsConcat(t *testing.T) {
+	diags, err := Scan("testdata/expr_concat.templ", nil)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(diags) != 3 {
+		t.Fatalf("want 3 diagnostics, got %d: %#v", len(diags), diags)
+	}
+	for _, d := range diags {
+		if !strings.Contains(d.Message, "string concatenation") {
+			t.Errorf("message %q does not describe concat", d.Message)
+		}
+	}
+}
