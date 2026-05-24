@@ -24,6 +24,10 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 - [reference.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/reference.md): Extended reference material the skill loads on demand.
 - [examples.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/examples.md): Worked examples that pair with the skill.
 
+## Tooling
+
+- `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `id`, `idtarget`, `params`) and for URL-bearing HTML attributes in `.templ` files (`url-attr`). Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go or `<!-- structpages:lint:ignore <cat> -->` in templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint Tool" sections have the full category list.
+
 ## Optional
 
 - [Examples index](https://raw.githubusercontent.com/jackielii/structpages/main/examples/README.md): Tour of `examples/` (simple, htmx, htmx-render-target, todo, blog, html-template, lint-misuse, url-validation).
