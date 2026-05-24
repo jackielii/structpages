@@ -117,7 +117,7 @@ func (a AddTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 }
 ```
 
-`RenderComponent(SomePage.SomeMethod)` resolves to that page's component and renders it. This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial.
+`RenderComponent(SomePage.SomeMethod)` is a method-expression: the framework finds that page, applies DI, and invokes the method. This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial *belonging to another page*. When you're rendering a component on the *same* page (you have its receiver in scope), prefer constructing the component directly — see §5.
 
 **Pattern C: ServeHTTP for redirects (no HTML response)**
 
@@ -358,22 +358,22 @@ All HTMX requests for a page go to the SAME route. structpages picks which compo
 
 ### 5. RenderTarget Pattern
 
-For pages with multiple HTMX-updatable sections, inject `RenderTarget` into Props to load only the data each section needs:
+For pages with multiple HTMX-updatable sections, inject `RenderTarget` into Props to load only the data each section needs. **Prefer constructing the component directly** — `p` is in scope, so call the method and hand the resulting component to `RenderComponent`:
 
 ```go
 func (p MyPage) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (MyPageProps, error) {
     switch {
-    case sel.Is(MyPage.UserList):
+    case sel.Is(p.UserList):
         users, err := p.userListData(r, appCtx)
         if err != nil { return MyPageProps{}, err }
-        return MyPageProps{}, structpages.RenderComponent(MyPage.UserList, users)
+        return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
 
-    case sel.Is(MyPage.GroupList):
+    case sel.Is(p.GroupList):
         groups, err := p.groupListData(r, appCtx)
         if err != nil { return MyPageProps{}, err }
-        return MyPageProps{}, structpages.RenderComponent(MyPage.GroupList, groups)
+        return MyPageProps{}, structpages.RenderComponent(p.GroupList(groups))
 
-    case sel.Is(MyPage.Page), sel.Is(MyPage.Content):
+    case sel.Is(p.Page), sel.Is(p.Content):
         // Full page — load everything
         return MyPageProps{Users: …, Groups: …}, nil
     }
@@ -381,9 +381,20 @@ func (p MyPage) Props(r *http.Request, appCtx *AppContext, sel structpages.Rende
 }
 ```
 
+Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when you genuinely don't have the receiver in scope (see §5b).
+
 Note: only methods named `Props` are auto-invoked. `*Props`-suffixed helpers (e.g. `userListData` above; some codebases call them `UserListProps`) are *just regular methods* the user calls from inside `Props` — there's no priority resolution.
 
-`RenderComponent` in `ServeHTTP` for write+rerender flows:
+Standalone function components work the same way — just call the function:
+
+```go
+case sel.Is(UserStatsWidget):
+    return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(loadStats()))
+```
+
+### 5b. Cross-page RenderComponent (method expression)
+
+When `ServeHTTP` (or another handler) needs to render a component owned by a *different* page, you don't have that page's receiver. Pass a method expression — the framework finds the page, applies DI, and invokes the method:
 
 ```go
 func (p MyDelete) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
@@ -393,7 +404,7 @@ func (p MyDelete) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppC
 }
 ```
 
-For function targets specifically (standalone templ funcs like `UserStatsWidget`), `target.Is(fn)` *must* be called before `RenderComponent(target, args...)` — `Is()` stores the function pointer for later rendering. For method targets, `Is()` is the recommended pattern but not strictly required (the method is captured at construction).
+This is the one case where the reflection path earns its keep: you can't construct `MyPage.ItemList(items)` directly because you don't have a `MyPage` instance, and the method may rely on DI-injected dependencies the framework will fill in.
 
 ### 6. Middleware
 
@@ -432,7 +443,7 @@ Generic types and interface types are supported as well — see `generics_inject
 2. **Never hardcode URLs** — always use `structpages.URLFor`.
 3. **Partial templ methods** take ONLY their specific data, not the full props struct.
 4. **`RenderComponent` is returned as an error** — when returned, the Props return values (other than the error) are ignored.
-5. **`target.Is(fn)` is required** before `RenderComponent(target, args...)` for *function* targets; recommended for method targets.
+5. **Prefer `RenderComponent(p.X(args))` to `RenderComponent(MyPage.X, args)` or `RenderComponent(target, args)`** when the receiver is in scope — direct construction is compile-time-checked; the reflective forms defer arg/type checks to runtime. The reflective forms are still correct, just slower and more error-prone; reserve them for cross-page renders where you don't have the receiver.
 6. **Children are registered before parents** on the mux (so nested-route conflicts resolve correctly).
 7. **Promoted (embedded) methods are skipped** — only methods defined directly on the struct count.
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
