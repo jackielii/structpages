@@ -388,6 +388,31 @@ All HTMX requests for a page go to the SAME route. structpages picks which compo
        hx-swap="outerHTML" />
 ```
 
+**Self-render uses the current mount.** When `ID` / `IDTarget` runs inside a page's own templ, the id derives from *that mount's* field name — so the same struct type mounted under different parents produces different ids per render context:
+
+```go
+type root struct {
+    AdminDash dashboardPage `route:"/admin"`
+    UserDash  dashboardPage `route:"/user"`
+}
+// templ (p dashboardPage) Page() { <div id={ structpages.ID(ctx, p.Header) }>... }
+// admin render emits id="admin-dash-header"; user render emits id="user-dash-header".
+```
+
+**Cross-page references with multiple mounts must be unambiguous.** When `ID` / `IDTarget` is called from outside the page (e.g. an outer story file generating a target selector) and the referenced struct type is mounted multiple times, the resolver collects every mount:
+
+- If all mounts share the same field name, the resulting kebab id is identical, so the call returns that id silently. This is the common "overlay slot shared by multiple section roots" pattern (all named `EntryDetail`).
+- If field names differ, the call errors with the available mounts and three disambiguation primitives: the `[]any` chain form, a `Ref`, or a standalone function (see Rule 11).
+
+```go
+// IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})  // chain + string
+// IDTarget(ctx, []any{adminRoot{}, dashboardPage.Header})       // chain + method expr
+// IDTarget(ctx, Ref("AdminDash.Header"))                        // by field name
+// IDTarget(ctx, EntryOverlaySlot)                               // standalone func: type-stable id
+```
+
+The chain form mirrors `URLFor`'s shape: leading typed values are chain steps; the trailing element is either a string method name or a method expression whose receiver type IS the leaf. When both the explicit leaf type and the method expression's receiver appear, they must agree.
+
 ### 5. RenderTarget Pattern
 
 For pages with multiple HTMX-updatable sections, inject `RenderTarget` into Props to load only the data each section needs. **Prefer constructing the component directly** — `p` is in scope, so call the method and hand the resulting component to `RenderComponent`:
@@ -504,6 +529,6 @@ This is the recommended fix for two patterns that fail under bare-context render
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
 9. **`ErrSkipPageRender` is only honored from `Props`** (e.g. after writing a redirect). Returning it from `ServeHTTP` does nothing special.
 10. **Disambiguation primitives:** when the same page type is mounted under multiple parents, use the `[]any{ParentPage{}, LeafPage{}}` chain form — strict `URLFor` (the default) errors on bare lookups. When a package needs to URL-to a page it can't import (importing would cycle), pass a string as the page arg — `URLFor(ctx, "Parent.Field", ...)` — or use the explicit `Ref("Parent.Field")` form; both resolve the same way. Ref also handles Go type aliases that collapse to one `reflect.Type`. Ref strings are validated at startup via the init-time validator pattern (see §3 "Validating URLs") and by `structpages-lint` (which also validates string args to `URLFor`).
-11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`.
+11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`. This is intentionally asymmetric to `URLFor`, where a top-level string is auto-`Ref`; literal CSS selectors are legitimate, literal URL paths are anti-pattern. **For a type-stable id that doesn't depend on a mount's field name** (e.g. a slot rendered the same way regardless of which section root mounts the page), define the slot as a standalone function: `func EntryOverlaySlot() templ.Component { ... }` then `IDTarget(ctx, EntryOverlaySlot)` returns `"#entry-overlay-slot"` regardless of how many times any page is mounted. This is the preferred shape for cross-package slot targeting.
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
 13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).
