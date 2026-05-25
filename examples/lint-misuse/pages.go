@@ -127,6 +127,20 @@ func urlSamples(ctx context.Context) {
 	// type matches the leaf, no duplicate descent needed).
 	_, _ = structpages.IDTarget(ctx, []any{itemsRoot{}, itemDetail.Stats})
 
+	// OK: URLFor chain with a trailing query-string fragment whose
+	// {placeholder} is filled by the map. The params check must
+	// inspect the fragment, not just the leaf's FullRoute — slug
+	// comes from the path, preset from the fragment.
+	_, _ = structpages.URLFor(ctx,
+		[]any{itemsRoot{}, itemDetail{}, "?preset={preset}"},
+		map[string]any{"slug": "x", "preset": "weekly"})
+
+	// BAD: chain with a fragment whose placeholder name doesn't
+	// match the map key.
+	_, _ = structpages.URLFor(ctx,
+		[]any{itemsRoot{}, itemDetail{}, "?tab={tab}"},
+		map[string]any{"slug": "x", "wrongTab": "summary"})
+
 	// BAD: ref/string — top-level string is sugar for Ref; the analyzer
 	// validates string args to URLFor the same way it validates Ref(...).
 	_, _ = structpages.URLFor(ctx, "Items.NoSuch")
