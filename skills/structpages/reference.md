@@ -314,8 +314,8 @@ type Ref string
 ```
 
 Dynamic references for URLFor/ID/IDTarget:
-- URLFor: `Ref("PageName")` by name, `Ref("Parent.Field")` qualified path
-- ID: `Ref("PageName.MethodName")` qualified, `Ref("MethodName")` if unambiguous
+- URLFor: `Ref("PageName")` by name, `Ref("Parent.Field")` qualified path. **URLFor also accepts a plain string at the top level as sugar** — `URLFor(ctx, "Parent.Field")` is equivalent to `URLFor(ctx, Ref("Parent.Field"))`. Strings inside `[]any{...}` composition are still URL fragments.
+- ID: `Ref("PageName.MethodName")` qualified, `Ref("MethodName")` if unambiguous. ID/IDTarget do **not** accept the string-as-Ref sugar — plain strings to ID/IDTarget are returned as literal IDs/selectors (e.g. `IDTarget(ctx, "body")` returns `"body"`). Use `Ref(...)` explicitly when you mean dynamic lookup.
 
 ## Mux Interface
 

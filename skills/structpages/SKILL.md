@@ -193,7 +193,8 @@ url, err := structpages.URLFor(ctx,
 | bare typed page | `URLFor(ctx, MyPage{}, params)` | the type is mounted exactly once |
 | typed chain | `URLFor(ctx, []any{Parent{}, Leaf{}}, params)` | same leaf type mounted under multiple parents — parent disambiguates |
 | chain + URL fragment | `URLFor(ctx, []any{Parent{}, Leaf{}, "?tab={t}"}, params)` | need to append a query template or path suffix |
-| Ref by qualified name | `URLFor(ctx, Ref("Parent.Field"), params)` | can't import the page type (cross-package import cycle) |
+| string (auto-Ref) | `URLFor(ctx, "Parent.Field", params)` | can't import the page type (cross-package cycle). Equivalent to `Ref("Parent.Field")` — top-level strings only; strings inside `[]any` are still URL fragments. |
+| Ref by qualified name | `URLFor(ctx, Ref("Parent.Field"), params)` | explicit form of the string sugar above; pick whichever reads better at the call site |
 
 **Always strict.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory.
 
@@ -502,7 +503,7 @@ This is the recommended fix for two patterns that fail under bare-context render
 7. **Promoted (embedded) methods are skipped** — only methods defined directly on the struct count.
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
 9. **`ErrSkipPageRender` is only honored from `Props`** (e.g. after writing a redirect). Returning it from `ServeHTTP` does nothing special.
-10. **Disambiguation primitives:** when the same page type is mounted under multiple parents, use the `[]any{ParentPage{}, LeafPage{}}` chain form — strict `URLFor` (the default) errors on bare lookups. Use `structpages.Ref("Parent.Field")` (qualified path) or `Ref("PageName")` when a package needs to URL-to a page it can't import (importing would cycle); Ref also handles Go type aliases that collapse to one `reflect.Type`. Ref strings are validated at startup via the init-time validator pattern (see §3 "Validating URLs").
+10. **Disambiguation primitives:** when the same page type is mounted under multiple parents, use the `[]any{ParentPage{}, LeafPage{}}` chain form — strict `URLFor` (the default) errors on bare lookups. When a package needs to URL-to a page it can't import (importing would cycle), pass a string as the page arg — `URLFor(ctx, "Parent.Field", ...)` — or use the explicit `Ref("Parent.Field")` form; both resolve the same way. Ref also handles Go type aliases that collapse to one `reflect.Type`. Ref strings are validated at startup via the init-time validator pattern (see §3 "Validating URLs") and by `structpages-lint` (which also validates string args to `URLFor`).
 11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`.
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
 13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).

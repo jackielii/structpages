@@ -58,6 +58,13 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 		return nil
 	}
 
+	// String literal (or named string constant) at the page slot is
+	// sugar for Ref(...): URLFor(ctx, "Admin.Settings"). Validate it
+	// the same way Ref conversions are validated.
+	if s, ok := stringConstantFromPass(ctx, expr); ok {
+		return resolveRef(ctx, expr.Pos(), s, false)
+	}
+
 	// Bare typed value: composite literal, &composite, or named value.
 	t := normalisedPageType(ctx.pass.TypesInfo, expr)
 	if t == nil {
