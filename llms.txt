@@ -4,6 +4,8 @@
 
 Module path: `github.com/jackielii/structpages`. Go reference: <https://pkg.go.dev/github.com/jackielii/structpages>.
 
+Docs site (rendered): <https://jackielii.github.io/structpages/>.
+
 Read these files in order to learn the library: `README.md` for the elevator pitch, `docs/routing.md` and `docs/supported-flows.md` for the routing model, then `skills/structpages/SKILL.md` (the authoritative API/idiom summary used by the Claude Code skill).
 
 ## Docs
