@@ -29,7 +29,7 @@ const config: Config = {
         docs: {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/jackielii/structpages/edit/main/docs/',
+          editUrl: 'https://github.com/jackielii/structpages/edit/main/',
         },
         blog: false,
         theme: {
