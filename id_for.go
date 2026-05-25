@@ -37,7 +37,7 @@ func ID(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - ID must be called within a page handler or template")
 	}
 
-	return idFor(pc, v, true)
+	return idFor(pc, currentPageCtx.Value(ctx), v, true)
 }
 
 // IDTarget generates a CSS selector (with "#" prefix) for a component method.
@@ -70,16 +70,35 @@ func IDTarget(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - IDTarget must be called within a page handler or template")
 	}
 
-	return idFor(pc, v, false)
+	return idFor(pc, currentPageCtx.Value(ctx), v, false)
 }
 
-// idFor generates the ID string based on the provided value (method expression or Ref).
-func idFor(pc *parseContext, v any, rawID bool) (string, error) {
+// idFor generates the ID string based on the provided value
+// (method expression, Ref, plain string, or standalone function).
+//
+// When currentPage is non-nil and the method expression's receiver
+// type matches the current page's type, the id is derived from the
+// current page's field Name. This guarantees self-render produces
+// the right id when the same struct type is mounted under multiple
+// parents with different field names (topologies C and D from the
+// design discussion). When currentPage is nil or the receiver type
+// doesn't match, the resolver falls back to a global tree lookup —
+// matches the existing behavior used by sp.ID / sp.IDTarget and
+// cross-page renders.
+func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, error) {
 	methodExpr := v
 
 	// Handle Ref type for dynamic method references
 	if ref, ok := methodExpr.(Ref); ok {
 		return idForRef(pc, string(ref), rawID)
+	}
+
+	// Handle []any chain form: typed chain steps + trailing method spec.
+	// Parallels URLFor's []any{Parent{}, Leaf{}, "?frag"} composition,
+	// but the trailing element is a method name string or a method
+	// expression whose receiver type is the chain leaf.
+	if parts, ok := methodExpr.([]any); ok {
+		return idForChain(pc, currentPage, parts, rawID)
 	}
 
 	// Handle plain string as literal ID - return as-is
@@ -102,7 +121,7 @@ func idFor(pc *parseContext, v any, rawID bool) (string, error) {
 	// Find the page node (for methods only - functions don't need one)
 	var pageName string
 	if !info.isFunction {
-		pn, err := pc.findPageNodeForMethod(info)
+		pn, err := resolvePageForMethod(pc, currentPage, info)
 		if err != nil {
 			return "", fmt.Errorf("cannot find page for method expression: %w", err)
 		}
@@ -113,6 +132,226 @@ func idFor(pc *parseContext, v any, rawID bool) (string, error) {
 	// Build ID
 	id := buildID(pageName, info.methodName, rawID)
 	return id, nil
+}
+
+// idForChain resolves the []any composition form for ID/IDTarget.
+// The trailing element is the method spec:
+//
+//   - string — used as the method name on the chain leaf's type.
+//   - method expression / method value — its receiver type IS the
+//     chain leaf, and its name supplies the method. If the prior
+//     chain step's type matches the receiver type, the method
+//     expression's implicit leaf is collapsed (no duplicate descend).
+//
+// Leading typed values form the chain steps, resolved by the same
+// rules URLFor's chain form uses (first step by type lookup,
+// subsequent steps by child-type descent).
+func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool) (string, error) {
+	if len(parts) == 0 {
+		return "", errors.New("ID: empty []any chain")
+	}
+	last := parts[len(parts)-1]
+	chainSteps := parts[:len(parts)-1]
+
+	var methodName string
+	var fromMethodExpr *methodInfo
+
+	switch t := last.(type) {
+	case string:
+		if t == "" {
+			return "", errors.New("ID: empty method name in []any chain")
+		}
+		methodName = t
+	case nil:
+		return "", errors.New("ID: nil trailing element in []any chain")
+	default:
+		rv := reflect.ValueOf(last)
+		if rv.Kind() != reflect.Func {
+			return "", fmt.Errorf(
+				"ID: trailing element of []any chain must be a method name string or method expression, got %T",
+				last)
+		}
+		info, err := extractMethodInfo(last)
+		if err != nil {
+			return "", fmt.Errorf("ID: invalid method expression in chain: %w", err)
+		}
+		if info.isFunction {
+			return "", errors.New("ID: trailing element is a standalone function; " +
+				"chain form expects a method expression bound to a page type")
+		}
+		fromMethodExpr = info
+		methodName = info.methodName
+	}
+
+	// When the trailing element is a method expression, its receiver
+	// type is an implicit final chain step. Append it unless the
+	// caller already wrote the type explicitly (e.g.,
+	// []any{Parent{}, Leaf{}, leafPage.Method} where Leaf{} and
+	// leafPage agree — collapse to a single descend rather than
+	// double-stepping).
+	if fromMethodExpr != nil {
+		recv := fromMethodExpr.receiverType
+		recvElem := recv
+		if recvElem.Kind() == reflect.Pointer {
+			recvElem = recvElem.Elem()
+		}
+		duplicate := false
+		if n := len(chainSteps); n > 0 {
+			lastStepType := reflect.TypeOf(chainSteps[n-1])
+			if pointerType(lastStepType) == pointerType(recv) {
+				duplicate = true
+			}
+		}
+		if !duplicate {
+			chainSteps = append(chainSteps, reflect.New(recvElem).Elem().Interface())
+		}
+	}
+
+	if len(chainSteps) == 0 {
+		return "", errors.New("ID: []any chain has no page context; " +
+			"provide at least one typed chain step or use a method expression")
+	}
+
+	leaf, err := pc.resolveChain(chainSteps)
+	if err != nil {
+		return "", fmt.Errorf("ID: %w", err)
+	}
+
+	// Self-render override: if the resolved leaf type matches the
+	// current page's type, prefer the current page's field name.
+	// This mirrors the bare method-expression behavior from idFor.
+	if currentPage != nil && pointerType(currentPage.Value.Type()) == pointerType(leaf.Value.Type()) {
+		leaf = currentPage
+	}
+
+	leafType := pointerType(leaf.Value.Type())
+	if _, ok := leafType.MethodByName(methodName); !ok {
+		return "", fmt.Errorf("ID: method %q not found on chain leaf type %s",
+			methodName, leafType.Elem().Name())
+	}
+
+	return buildID(leaf.Name, methodName, rawID), nil
+}
+
+// resolvePageForMethod picks the PageNode whose Name supplies the
+// id prefix. It prefers the currentPage when its receiver type
+// matches the method expression — that way a page rendering its
+// own template gets the id for *its* mount, not whichever match
+// tree-walk encounters first.
+//
+// For cross-page calls (no current page, or its type doesn't
+// match), the resolver collects every mount of the receiver type.
+// Identical mount field names produce identical ids and are
+// silently collapsed (e.g. an entryPage mounted under three
+// section roots all named "EntryDetail" — the user explicitly
+// chose this shape). Divergent field names produce different ids;
+// the resolver refuses to silently pick one and surfaces a
+// disambiguation error instead.
+func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodInfo) (*PageNode, error) {
+	if currentPage != nil && pageNodeMatchesMethod(currentPage, info) {
+		return currentPage, nil
+	}
+	matches := pc.collectPageNodesForMethod(info)
+	switch len(matches) {
+	case 0:
+		if info.isBound {
+			return nil, fmt.Errorf("no page node found with type name %q", info.receiverTypeName)
+		}
+		return nil, fmt.Errorf("no page node found for type %s", pointerType(info.receiverType).String())
+	case 1:
+		return matches[0], nil
+	}
+	first := matches[0]
+	allSameName := true
+	for _, m := range matches[1:] {
+		if m.Name != first.Name {
+			allSameName = false
+			break
+		}
+	}
+	if allSameName {
+		return first, nil
+	}
+	// Build a useful error: list each distinct (mount, id) pair.
+	type opt struct {
+		name, route, id string
+	}
+	seen := map[string]bool{}
+	var opts []opt
+	for _, m := range matches {
+		if seen[m.Name] {
+			continue
+		}
+		seen[m.Name] = true
+		opts = append(opts, opt{
+			name:  m.Name,
+			route: m.FullRoute(),
+			id:    buildID(m.Name, info.methodName, true),
+		})
+	}
+	descs := make([]string, len(opts))
+	for i, o := range opts {
+		descs[i] = fmt.Sprintf("%s at %s → %q", o.name, o.route, o.id)
+	}
+	return nil, fmt.Errorf(
+		"ID: type %s is mounted under multiple fields producing different ids: %s; "+
+			"disambiguate with the []any chain form, a Ref, or move the slot to a "+
+			"standalone function",
+		first.Value.Type().String(), strings.Join(descs, "; "))
+}
+
+// collectPageNodesForMethod returns every PageNode whose value type
+// matches info's receiver. For bound method values (isBound), it
+// additionally verifies the method exists on the type — matching
+// the historical behavior of findPageNodeByTypeName. For unbound
+// method expressions, the caller has already vouched for the
+// method by writing the expression, so we trust it.
+func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
+	var out []*PageNode
+	for node := range p.root.All() {
+		nodeType := node.Value.Type()
+		if info.isBound {
+			nodeTypeName := nodeType.Name()
+			if nodeType.Kind() == reflect.Pointer {
+				nodeTypeName = nodeType.Elem().Name()
+			}
+			if nodeTypeName != info.receiverTypeName {
+				continue
+			}
+			if _, found := nodeType.MethodByName(info.methodName); !found {
+				continue
+			}
+		} else if pointerType(nodeType) != pointerType(info.receiverType) {
+			continue
+		}
+		out = append(out, node)
+	}
+	return out
+}
+
+// pageNodeMatchesMethod reports whether pn's value type is the
+// receiver type for info (either by reflect.Type or by type name
+// for bound method values).
+func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
+	if pn == nil {
+		return false
+	}
+	nodeType := pn.Value.Type()
+	if info.isBound {
+		nodeTypeName := nodeType.Name()
+		if nodeType.Kind() == reflect.Pointer {
+			nodeTypeName = nodeType.Elem().Name()
+		}
+		if nodeTypeName != info.receiverTypeName {
+			return false
+		}
+	} else if pointerType(nodeType) != pointerType(info.receiverType) {
+		return false
+	}
+	// Confirm the method exists on this type — guards against
+	// matching a same-named type that doesn't have the method.
+	_, found := pointerType(nodeType).MethodByName(info.methodName)
+	return found
 }
 
 // findPageNodeForMethod finds a page node using the method info.

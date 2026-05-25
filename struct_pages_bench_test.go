@@ -592,6 +592,129 @@ func BenchmarkIDGeneration(b *testing.B) {
 	})
 }
 
+// BenchmarkURLGenerationV05 covers the v0.5.0 surface addition:
+// URLFor accepting a top-level string as auto-Ref. Measures the
+// extra string-detection branch on the bare-page hot path against
+// the existing typed/Ref forms.
+func BenchmarkURLGenerationV05(b *testing.B) {
+	type product struct{}
+	type index struct {
+		product `route:"/product/{id} Product"`
+	}
+	mux := http.NewServeMux()
+	sp, _ := Mount(mux, index{}, "/", "Index")
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	args := map[string]any{"id": "123"}
+
+	b.Run("Typed", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, product{}, args)
+		}
+	})
+	b.Run("StringAsRef", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, "product", args)
+		}
+	})
+	b.Run("ExplicitRef", func(b *testing.B) {
+		ref := Ref("product")
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = URLFor(ctx, ref, args)
+		}
+	})
+}
+
+type benchV06Foundations struct {
+	EntryDetail ambSameName `route:"/{slug}"`
+}
+type benchV06Components struct {
+	EntryDetail ambSameName `route:"/{slug}"`
+}
+type benchV06Patterns struct {
+	EntryDetail ambSameName `route:"/{slug}"`
+}
+
+type benchV06Root struct {
+	AdminDash   dashboardC          `route:"/admin Admin"`
+	UserDash    dashboardC          `route:"/user User"`
+	Foundations benchV06Foundations `route:"/foundations"`
+	Components  benchV06Components  `route:"/components"`
+	Patterns    benchV06Patterns    `route:"/patterns"`
+}
+
+// BenchmarkIDGenerationV06 covers the v0.6.0 surface:
+//   - self-render fast path (currentPage in ctx matches method
+//     receiver type — must be measurably free vs the pre-fix
+//     global lookup);
+//   - cross-page method expression where multiple mounts share a
+//     name (the entryPage / topology B case — collapse-to-one
+//     path through the new ambiguity resolver);
+//   - []any chain form, string-terminal and method-expression
+//     terminal (new in v0.6.0).
+func BenchmarkIDGenerationV06(b *testing.B) {
+	pc, err := parsePageTree("/", &benchV06Root{})
+	if err != nil {
+		b.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	// Pre-find the AdminDash node for self-render bench.
+	var admin *PageNode
+	for n := range pc.root.All() {
+		if n.Name == "AdminDash" {
+			admin = n
+			break
+		}
+	}
+	if admin == nil {
+		b.Fatal("could not find AdminDash node")
+	}
+	ctxAdmin := currentPageCtx.WithValue(ctx, admin)
+
+	b.Run("SelfRender_MethodExpr", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = IDTarget(ctxAdmin, dashboardC.Header)
+		}
+	})
+
+	b.Run("CrossPage_SameNameMounts_NoError", func(b *testing.B) {
+		// Three EntryDetail mounts all named "EntryDetail" — the
+		// resolver collects all three, verifies same Name, and
+		// returns one. Hot path for the entryPage-style scenario.
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = IDTarget(ctx, ambSameName.Overlays)
+		}
+	})
+
+	b.Run("Chain_StringTerminal", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = IDTarget(ctx,
+				[]any{benchV06Foundations{}, ambSameName{}, "Overlays"})
+		}
+	})
+
+	b.Run("Chain_MethodExprTerminal", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = IDTarget(ctx,
+				[]any{benchV06Foundations{}, ambSameName.Overlays})
+		}
+	})
+}
+
 // ============================================================================
 // 6. REFLECTION BENCHMARKS
 // ============================================================================

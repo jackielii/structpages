@@ -1,0 +1,63 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/jackielii/structpages
+cpu: Apple M1 Pro
+BenchmarkURLGeneration/URLFor_NoParams-8         	14561114	       165.0 ns/op	      88 B/op	       5 allocs/op
+BenchmarkURLGeneration/URLFor_NoParams-8         	14635424	       165.2 ns/op	      88 B/op	       5 allocs/op
+BenchmarkURLGeneration/URLFor_NoParams-8         	14477250	       166.4 ns/op	      88 B/op	       5 allocs/op
+BenchmarkURLGeneration/URLFor_OneParam_Positional-8         	 8399407	       286.3 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_OneParam_Positional-8         	 8278696	       287.2 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_OneParam_Positional-8         	 8385523	       287.9 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_MultipleParams_Positional-8   	 5153104	       472.2 ns/op	     402 B/op	      11 allocs/op
+BenchmarkURLGeneration/URLFor_MultipleParams_Positional-8   	 5152720	       468.2 ns/op	     402 B/op	      11 allocs/op
+BenchmarkURLGeneration/URLFor_MultipleParams_Positional-8   	 5148541	       466.7 ns/op	     402 B/op	      11 allocs/op
+BenchmarkURLGeneration/URLFor_WithMap-8                     	 8150174	       297.3 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_WithMap-8                     	 8042817	       296.9 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_WithMap-8                     	 8111462	       297.1 ns/op	     184 B/op	       8 allocs/op
+BenchmarkURLGeneration/URLFor_WithContext-8                 	10086141	       237.4 ns/op	     168 B/op	       6 allocs/op
+BenchmarkURLGeneration/URLFor_WithContext-8                 	10167188	       235.7 ns/op	     168 B/op	       6 allocs/op
+BenchmarkURLGeneration/URLFor_WithContext-8                 	10186005	       235.5 ns/op	     168 B/op	       6 allocs/op
+BenchmarkURLGeneration/URLFor_Repeated_10Times-8            	  827128	      2887 ns/op	    1840 B/op	      80 allocs/op
+BenchmarkURLGeneration/URLFor_Repeated_10Times-8            	  837176	      2889 ns/op	    1840 B/op	      80 allocs/op
+BenchmarkURLGeneration/URLFor_Repeated_10Times-8            	  841840	      2893 ns/op	    1840 B/op	      80 allocs/op
+BenchmarkURLGenerationStrict/Bare_UniqueType-8              	10952745	       221.0 ns/op	     104 B/op	       5 allocs/op
+BenchmarkURLGenerationStrict/Bare_UniqueType-8              	10995082	       220.6 ns/op	     104 B/op	       5 allocs/op
+BenchmarkURLGenerationStrict/Bare_UniqueType-8              	10895114	       221.9 ns/op	     104 B/op	       5 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_NoParams-8      	 6239713	       386.6 ns/op	     248 B/op	      10 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_NoParams-8      	 6197024	       386.9 ns/op	     248 B/op	      10 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_NoParams-8      	 6199971	       386.4 ns/op	     248 B/op	      10 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_WithMap-8       	 4884813	       493.0 ns/op	     304 B/op	      12 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_WithMap-8       	 4848496	       493.1 ns/op	     304 B/op	      12 allocs/op
+BenchmarkURLGenerationStrict/Chain_TwoLevel_WithMap-8       	 4707127	       494.6 ns/op	     304 B/op	      12 allocs/op
+BenchmarkURLGenerationStrict/Chain_PlusFragment-8           	 3770150	       632.9 ns/op	     512 B/op	      16 allocs/op
+BenchmarkURLGenerationStrict/Chain_PlusFragment-8           	 3776694	       637.2 ns/op	     512 B/op	      16 allocs/op
+BenchmarkURLGenerationStrict/Chain_PlusFragment-8           	 3804501	       632.3 ns/op	     512 B/op	      16 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_TwoSegments-8    	 8065386	       299.0 ns/op	     240 B/op	       9 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_TwoSegments-8    	 8042773	       407.9 ns/op	     240 B/op	       9 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_TwoSegments-8    	 7977870	       299.8 ns/op	     240 B/op	       9 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_WithMap-8        	 5916356	       408.3 ns/op	     296 B/op	      11 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_WithMap-8        	 5895571	       406.5 ns/op	     296 B/op	      11 allocs/op
+BenchmarkURLGenerationStrict/Ref_Qualified_WithMap-8        	 5929592	       407.3 ns/op	     296 B/op	      11 allocs/op
+BenchmarkURLGenerationStrict/Ref_SingleName-8               	16664211	       145.6 ns/op	      96 B/op	       4 allocs/op
+BenchmarkURLGenerationStrict/Ref_SingleName-8               	16400013	       151.1 ns/op	      96 B/op	       4 allocs/op
+BenchmarkURLGenerationStrict/Ref_SingleName-8               	16406474	       142.7 ns/op	      96 B/op	       4 allocs/op
+BenchmarkURLGenerationStrict/StrictAmbiguity_ErrorPath-8    	 2463813	       970.6 ns/op	     776 B/op	      28 allocs/op
+BenchmarkURLGenerationStrict/StrictAmbiguity_ErrorPath-8    	 2452522	       970.4 ns/op	     776 B/op	      28 allocs/op
+BenchmarkURLGenerationStrict/StrictAmbiguity_ErrorPath-8    	 2478378	       968.9 ns/op	     776 B/op	      28 allocs/op
+BenchmarkURLGenerationStrict/Chain_ThreeLevel-8             	 6062606	       394.1 ns/op	     232 B/op	      13 allocs/op
+BenchmarkURLGenerationStrict/Chain_ThreeLevel-8             	 6046777	       395.3 ns/op	     232 B/op	      13 allocs/op
+BenchmarkURLGenerationStrict/Chain_ThreeLevel-8             	 6093626	       395.1 ns/op	     232 B/op	      13 allocs/op
+BenchmarkIDGeneration/IDFor_UnboundMethod-8                 	11505247	       208.1 ns/op	      96 B/op	       3 allocs/op
+BenchmarkIDGeneration/IDFor_UnboundMethod-8                 	11541853	       214.7 ns/op	      96 B/op	       3 allocs/op
+BenchmarkIDGeneration/IDFor_UnboundMethod-8                 	11507695	       208.6 ns/op	      96 B/op	       3 allocs/op
+BenchmarkIDGeneration/IDFor_BoundMethod-8                   	 6110949	       396.1 ns/op	     200 B/op	       6 allocs/op
+BenchmarkIDGeneration/IDFor_BoundMethod-8                   	 6067393	       396.4 ns/op	     200 B/op	       6 allocs/op
+BenchmarkIDGeneration/IDFor_BoundMethod-8                   	 6060961	       396.1 ns/op	     200 B/op	       6 allocs/op
+BenchmarkIDGeneration/IDFor_Ref-8                           	 6970704	       341.7 ns/op	     184 B/op	       5 allocs/op
+BenchmarkIDGeneration/IDFor_Ref-8                           	 7021844	       346.9 ns/op	     184 B/op	       5 allocs/op
+BenchmarkIDGeneration/IDFor_Ref-8                           	 7010817	       343.9 ns/op	     184 B/op	       5 allocs/op
+BenchmarkIDGeneration/IDTarget_UnboundMethod-8              	10185074	       233.7 ns/op	     144 B/op	       4 allocs/op
+BenchmarkIDGeneration/IDTarget_UnboundMethod-8              	10302409	       232.1 ns/op	     144 B/op	       4 allocs/op
+BenchmarkIDGeneration/IDTarget_UnboundMethod-8              	10253446	       232.4 ns/op	     144 B/op	       4 allocs/op
+PASS
+ok  	github.com/jackielii/structpages	158.095s

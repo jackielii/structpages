@@ -50,7 +50,7 @@ type StructPages struct {
 //	sp.ID(UserStatsWidget)
 //	// → "user-stats-widget" (no page prefix for standalone functions)
 func (sp *StructPages) ID(v any) (string, error) {
-	return idFor(sp.pc, v, true)
+	return idFor(sp.pc, nil, v, true)
 }
 
 // IDTarget generates a CSS selector (with "#" prefix) for a component method.
@@ -65,7 +65,7 @@ func (sp *StructPages) ID(v any) (string, error) {
 //	sp.IDTarget(UserStatsWidget)
 //	// → "#user-stats-widget" (no page prefix for standalone functions)
 func (sp *StructPages) IDTarget(v any) (string, error) {
-	return idFor(sp.pc, v, false)
+	return idFor(sp.pc, nil, v, false)
 }
 
 // URLFor returns the URL for a given page type. If args is provided, it'll replace

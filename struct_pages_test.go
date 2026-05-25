@@ -2414,10 +2414,15 @@ func TestAliasTypeMount_URLFor(t *testing.T) {
 
 // TestAliasTypeMount_IDFor demonstrates Go type alias behavior with ID/IDTarget.
 //
-// Same limitation as URLFor - type aliases are identical at runtime, so ID()
-// with a method expression will find the first matching page type.
+// Type aliases (aliasPage = aliasOriginalPage) collapse to the same reflect.Type,
+// so mounting the original under one field and the alias under another field
+// is indistinguishable from mounting the same type under two field names with
+// distinct kebab ids. The resolver therefore errors with a disambiguation
+// hint rather than silently picking one — pre-fix behavior was first-match,
+// which is a latent bug whenever the field names differ.
 //
-// Use Ref("fieldName.MethodName") to target a specific component.
+// Use the []any chain form, Ref("fieldName.MethodName"), or a standalone
+// function to disambiguate.
 func TestAliasTypeMount_IDFor(t *testing.T) {
 	type parentWithAlias struct {
 		original aliasOriginalPage `route:"/original Original"`
@@ -2430,30 +2435,29 @@ func TestAliasTypeMount_IDFor(t *testing.T) {
 		t.Fatalf("Mount failed: %v", err)
 	}
 
-	// ID with original type method expression - returns first match
+	// Bare method expression errors — the two mounts produce different ids
+	// ("original-content" vs "child-content") so the resolver can't pick.
 	{
-		id, err := sp.ID(aliasOriginalPage.Content)
-		if err != nil {
-			t.Errorf("ID original type error: %v", err)
+		_, err := sp.ID(aliasOriginalPage.Content)
+		if err == nil {
+			t.Error("expected ambiguity error, got nil")
 		}
-		if id != "original-content" {
-			t.Errorf("ID original type = %q, want %q", id, "original-content")
+		for _, want := range []string{"multiple fields", "original-content", "child-content"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not contain %q", err.Error(), want)
+			}
 		}
 	}
 
-	// ID with alias type method expression - ALSO returns "original-content"
-	// because Go type aliases are identical at runtime
+	// Same applies to the alias type — aliases are identical at runtime.
 	{
-		id, err := sp.ID(aliasPage.Content)
-		if err != nil {
-			t.Errorf("ID alias type error: %v", err)
-		}
-		if id != "original-content" {
-			t.Errorf("ID alias type = %q, want %q", id, "original-content")
+		_, err := sp.ID(aliasPage.Content)
+		if err == nil {
+			t.Error("expected ambiguity error for alias type, got nil")
 		}
 	}
 
-	// WORKAROUND: Use Ref("fieldName.MethodName") to target a specific component
+	// Disambiguation #1: Ref("fieldName.MethodName")
 	{
 		id, err := sp.IDTarget(Ref("child.Content"))
 		if err != nil {
@@ -2464,7 +2468,12 @@ func TestAliasTypeMount_IDFor(t *testing.T) {
 		}
 	}
 
-	// ID (without #) using Ref
+	// Note: the []any chain form can't help here — chain descent is
+	// by type, and `parentWithAlias` has two children of the same
+	// type (aliases collapse to one reflect.Type). Ref by field name
+	// is the disambiguation primitive for same-type siblings.
+
+	// ID (without #) using Ref still works.
 	{
 		id, err := sp.ID(Ref("child.Content"))
 		if err != nil {
