@@ -72,6 +72,15 @@ func extractURLParams(next http.Handler, node *PageNode) http.Handler {
 // URLFor returns the URL for a given page type. If args is provided, it'll replace
 // the path segments. Supported format is similar to http.ServeMux.
 //
+// The page argument accepts:
+//   - a typed page value: URLFor(ctx, Page{}, ...)
+//   - a top-level string (sugar for Ref): URLFor(ctx, "Admin.Settings", ...)
+//     resolves the same as URLFor(ctx, Ref("Admin.Settings"), ...). Useful at
+//     call sites that can't import the target page (cross-package cycle).
+//   - a Ref: URLFor(ctx, Ref("PageName"), ...)
+//   - a []any composition (chain + optional URL fragments): see below.
+//   - a func(*PageNode) bool predicate for unusual lookups.
+//
 // Type-based lookup is strict: if the same page type is mounted under
 // multiple parents, URLFor returns an error listing every match
 // instead of silently choosing one. Disambiguate with the []any chain
@@ -97,6 +106,16 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	pc := pcCtx.Value(ctx)
 	if pc == nil {
 		return "", errors.New("parse context not found in context")
+	}
+
+	// A top-level string is sugar for Ref(string): URLFor(ctx, "Home")
+	// reads cleaner than URLFor(ctx, Ref("Home")), especially at call
+	// sites that can't import the target page (cross-package cycle).
+	// Strings inside the []any composition form remain URL fragments
+	// (e.g. []any{Page{}, "?tab={t}"}); only the top-level position
+	// gets the auto-Ref treatment.
+	if s, ok := page.(string); ok {
+		page = Ref(s)
 	}
 
 	parts, ok := page.([]any)

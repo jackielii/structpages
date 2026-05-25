@@ -94,6 +94,13 @@ func urlSamples(ctx context.Context) {
 	var d itemDetail
 	_, _ = structpages.IDTarget(ctx, d.Stats)
 
+	// BAD: ref/string — top-level string is sugar for Ref; the analyzer
+	// validates string args to URLFor the same way it validates Ref(...).
+	_, _ = structpages.URLFor(ctx, "Items.NoSuch")
+
+	// OK: bare string that resolves to a real page name.
+	_, _ = structpages.URLFor(ctx, "Home")
+
 	// OK: would be a [ref] diagnostic but directive on previous line silences it.
 	//structpages:lint:ignore ref
 	_, _ = structpages.URLFor(ctx, structpages.Ref("Suppressed"))
