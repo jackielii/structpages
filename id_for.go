@@ -237,13 +237,96 @@ func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool
 // id prefix. It prefers the currentPage when its receiver type
 // matches the method expression — that way a page rendering its
 // own template gets the id for *its* mount, not whichever match
-// tree-walk encounters first. Falls back to the global lookup
-// when there is no current page or its type doesn't match.
+// tree-walk encounters first.
+//
+// For cross-page calls (no current page, or its type doesn't
+// match), the resolver collects every mount of the receiver type.
+// Identical mount field names produce identical ids and are
+// silently collapsed (e.g. an entryPage mounted under three
+// section roots all named "EntryDetail" — the user explicitly
+// chose this shape). Divergent field names produce different ids;
+// the resolver refuses to silently pick one and surfaces a
+// disambiguation error instead.
 func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodInfo) (*PageNode, error) {
 	if currentPage != nil && pageNodeMatchesMethod(currentPage, info) {
 		return currentPage, nil
 	}
-	return pc.findPageNodeForMethod(info)
+	matches := pc.collectPageNodesForMethod(info)
+	switch len(matches) {
+	case 0:
+		if info.isBound {
+			return nil, fmt.Errorf("no page node found with type name %q", info.receiverTypeName)
+		}
+		return nil, fmt.Errorf("no page node found for type %s", pointerType(info.receiverType).String())
+	case 1:
+		return matches[0], nil
+	}
+	first := matches[0]
+	allSameName := true
+	for _, m := range matches[1:] {
+		if m.Name != first.Name {
+			allSameName = false
+			break
+		}
+	}
+	if allSameName {
+		return first, nil
+	}
+	// Build a useful error: list each distinct (mount, id) pair.
+	type opt struct {
+		name, route, id string
+	}
+	seen := map[string]bool{}
+	var opts []opt
+	for _, m := range matches {
+		if seen[m.Name] {
+			continue
+		}
+		seen[m.Name] = true
+		opts = append(opts, opt{
+			name:  m.Name,
+			route: m.FullRoute(),
+			id:    buildID(m.Name, info.methodName, true),
+		})
+	}
+	descs := make([]string, len(opts))
+	for i, o := range opts {
+		descs[i] = fmt.Sprintf("%s at %s → %q", o.name, o.route, o.id)
+	}
+	return nil, fmt.Errorf(
+		"ID: type %s is mounted under multiple fields producing different ids: %s; "+
+			"disambiguate with the []any chain form, a Ref, or move the slot to a "+
+			"standalone function",
+		first.Value.Type().String(), strings.Join(descs, "; "))
+}
+
+// collectPageNodesForMethod returns every PageNode whose value type
+// matches info's receiver. For bound method values (isBound), it
+// additionally verifies the method exists on the type — matching
+// the historical behavior of findPageNodeByTypeName. For unbound
+// method expressions, the caller has already vouched for the
+// method by writing the expression, so we trust it.
+func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
+	var out []*PageNode
+	for node := range p.root.All() {
+		nodeType := node.Value.Type()
+		if info.isBound {
+			nodeTypeName := nodeType.Name()
+			if nodeType.Kind() == reflect.Pointer {
+				nodeTypeName = nodeType.Elem().Name()
+			}
+			if nodeTypeName != info.receiverTypeName {
+				continue
+			}
+			if _, found := nodeType.MethodByName(info.methodName); !found {
+				continue
+			}
+		} else if pointerType(nodeType) != pointerType(info.receiverType) {
+			continue
+		}
+		out = append(out, node)
+	}
+	return out
 }
 
 // pageNodeMatchesMethod reports whether pn's value type is the
