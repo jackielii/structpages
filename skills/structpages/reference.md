@@ -73,11 +73,24 @@ The other forms are also supported. Order of detection inside `formatPathSegment
 
 - **Unbound method**: `ID(ctx, MyPage.UserList)` → `"my-page-user-list"`
 - **Bound method**: `ID(ctx, p.UserList)` → same result
-- **Standalone function**: `ID(ctx, UserWidget)` → `"user-widget"` (no page prefix)
+- **Standalone function**: `ID(ctx, UserWidget)` → `"user-widget"` (no page prefix, type-stable across all mounts)
+- **`[]any` chain form**: leading typed values + trailing method spec; the trailing element is either a string method name or a method expression
+  - `IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})` — chain + string
+  - `IDTarget(ctx, []any{adminRoot{}, dashboardPage.Header})` — chain + method expression (receiver type collapses with the leaf if both appear, and must agree)
 - **Ref string**: `ID(ctx, Ref("MyPage.UserList"))` qualified, or `Ref("UserList")` if unambiguous across all pages
 - **Plain string**: `ID(ctx, "my-custom-id")` → returned as-is
 
 `IDTarget` works the same way but prepends `#` to method-derived IDs: `"#my-page-user-list"`. **For plain string inputs, `IDTarget` returns the string verbatim** — `IDTarget("body")` is `"body"`, not `"#body"`. Pass `"#body"` if you want the hash.
+
+#### Mount-context semantics
+
+The id is derived from the matched PageNode's *field name* (mount role), not the struct type name. When the same struct is mounted under multiple field names with different kebabs:
+
+- **Self-render** (inside the page's own templ): the resolver consults the current request's page node from context, so the id reflects *that mount* — admin's render emits `"admin-dash-header"`, user's emits `"user-dash-header"`.
+- **Cross-page** (call site has no current-page context): the resolver collects every mount of the receiver type. If all share the same field name (entryPage-style: three mounts all named `EntryDetail`), the resulting kebab id is identical → return it. If field names differ → error with the available mounts and three disambiguation primitives:
+  1. `[]any` chain form (type-safe — chain steps are real types)
+  2. `Ref("Parent.Field")` (string lookup, lint-validated, useful when the type isn't importable)
+  3. Move the slot to a standalone function (type-stable id, no mount dependency)
 
 Naming: CamelCase → kebab-case (`HTMLParser` → `html-parser`). The reverse direction (`kebabToPascal`) is lossy: `html-parser` → `HtmlParser`, not `HTMLParser`. HX-Target matching uses suffix and page-prefix rules (see `HTMXRenderTarget` below) rather than simple reverse conversion, so this lossiness rarely matters in practice.
 

@@ -31,6 +31,9 @@ docs/superpowers/
 # Docusaurus worktree (docs-site branch mounted here)
 /website/
 
+# Local-only profile output (text baselines under bench/ are tracked)
+bench/*.pprof
+
 /coverage.txt
 /coverage.out
 /coverage.html
