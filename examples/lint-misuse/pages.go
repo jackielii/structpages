@@ -101,6 +101,19 @@ func urlSamples(ctx context.Context) {
 	var d itemDetail
 	_, _ = structpages.IDTarget(ctx, d.Stats)
 
+	// OK: ID-context qualified Ref with anchor deeper than
+	// root.Children. Detail lives at root.Items.Detail; the
+	// runtime's idForRef walks pc.root.All() by Name, so this
+	// resolves. Lint must mirror that (the URL form would
+	// correctly error because URL anchors are stricter).
+	_, _ = structpages.IDTarget(ctx, structpages.Ref("Detail.Stats"))
+
+	// BAD: URL-context qualified Ref still requires the anchor to
+	// be a root or root.Children. "Detail.Index" can't resolve at
+	// the URL level even though both names exist deeper in the
+	// tree — URLs must be unambiguous, no first-match-by-name.
+	_, _ = structpages.URLFor(ctx, structpages.Ref("Detail.Index"))
+
 	// BAD: ref/string — top-level string is sugar for Ref; the analyzer
 	// validates string args to URLFor the same way it validates Ref(...).
 	_, _ = structpages.URLFor(ctx, "Items.NoSuch")

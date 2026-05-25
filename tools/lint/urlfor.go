@@ -45,15 +45,14 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 		return resolveChainLiteral(ctx, comp)
 	}
 
-	// Ref(...) — already validated at the conversion site; resolve
-	// silently here so we can carry the node into param-map check.
+	// Ref(...) — validate at the URLFor call-site with URL-context
+	// semantics (strict anchoring). The Ref-conversion check
+	// (checkRefConversion) only catches refs invalid in *every*
+	// context, so context-specific failures (URL-only callers
+	// feeding a depth-2 anchor) must be caught here.
 	if call, ok := expr.(*ast.CallExpr); ok && isRefConversion(ctx.pass.TypesInfo, call) {
 		if s, ok := stringConstantFromPass(ctx, call.Args[0]); ok {
-			save := ctx.silent
-			ctx.silent = true
-			node := resolveRef(ctx, call.Args[0].Pos(), s, false)
-			ctx.silent = save
-			return node
+			return resolveRef(ctx, call.Args[0].Pos(), s, false)
 		}
 		return nil
 	}
