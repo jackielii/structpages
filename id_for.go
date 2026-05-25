@@ -37,7 +37,7 @@ func ID(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - ID must be called within a page handler or template")
 	}
 
-	return idFor(pc, v, true)
+	return idFor(pc, currentPageCtx.Value(ctx), v, true)
 }
 
 // IDTarget generates a CSS selector (with "#" prefix) for a component method.
@@ -70,11 +70,22 @@ func IDTarget(ctx context.Context, v any) (string, error) {
 		return "", errors.New("parseContext not found in context - IDTarget must be called within a page handler or template")
 	}
 
-	return idFor(pc, v, false)
+	return idFor(pc, currentPageCtx.Value(ctx), v, false)
 }
 
-// idFor generates the ID string based on the provided value (method expression or Ref).
-func idFor(pc *parseContext, v any, rawID bool) (string, error) {
+// idFor generates the ID string based on the provided value
+// (method expression, Ref, plain string, or standalone function).
+//
+// When currentPage is non-nil and the method expression's receiver
+// type matches the current page's type, the id is derived from the
+// current page's field Name. This guarantees self-render produces
+// the right id when the same struct type is mounted under multiple
+// parents with different field names (topologies C and D from the
+// design discussion). When currentPage is nil or the receiver type
+// doesn't match, the resolver falls back to a global tree lookup —
+// matches the existing behavior used by sp.ID / sp.IDTarget and
+// cross-page renders.
+func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, error) {
 	methodExpr := v
 
 	// Handle Ref type for dynamic method references
@@ -102,7 +113,7 @@ func idFor(pc *parseContext, v any, rawID bool) (string, error) {
 	// Find the page node (for methods only - functions don't need one)
 	var pageName string
 	if !info.isFunction {
-		pn, err := pc.findPageNodeForMethod(info)
+		pn, err := resolvePageForMethod(pc, currentPage, info)
 		if err != nil {
 			return "", fmt.Errorf("cannot find page for method expression: %w", err)
 		}
@@ -113,6 +124,44 @@ func idFor(pc *parseContext, v any, rawID bool) (string, error) {
 	// Build ID
 	id := buildID(pageName, info.methodName, rawID)
 	return id, nil
+}
+
+// resolvePageForMethod picks the PageNode whose Name supplies the
+// id prefix. It prefers the currentPage when its receiver type
+// matches the method expression — that way a page rendering its
+// own template gets the id for *its* mount, not whichever match
+// tree-walk encounters first. Falls back to the global lookup
+// when there is no current page or its type doesn't match.
+func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodInfo) (*PageNode, error) {
+	if currentPage != nil && pageNodeMatchesMethod(currentPage, info) {
+		return currentPage, nil
+	}
+	return pc.findPageNodeForMethod(info)
+}
+
+// pageNodeMatchesMethod reports whether pn's value type is the
+// receiver type for info (either by reflect.Type or by type name
+// for bound method values).
+func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
+	if pn == nil {
+		return false
+	}
+	nodeType := pn.Value.Type()
+	if info.isBound {
+		nodeTypeName := nodeType.Name()
+		if nodeType.Kind() == reflect.Pointer {
+			nodeTypeName = nodeType.Elem().Name()
+		}
+		if nodeTypeName != info.receiverTypeName {
+			return false
+		}
+	} else if pointerType(nodeType) != pointerType(info.receiverType) {
+		return false
+	}
+	// Confirm the method exists on this type — guards against
+	// matching a same-named type that doesn't have the method.
+	_, found := pointerType(nodeType).MethodByName(info.methodName)
+	return found
 }
 
 // findPageNodeForMethod finds a page node using the method info.
