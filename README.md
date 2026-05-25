@@ -88,6 +88,7 @@ Route definitions use the format `[method] path [Title]`:
 - [URLFor & ID Generation](./docs/urlfor.md) - Type-safe URL and HTML id generation
 - [Templ Patterns](./docs/templ.md) - Working with Templ templates
 - [Advanced Features](./docs/advanced.md) - Dependency injection, Init, dynamic Refs, type aliases
+- [Testing renders](./skills/structpages/SKILL.md#8-testing-renders-with-a-bare-context) - `structpages.Parse` + `sp.PageContext(ctx)` for unit tests that render templ components without an HTTP server
 
 ## Examples
 

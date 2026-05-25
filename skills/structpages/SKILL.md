@@ -468,6 +468,29 @@ Generic types and interface types are supported as well — see `generics_inject
 
 `*PageNode` is always available for injection (the framework adds the current node automatically).
 
+### 8. Testing renders with a bare context
+
+Unit tests that render templ components directly — without spinning up an HTTP server — need a page tree in `context.Background()` so calls to `URLFor` / `ID` / `IDTarget` resolve. Use `structpages.Parse` (builds the tree, no mux) and `sp.PageContext(ctx)` (wraps ctx with the tree):
+
+```go
+sp, err := structpages.Parse(webPages{}, "/", "App",
+    structpages.WithArgs(fakeAppCtx),
+)
+if err != nil { t.Fatal(err) }
+ctx := sp.PageContext(context.Background())
+
+// Now URLFor in templ components and props helpers resolves against webPages{}.
+buf := &bytes.Buffer{}
+if err := MyPage{}.Page(props).Render(ctx, buf); err != nil { t.Fatal(err) }
+```
+
+This is the recommended fix for two patterns that fail under bare-context renders:
+
+1. **Component-level renders with handcrafted props.** Props is hand-rolled; the only framework dep is `URLFor` in the templ. `sp.PageContext` is a one-line wrap.
+2. **Cross-module URL refs (e.g. appshell linking to `Home` in a sibling module).** Mount only one sub-tree on a test mux and `URLFor` to siblings outside it fails. Building the canonical root via `Parse(webPages{}, ...)` gives the tree those refs need, without registering any routes.
+
+`Parse` accepts the same options as `Mount` — `WithArgs` for DI args used by `Props`, `WithURLPrefix` if the test asserts prefixed URLs, etc. Mux-shaped options (middlewares) are accepted but inert since no handlers register.
+
 ## Key Rules
 
 1. **Props methods extract path params** via `r.PathValue("param")`, not function arguments.
