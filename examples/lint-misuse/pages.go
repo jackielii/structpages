@@ -114,6 +114,19 @@ func urlSamples(ctx context.Context) {
 	// tree — URLs must be unambiguous, no first-match-by-name.
 	_, _ = structpages.URLFor(ctx, structpages.Ref("Detail.Index"))
 
+	// BAD: []any chain to ID with a method name that doesn't exist
+	// on the chain leaf type. The chain itself resolves cleanly
+	// (Items has Detail child of itemDetail type) but itemDetail
+	// has no method "Nope".
+	_, _ = structpages.IDTarget(ctx, []any{itemsRoot{}, itemDetail{}, "Nope"})
+
+	// OK: []any chain with a valid method name terminal.
+	_, _ = structpages.IDTarget(ctx, []any{itemsRoot{}, itemDetail{}, "Stats"})
+
+	// OK: []any chain with a method expression terminal (receiver
+	// type matches the leaf, no duplicate descent needed).
+	_, _ = structpages.IDTarget(ctx, []any{itemsRoot{}, itemDetail.Stats})
+
 	// BAD: ref/string — top-level string is sugar for Ref; the analyzer
 	// validates string args to URLFor the same way it validates Ref(...).
 	_, _ = structpages.URLFor(ctx, "Items.NoSuch")

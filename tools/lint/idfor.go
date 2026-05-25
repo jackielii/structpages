@@ -2,6 +2,7 @@ package lint
 
 import (
 	"go/ast"
+	"go/token"
 	"go/types"
 	"sort"
 	"strings"
@@ -44,8 +45,154 @@ func checkIDOrIDTarget(ctx *checkCtx, call *ast.CallExpr, fnName string) {
 		return
 	}
 
+	// []any{...} chain form — leading typed values + trailing
+	// string method name or method expression. Mirrors URLFor's
+	// chain check shape.
+	if comp, ok := asAnySliceLiteral(ctx, arg); ok {
+		checkIDChain(ctx, comp, fnName)
+		return
+	}
+
 	// Method expression or standalone function.
 	checkIDFuncArg(ctx, arg, fnName)
+}
+
+// checkIDChain validates a []any composition argument to ID /
+// IDTarget. Two terminal shapes:
+//
+//   - trailing string: method name to look up on the chain leaf
+//   - trailing method expression: receiver type IS the leaf (or
+//     matches the prior chain step's type — duplicate collapse)
+func checkIDChain(ctx *checkCtx, comp *ast.CompositeLit, fnName string) {
+	if len(comp.Elts) == 0 {
+		ctx.report(comp.Pos(), "idfor",
+			"%s: empty []any chain", fnName)
+		return
+	}
+	elts := comp.Elts
+	last := elts[len(elts)-1]
+	chainSteps := elts[:len(elts)-1]
+
+	// Determine method spec.
+	var methodName string
+	var methodPos token.Pos
+	if s, ok := stringConstantFromPass(ctx, last); ok {
+		if t := ctx.pass.TypesInfo.TypeOf(last); t != nil {
+			if b, ok := t.Underlying().(*types.Basic); ok && b.Kind() == types.String && !isRefType(t) {
+				methodName = s
+				methodPos = last.Pos()
+			} else {
+				ctx.report(last.Pos(), "idfor",
+					"%s: trailing []any element must be a plain method-name string or a method expression", fnName)
+				return
+			}
+		}
+	} else if sel, ok := lastAsMethodExpr(ctx, last); ok {
+		methodName = sel.fnName
+		methodPos = last.Pos()
+		// Append the method expression's receiver type as an
+		// implicit chain step unless the prior step already
+		// names the same type (duplicate collapse).
+		dup := false
+		if n := len(chainSteps); n > 0 {
+			if t := normalisedPageType(ctx.pass.TypesInfo, chainSteps[n-1]); t != nil {
+				if typeKey(t) == typeKey(sel.recvType) {
+					dup = true
+				}
+			}
+		}
+		if !dup {
+			chainSteps = append(chainSteps, last)
+		}
+	} else {
+		ctx.report(last.Pos(), "idfor",
+			"%s: trailing []any element must be a method-name string or a method expression", fnName)
+		return
+	}
+
+	if len(chainSteps) == 0 {
+		ctx.report(comp.Pos(), "idfor",
+			"%s: []any chain has no page context", fnName)
+		return
+	}
+
+	leaf := resolveChainLiteralSteps(ctx, chainSteps)
+	if leaf == nil {
+		return
+	}
+	if _, ok := leaf.Methods[methodName]; !ok {
+		methods := mapMethodNames(leaf.Methods)
+		ctx.report(methodPos, "idfor",
+			"%s: method %q not found on chain leaf %q; available: %s",
+			fnName, methodName, leaf.Name, strings.Join(methods, ", "))
+	}
+}
+
+// methodExprInfo bundles a method expression's static info pulled
+// from go/types so callers can avoid re-walking the AST.
+type methodExprInfo struct {
+	fnName   string
+	recvType *types.Named
+}
+
+// lastAsMethodExpr reports whether expr is a selector that names a
+// method on a struct receiver, and returns the receiver type + the
+// method name.
+func lastAsMethodExpr(ctx *checkCtx, expr ast.Expr) (methodExprInfo, bool) {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return methodExprInfo{}, false
+	}
+	use, ok := ctx.pass.TypesInfo.Uses[sel.Sel]
+	if !ok {
+		return methodExprInfo{}, false
+	}
+	fn, ok := use.(*types.Func)
+	if !ok {
+		return methodExprInfo{}, false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return methodExprInfo{}, false
+	}
+	named, ok := resolveNamedStruct(sig.Recv().Type())
+	if !ok {
+		return methodExprInfo{}, false
+	}
+	return methodExprInfo{fnName: fn.Name(), recvType: named}, true
+}
+
+// resolveChainLiteralSteps walks the chain steps (mirrors
+// resolveChainLiteral in urlfor.go but doesn't accept string
+// fragments — strings are method specs for ID, validated by the
+// caller). On error, reports and returns nil.
+func resolveChainLiteralSteps(ctx *checkCtx, steps []ast.Expr) *PageNode {
+	if len(steps) == 0 {
+		return nil
+	}
+	node := resolveChainStep(ctx, steps[0], true)
+	if node == nil {
+		return nil
+	}
+	for i, step := range steps[1:] {
+		s := unparen(step)
+		if call, ok := s.(*ast.CallExpr); ok && isRefConversion(ctx.pass.TypesInfo, call) {
+			ctx.report(s.Pos(), "idfor",
+				"ID/IDTarget: chain step %d is a Ref; Ref is only valid as the first chain step",
+				i+1)
+			return nil
+		}
+		t := normalisedPageType(ctx.pass.TypesInfo, s)
+		if t == nil {
+			return nil
+		}
+		next := descendByType(ctx, node, s.Pos(), t)
+		if next == nil {
+			return nil
+		}
+		node = next
+	}
+	return node
 }
 
 // checkIDRef validates a Ref passed to ID/IDTarget. Supported shapes:
