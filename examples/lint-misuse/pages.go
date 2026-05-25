@@ -76,6 +76,13 @@ func urlSamples(ctx context.Context) {
 	// OK: bare typed lookup
 	_, _ = structpages.URLFor(ctx, homePage{})
 
+	// OK: bare typed lookup against a page that is also Mount'd
+	// standalone via a structural test (see pages_subtree_test.go).
+	// Both mounts produce the same FullRoute for itemsIndex, so the
+	// analyzer must collapse the duplicate match instead of reporting
+	// spurious ambiguity.
+	_, _ = structpages.URLFor(ctx, itemsIndex{})
+
 	// BAD: urlfor/typed — chain says items->home, but home is not under items
 	_, _ = structpages.URLFor(ctx, []any{itemsRoot{}, homePage{}})
 

@@ -76,14 +76,28 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 // resolveByType looks up a named struct type in the page tree. It
 // errors with a suggested chain form on ambiguity, mirroring the
 // runtime "ambiguous: type X matches N nodes" message.
+//
+// Matches are deduplicated by FullRoute: when a test re-mounts a
+// production sub-tree standalone (a structural test that does
+// `Mount(testMux, &subRoot{}, "/subroot")` against the same path
+// the production tree already mounts it at), both mounts produce
+// equivalent nodes at the same FullRoute. The runtime URLFor would
+// be unambiguous in production for those calls — only the static
+// analyzer's two-trees view was reporting spurious ambiguity.
 func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 	wantKey := typeKey(named)
 	var matches []*PageNode
+	seenRoute := map[string]bool{}
 	for _, root := range ctx.tree.Roots {
 		root.All(func(n *PageNode) bool {
-			if typeKey(n.Type) == wantKey {
-				matches = append(matches, n)
+			if typeKey(n.Type) != wantKey {
+				return true
 			}
+			if seenRoute[n.FullRoute] {
+				return true
+			}
+			seenRoute[n.FullRoute] = true
+			matches = append(matches, n)
 			return true
 		})
 	}
