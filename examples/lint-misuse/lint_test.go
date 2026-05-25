@@ -26,7 +26,7 @@ func TestLintMisuse(t *testing.T) {
 	want := strings.TrimSpace(`
 pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index
 pages.go:LINE:COL: [ref] Ref "/missing": no page with this route. Did you rename a route tag? Known routes: /, /items, /items/{$}, /items/{slug}, /{$}
-pages.go:LINE:COL: [ref] Ref "Ghost": no page with this name; known names include: Detail, Home, Index, Items, root
+pages.go:LINE:COL: [ref] Ref "Ghost": no page with this name; known names include: Detail, Home, Index, Items, itemsRoot, root
 pages.go:LINE:COL: [urlfor] URLFor chain: parent Items has no child of type homePage; available: Index (itemsIndex), Detail (itemDetail)
 pages.go:LINE:COL: [urlfor] URLFor: typed value at slice position 2 follows a string fragment; chain steps must all come before any string fragment
 pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/items/{slug}" (known: slug)
