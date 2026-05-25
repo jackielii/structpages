@@ -93,6 +93,14 @@ func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, 
 		return idForRef(pc, string(ref), rawID)
 	}
 
+	// Handle []any chain form: typed chain steps + trailing method spec.
+	// Parallels URLFor's []any{Parent{}, Leaf{}, "?frag"} composition,
+	// but the trailing element is a method name string or a method
+	// expression whose receiver type is the chain leaf.
+	if parts, ok := methodExpr.([]any); ok {
+		return idForChain(pc, currentPage, parts, rawID)
+	}
+
 	// Handle plain string as literal ID - return as-is
 	if str, ok := methodExpr.(string); ok {
 		return str, nil
@@ -124,6 +132,105 @@ func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, 
 	// Build ID
 	id := buildID(pageName, info.methodName, rawID)
 	return id, nil
+}
+
+// idForChain resolves the []any composition form for ID/IDTarget.
+// The trailing element is the method spec:
+//
+//   - string — used as the method name on the chain leaf's type.
+//   - method expression / method value — its receiver type IS the
+//     chain leaf, and its name supplies the method. If the prior
+//     chain step's type matches the receiver type, the method
+//     expression's implicit leaf is collapsed (no duplicate descend).
+//
+// Leading typed values form the chain steps, resolved by the same
+// rules URLFor's chain form uses (first step by type lookup,
+// subsequent steps by child-type descent).
+func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool) (string, error) {
+	if len(parts) == 0 {
+		return "", errors.New("ID: empty []any chain")
+	}
+	last := parts[len(parts)-1]
+	chainSteps := parts[:len(parts)-1]
+
+	var methodName string
+	var fromMethodExpr *methodInfo
+
+	switch t := last.(type) {
+	case string:
+		if t == "" {
+			return "", errors.New("ID: empty method name in []any chain")
+		}
+		methodName = t
+	case nil:
+		return "", errors.New("ID: nil trailing element in []any chain")
+	default:
+		rv := reflect.ValueOf(last)
+		if rv.Kind() != reflect.Func {
+			return "", fmt.Errorf(
+				"ID: trailing element of []any chain must be a method name string or method expression, got %T",
+				last)
+		}
+		info, err := extractMethodInfo(last)
+		if err != nil {
+			return "", fmt.Errorf("ID: invalid method expression in chain: %w", err)
+		}
+		if info.isFunction {
+			return "", errors.New("ID: trailing element is a standalone function; " +
+				"chain form expects a method expression bound to a page type")
+		}
+		fromMethodExpr = info
+		methodName = info.methodName
+	}
+
+	// When the trailing element is a method expression, its receiver
+	// type is an implicit final chain step. Append it unless the
+	// caller already wrote the type explicitly (e.g.,
+	// []any{Parent{}, Leaf{}, leafPage.Method} where Leaf{} and
+	// leafPage agree — collapse to a single descend rather than
+	// double-stepping).
+	if fromMethodExpr != nil {
+		recv := fromMethodExpr.receiverType
+		recvElem := recv
+		if recvElem.Kind() == reflect.Pointer {
+			recvElem = recvElem.Elem()
+		}
+		duplicate := false
+		if n := len(chainSteps); n > 0 {
+			lastStepType := reflect.TypeOf(chainSteps[n-1])
+			if pointerType(lastStepType) == pointerType(recv) {
+				duplicate = true
+			}
+		}
+		if !duplicate {
+			chainSteps = append(chainSteps, reflect.New(recvElem).Elem().Interface())
+		}
+	}
+
+	if len(chainSteps) == 0 {
+		return "", errors.New("ID: []any chain has no page context; " +
+			"provide at least one typed chain step or use a method expression")
+	}
+
+	leaf, err := pc.resolveChain(chainSteps)
+	if err != nil {
+		return "", fmt.Errorf("ID: %w", err)
+	}
+
+	// Self-render override: if the resolved leaf type matches the
+	// current page's type, prefer the current page's field name.
+	// This mirrors the bare method-expression behavior from idFor.
+	if currentPage != nil && pointerType(currentPage.Value.Type()) == pointerType(leaf.Value.Type()) {
+		leaf = currentPage
+	}
+
+	leafType := pointerType(leaf.Value.Type())
+	if _, ok := leafType.MethodByName(methodName); !ok {
+		return "", fmt.Errorf("ID: method %q not found on chain leaf type %s",
+			methodName, leafType.Elem().Name())
+	}
+
+	return buildID(leaf.Name, methodName, rawID), nil
 }
 
 // resolvePageForMethod picks the PageNode whose Name supplies the
