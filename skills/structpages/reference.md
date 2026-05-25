@@ -14,17 +14,28 @@ Main entry point. Parses page tree, registers routes on mux, returns `*StructPag
 - `title`: Root page title
 - `options`: `WithArgs`, `WithErrorHandler`, `WithMiddlewares`, `WithTargetSelector`, `WithWarnEmptyRoute`
 
+## Parse (no-mux variant)
+
+```go
+func Parse(page any, route, title string, options ...Option) (*StructPages, error)
+```
+
+Builds the page tree without registering any routes on a mux. Use in tests and tooling that need URLFor/ID/IDTarget against the real page tree but don't want an HTTP server. Accepts the same options as `Mount`; mux-shaped options (middlewares) are inert.
+
 ## StructPages Type
 
-Returned by `Mount()`. Methods:
+Returned by `Mount()` and `Parse()`. Methods:
 
 ```go
 func (sp *StructPages) URLFor(page any, args ...any) (string, error)
 func (sp *StructPages) ID(v any) (string, error)
 func (sp *StructPages) IDTarget(v any) (string, error)
+func (sp *StructPages) PageContext(ctx context.Context) context.Context
 ```
 
-Use these outside of request context (e.g., during initialization). Within request handlers, use the context-based versions.
+`PageContext` wraps `ctx` with `sp`'s page tree so the context-form `URLFor` / `ID` / `IDTarget` (in templ renders, props helpers) resolve against `sp`. The recommended test pattern: `Parse` once per package, wrap a bare `context.Background()` in `PageContext`, render against the wrapped ctx.
+
+Use the method form of `URLFor`/`ID`/`IDTarget` outside of request context (e.g., during initialization). Within request handlers, use the context-based versions.
 
 ## Context Functions
 
