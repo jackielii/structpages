@@ -11,7 +11,7 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 ## Docs
 
 - [README](https://raw.githubusercontent.com/jackielii/structpages/main/README.md): Overview, features, install, quick-start, and links to documentation and examples.
-- [API reference](https://raw.githubusercontent.com/jackielii/structpages/main/docs/api.md): Signatures for `Mount`, `StructPages`, options (`WithMiddlewares`, `WithArgs`, `WithErrorHandler`, `WithURLPrefix`), and methods (`Page`, `Content`, `Props`, `ServeHTTP`, `Middlewares`, `Init`).
+- [API reference](https://raw.githubusercontent.com/jackielii/structpages/main/docs/api.md): Signatures for `Mount`, `Parse` (no-mux variant for tests/tooling), `StructPages` (including `PageContext` for injecting the page tree into a `context.Background()` so renders can call URLFor/ID/IDTarget), options (`WithMiddlewares`, `WithArgs`, `WithErrorHandler`, `WithURLPrefix`), and methods (`Page`, `Content`, `Props`, `ServeHTTP`, `Middlewares`, `Init`).
 - [Routing patterns](https://raw.githubusercontent.com/jackielii/structpages/main/docs/routing.md): Route tag syntax (`route:"[METHOD] /path [Title]"`), nested routes, path parameters, and registration order.
 - [Supported request flows](https://raw.githubusercontent.com/jackielii/structpages/main/docs/supported-flows.md): How requests dispatch to handlers and components (`Page`/`Content`/partial methods, `Props`-only pages, `ServeHTTP` pages, render targets).
 - [Middleware](https://raw.githubusercontent.com/jackielii/structpages/main/docs/middleware.md): Global vs per-page middleware, the `MiddlewareFunc` signature, and using the `*PageNode` argument.
