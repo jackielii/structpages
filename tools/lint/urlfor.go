@@ -73,6 +73,27 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 	return resolveByType(ctx, expr.Pos(), t)
 }
 
+// dedupByFullRoute collapses runs of PageNodes that resolve to the
+// same FullRoute. Order is preserved (first occurrence wins). Used
+// after gathering matches across multiple roots so equivalent
+// mounts (e.g. a test re-mounting a production sub-tree at the
+// same path) don't trip ambiguity checks.
+func dedupByFullRoute(in []*PageNode) []*PageNode {
+	if len(in) <= 1 {
+		return in
+	}
+	seen := make(map[string]bool, len(in))
+	out := in[:0]
+	for _, n := range in {
+		if seen[n.FullRoute] {
+			continue
+		}
+		seen[n.FullRoute] = true
+		out = append(out, n)
+	}
+	return out
+}
+
 // resolveByType looks up a named struct type in the page tree. It
 // errors with a suggested chain form on ambiguity, mirroring the
 // runtime "ambiguous: type X matches N nodes" message.
@@ -87,20 +108,15 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 	wantKey := typeKey(named)
 	var matches []*PageNode
-	seenRoute := map[string]bool{}
 	for _, root := range ctx.tree.Roots {
 		root.All(func(n *PageNode) bool {
-			if typeKey(n.Type) != wantKey {
-				return true
+			if typeKey(n.Type) == wantKey {
+				matches = append(matches, n)
 			}
-			if seenRoute[n.FullRoute] {
-				return true
-			}
-			seenRoute[n.FullRoute] = true
-			matches = append(matches, n)
 			return true
 		})
 	}
+	matches = dedupByFullRoute(matches)
 	switch len(matches) {
 	case 1:
 		return matches[0]
