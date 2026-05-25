@@ -12,7 +12,12 @@ import (
 // `{name}` and `{name...}` segments. Missing keys are emitted at low
 // confidence because the runtime can pull params from request context
 // — false positives there are easy to silence with the directive.
-func checkParamMap(ctx *checkCtx, node *PageNode, args []ast.Expr) {
+//
+// fragment is the concatenated trailing string fragments of an
+// []any chain (e.g., "?preset={preset}"). Its placeholders are
+// added to the known set so keys filled by the fragment don't
+// trigger false-positive diagnostics.
+func checkParamMap(ctx *checkCtx, node *PageNode, fragment string, args []ast.Expr) {
 	if len(args) == 0 {
 		return
 	}
@@ -24,7 +29,7 @@ func checkParamMap(ctx *checkCtx, node *PageNode, args []ast.Expr) {
 		return
 	}
 
-	pattern := node.FullRoute
+	pattern := node.FullRoute + fragment
 	segments := parsePatternSegments(pattern)
 	if len(segments) == 0 && len(mapLit.Elts) == 0 {
 		return
