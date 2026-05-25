@@ -63,10 +63,16 @@ jobs:
             printf -- '---\n\n'
             cat main/examples/README.md
           } > site/docs/examples/index.md
-          # Rewrite cross-directory relative links to absolute GitHub URLs.
+          # Rewrite cross-directory `../X` links (any sibling of docs/) to
+          # absolute GitHub URLs so they resolve on the rendered site.
           find site/docs -name '*.md' -print0 | xargs -0 sed -i -E \
-            -e 's#\]\(\.\./examples/([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/examples/\1)#g' \
-            -e 's#\]\(\.\./skills/([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/skills/\1)#g'
+            -e 's#\]\(\.\./([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/\1)#g'
+          # Examples README uses `./<name>/` links (relative to examples/).
+          # In docs/examples/index.md those would resolve to /structpages/<name>
+          # which doesn't exist, so rewrite to absolute GitHub URLs.
+          sed -i -E \
+            -e 's#\]\(\./([^)]+/?)\)#](https://github.com/jackielii/structpages/tree/main/examples/\1)#g' \
+            site/docs/examples/index.md
 
       - name: Generate package reference
         run: |

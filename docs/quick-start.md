@@ -89,7 +89,7 @@ go tool templ generate -include-version=false
 go run .
 ```
 
-Open <http://localhost:8080>. You should see "Hello, structpages!" and a link to `/about`.
+Open [http://localhost:8080](http://localhost:8080). You should see "Hello, structpages!" and a link to `/about`.
 
 ## What just happened
 
