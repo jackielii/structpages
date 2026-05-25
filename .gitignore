@@ -28,6 +28,9 @@ go.work.sum
 # Superpowers / in-progress design docs — local-only
 docs/superpowers/
 
+# Docusaurus worktree (docs-site branch mounted here)
+/website/
+
 /coverage.txt
 /coverage.out
 /coverage.html

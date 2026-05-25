@@ -1,0 +1,100 @@
+name: Docs Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'examples/README.md'
+      - '**/*.go'
+      - '!**/*_test.go'
+      - 'README.md'
+      - 'PERFORMANCE.md'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-site
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout docs-site branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs-site
+          path: site
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Copy markdown content from main
+        run: |
+          set -euo pipefail
+          mkdir -p site/docs site/docs/about site/docs/reference site/docs/examples
+          cp main/docs/*.md site/docs/
+          cp main/PERFORMANCE.md site/docs/about/performance.md
+          {
+            printf -- '---\n'
+            printf -- 'title: Examples\n'
+            printf -- 'sidebar_position: 1\n'
+            printf -- '---\n\n'
+            cat main/examples/README.md
+          } > site/docs/examples/index.md
+          # Rewrite cross-directory relative links to absolute GitHub URLs.
+          find site/docs -name '*.md' -print0 | xargs -0 sed -i -E \
+            -e 's#\]\(\.\./examples/([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/examples/\1)#g' \
+            -e 's#\]\(\.\./skills/([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/skills/\1)#g'
+
+      - name: Generate package reference
+        run: |
+          set -euo pipefail
+          go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
+          cd main
+          gomarkdoc -o ../site/docs/reference/package.md ./
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Build site
+        working-directory: site
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
