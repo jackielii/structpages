@@ -27,10 +27,24 @@ func checkURLFor(ctx *checkCtx, call *ast.CallExpr) {
 	pageArg := call.Args[1]
 	args := call.Args[2:]
 
-	node := resolvePageArg(ctx, pageArg)
+	node, frag := resolvePageArgAndFragment(ctx, pageArg)
 	if node != nil {
-		checkParamMap(ctx, node, args)
+		checkParamMap(ctx, node, frag, args)
 	}
+}
+
+// resolvePageArgAndFragment is like resolvePageArg but additionally
+// returns the concatenated trailing string fragments of an []any
+// chain. Those fragments contribute placeholders to the URL
+// pattern (e.g., "?preset={preset}" supplies the {preset} key);
+// checkParamMap needs them to avoid false-positive "unknown param"
+// diagnostics.
+func resolvePageArgAndFragment(ctx *checkCtx, expr ast.Expr) (*PageNode, string) {
+	expr = unparen(expr)
+	if comp, ok := asAnySliceLiteral(ctx, expr); ok {
+		return resolveChainLiteralWithFragment(ctx, comp)
+	}
+	return resolvePageArg(ctx, expr), ""
 }
 
 // resolvePageArg classifies the page argument and resolves it to a
@@ -134,6 +148,26 @@ func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 			named.Obj().Name(), strings.Join(routes, ", "), named.Obj().Name())
 		return nil
 	}
+}
+
+// resolveChainLiteralWithFragment is the chain-form walker that
+// returns the concatenated trailing string fragments alongside the
+// leaf node. Wraps resolveChainLiteral; callers that don't care
+// about the fragment can use resolveChainLiteral directly.
+func resolveChainLiteralWithFragment(ctx *checkCtx, comp *ast.CompositeLit) (*PageNode, string) {
+	node := resolveChainLiteral(ctx, comp)
+	if node == nil {
+		return nil, ""
+	}
+	var frag strings.Builder
+	for _, e := range comp.Elts {
+		s, ok := stringConstantFromPass(ctx, e)
+		if !ok {
+			continue
+		}
+		frag.WriteString(s)
+	}
+	return node, frag.String()
 }
 
 // resolveChainLiteral handles the `[]any{step0, step1, ..., "?fragment"}`

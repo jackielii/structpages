@@ -33,6 +33,7 @@ pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/i
 pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: receiver type unmountedPage is not mounted as a page
 pages.go:LINE:COL: [ref] Ref "Detail.Index": segment 1 ("Index") not found as child of "Detail"; available:
 pages.go:LINE:COL: [idfor] IDTarget: method "Nope" not found on chain leaf "Detail"; available: Page, Stats
+pages.go:LINE:COL: [params] URLFor: param "wrongTab" does not appear in pattern "/items/{slug}?tab={tab}" (known: slug, tab)
 pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index
 pages.templ:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead
 pages.templ:LINE:COL: [url-attr] href value "/admin" is a hard-coded internal URL; use structpages.URLFor instead
