@@ -356,16 +356,15 @@ func must[T any](v T, err error) T {
 myURL := must(structpages.URLFor(ctx, MyPage{}))
 ```
 
-**Optional convenience wrappers.** Some apps define short local wrappers like `urlFor`, `idFor`, `idForTarget` — e.g. to return `templ.SafeURL` or to shorten the package qualifier. These are app-level conveniences, not framework functions:
+**Optional convenience wrappers.** Some apps define short local wrappers like `urlFor`, `idFor`, `idForTarget` — e.g. to return `templ.URL` or to shorten the package qualifier. These are app-level conveniences, not framework functions:
 
 ```go
 // in your app — purely optional
-func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
-    s, err := structpages.URLFor(ctx, page, args...)
-    return templ.SafeURL(s), err
+func urlFor(ctx context.Context, page any, args ...any) (string, error) {
+    return structpages.URLFor(ctx, page, args...)
 }
 func idFor(ctx context.Context, v any) (string, error)        { return structpages.ID(ctx, v) }
-func idForTarget(ctx context.Context, v any) (string, error)  { return structpages.IDTarget(ctx, v) }
+func idTarget(ctx context.Context, v any) (string, error)     { return structpages.IDTarget(ctx, v) }
 ```
 
 The rest of this guide uses the framework names (`structpages.URLFor`, `structpages.ID`, `structpages.IDTarget`) directly.
