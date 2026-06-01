@@ -552,9 +552,9 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 		return nil, fmt.Errorf("Ref: empty qualified path %q", ref)
 	}
 
-	// Anchor: match the first segment against the root or its direct
-	// children by Name. The root itself is included so callers can
-	// write "Root.Foo" if they want the explicit form.
+	// Anchor: match the first segment by Name. Prefer a top-level match
+	// (the root or its direct children) so existing "Parent.Field" refs
+	// resolve exactly as before and "Root.Foo" works explicitly.
 	var current *PageNode
 	if p.root.Name == segments[0] {
 		current = p.root
@@ -566,14 +566,33 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 			}
 		}
 	}
+	// Otherwise accept a uniquely-named anchor anywhere in the tree, so a
+	// Ref needn't name the structural wrappers above its target (e.g.
+	// "Receptionist.Patients" resolves without the authed-subtree segment).
+	// More than one match is ambiguous — error rather than silently pick.
 	if current == nil {
-		names := []string{p.root.Name}
-		for _, c := range p.root.Children {
-			names = append(names, c.Name)
+		var matches []*PageNode
+		for node := range p.root.All() {
+			if node.Name == segments[0] {
+				matches = append(matches, node)
+			}
 		}
-		return nil, fmt.Errorf(
-			"Ref %q: anchor %q not found at root or top level; available: %s",
-			ref, segments[0], strings.Join(names, ", "))
+		switch len(matches) {
+		case 1:
+			current = matches[0]
+		case 0:
+			return nil, fmt.Errorf(
+				"Ref %q: anchor %q not found in the page tree", ref, segments[0])
+		default:
+			routes := make([]string, len(matches))
+			for i, m := range matches {
+				routes[i] = m.FullRoute()
+			}
+			return nil, fmt.Errorf(
+				"Ref %q: anchor %q is ambiguous — it names %d nodes (%s); "+
+					"qualify it with a parent segment",
+				ref, segments[0], len(matches), strings.Join(routes, ", "))
+		}
 	}
 
 	// Walk down: each subsequent segment must match a child Name.

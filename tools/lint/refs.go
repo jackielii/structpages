@@ -126,10 +126,11 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 		ctx.report(pos, "ref", "Ref %q: empty qualified path", ref)
 		return nil
 	}
-	anchor := findRefAnchor(ctx.tree.Roots, segments[0], isIDContext)
-	if anchor == nil {
-		var available []string
-		if isIDContext {
+	var anchor *PageNode
+	if isIDContext {
+		anchor = findRefAnchor(ctx.tree.Roots, segments[0], true)
+		if anchor == nil {
+			var available []string
 			for _, root := range ctx.tree.Roots {
 				root.All(func(n *PageNode) bool {
 					available = append(available, n.Name)
@@ -139,18 +140,57 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 			ctx.report(pos, "ref",
 				"Ref %q: anchor %q not found anywhere in the tree; available: %s",
 				ref, segments[0], joinSortedUnique(available, 16))
-		} else {
-			for _, root := range ctx.tree.Roots {
-				available = append(available, root.Name)
-				for _, c := range root.Children {
-					available = append(available, c.Name)
+			return nil
+		}
+	} else {
+		// Mirror the runtime resolver (parse.go findPageNodeByQualifiedRef):
+		// prefer a top-level anchor, else accept a uniquely-named anchor
+		// anywhere in the tree, and treat >1 match as ambiguous. Keeping
+		// this in lockstep is what makes a lint-passing Ref runtime-valid.
+		for _, root := range ctx.tree.Roots {
+			if root.Name == segments[0] {
+				anchor = root
+				break
+			}
+			for _, c := range root.Children {
+				if c.Name == segments[0] {
+					anchor = c
+					break
 				}
 			}
-			ctx.report(pos, "ref",
-				"Ref %q: anchor %q not found at root or top level; available: %s",
-				ref, segments[0], joinSortedUnique(available, 16))
+			if anchor != nil {
+				break
+			}
 		}
-		return nil
+		if anchor == nil {
+			var matches []*PageNode
+			for _, root := range ctx.tree.Roots {
+				root.All(func(n *PageNode) bool {
+					if n.Name == segments[0] {
+						matches = append(matches, n)
+					}
+					return true
+				})
+			}
+			switch len(matches) {
+			case 1:
+				anchor = matches[0]
+			case 0:
+				ctx.report(pos, "ref",
+					"Ref %q: anchor %q not found in the page tree", ref, segments[0])
+				return nil
+			default:
+				routes := make([]string, len(matches))
+				for i, m := range matches {
+					routes[i] = m.FullRoute
+				}
+				ctx.report(pos, "ref",
+					"Ref %q: anchor %q is ambiguous — it names %d nodes (%s); "+
+						"qualify it with a parent segment",
+					ref, segments[0], len(matches), strings.Join(routes, ", "))
+				return nil
+			}
+		}
 	}
 	current := anchor
 	for i, name := range segments[1:] {

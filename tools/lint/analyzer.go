@@ -49,6 +49,7 @@ func run(pass *analysis.Pass, tree *PageTree) {
 		})
 	}
 	checkRouteLiterals(ctx)
+	checkRefLiterals(ctx)
 }
 
 // visitCall identifies what kind of structpages call this is and
