@@ -313,3 +313,66 @@ func TestStrictAmbiguity_errorRecommendsChain(t *testing.T) {
 		t.Errorf("error %q still mentions removed Child API", msg)
 	}
 }
+
+// Fixtures for nested-anchor qualified Ref resolution. Mirrors the
+// his-project shape (Authed > Receptionist > Patients): the anchor segment
+// of a qualified Ref isn't a top-level node, but it's unique in the tree, so
+// the Ref must resolve without naming the structural wrapper above it.
+type naLeaf struct{}
+type naOther struct{}
+
+func (naLeaf) Page() component  { return testComponent{"na-leaf"} }
+func (naOther) Page() component { return testComponent{"na-other"} }
+
+type naSection struct {
+	Leaf naLeaf `route:"/{$} Leaf"`
+}
+type naWrapper struct {
+	Section naSection `route:"/section Section"`
+	Other   naOther   `route:"/other Other"`
+}
+type naRoot struct {
+	Wrapper naWrapper `route:"/ Wrapper"`
+}
+
+func TestRef_qualifiedNestedAnchor(t *testing.T) {
+	pc, err := parsePageTree("/", &naRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	// "Section" is a grandchild (under Wrapper), not a top-level node, but
+	// it's unique — a qualified Ref anchored on it must resolve.
+	got, err := URLFor(ctx, Ref("Section.Leaf"))
+	if err != nil {
+		t.Fatalf("URLFor(Ref(\"Section.Leaf\")): %v", err)
+	}
+	if got != "/section/" {
+		t.Errorf("got %q, want %q", got, "/section/")
+	}
+}
+
+// naDupRoot mounts naWrapper twice, so "Section" names two nodes — a
+// qualified Ref anchored on it is ambiguous and must error, not silently
+// pick one.
+type naDupRoot struct {
+	A naWrapper `route:"/a A"`
+	B naWrapper `route:"/b B"`
+}
+
+func TestRef_qualifiedAmbiguousAnchor(t *testing.T) {
+	pc, err := parsePageTree("/", &naDupRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	_, err = URLFor(ctx, Ref("Section.Leaf"))
+	if err == nil {
+		t.Fatal("expected ambiguous-anchor error for duplicated 'Section'")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("error %q missing 'ambiguous' hint", err.Error())
+	}
+}
