@@ -318,11 +318,14 @@ See `examples/url-validation/` for the full pattern: `urls.go` (helpers), `valid
 
 #### Lint your templates and URL calls
 
-`structpages-lint ./...` catches three classes of bug in CI:
+`structpages-lint ./...` catches four classes of bug in CI:
 
 - Dangling `URLFor` / `Ref` calls — renamed routes, ambiguous lookups, wrong params (`urlfor`, `ref`, `params`).
 - Bad `ID` / `IDTarget` method expressions — receiver not mounted as a page (`id`, `idtarget`).
 - **URL-bearing HTML attributes** in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` — i.e. cases where you should have called `structpages.URLFor` (`url-attr`). Allows `https://`, `mailto:`, `#`, `//cdn.example.com/...`.
+- **Route string literals** in `.go` files whose value exactly equals a mounted route — e.g. `return "/admin/queues"` or `http.Redirect(w, r, "/orders", …)` — where you should resolve the URL by page type via `structpages.URLFor(ctx, SomePage{})` so renames are caught here instead of drifting (`route-literal`). Deliberately narrow: only an exact concrete-route match counts (param/`{$}` routes, trailing-slash and query variants, and the bare `/` never match); literals in `==`/`switch` comparisons and `Ref("…")` args are skipped (they read a route, they don't generate a URL); `_test.go` and generated files are skipped.
+
+**Rule of thumb: never write an in-app URL as a string literal.** Resolve it by page type — `structpages.URLFor(ctx, SomePage{})` — so the literal can't drift when routes move; the typed call breaks the build instead. When an import cycle blocks naming the page type (a shared chrome package that its own leaf pages import), register a URL resolver from the package that *can* see the types, rather than reaching for a hard-coded route string.
 
 Install once, then wire into CI alongside `go test`:
 

@@ -15,7 +15,7 @@ import (
 func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "structpageslint",
-		Doc:  "checks structpages.URLFor / ID / IDTarget / Ref calls against the page tree",
+		Doc:  "checks structpages.URLFor / ID / IDTarget / Ref calls against the page tree, and flags route string literals that should use URLFor",
 		Run: func(pass *analysis.Pass) (any, error) {
 			run(pass, tree)
 			return nil, nil
@@ -48,6 +48,7 @@ func run(pass *analysis.Pass, tree *PageTree) {
 			return true
 		})
 	}
+	checkRouteLiterals(ctx)
 }
 
 // visitCall identifies what kind of structpages call this is and
