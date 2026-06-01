@@ -376,6 +376,7 @@ Diagnostic categories:
 | `id`, `idtarget` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted. |
 | `params` | `URLFor` params that don't appear in the route pattern. |
 | `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. |
+| `route-literal` | `.go` string literals whose value exactly equals a mounted route — resolve by page type via `URLFor` instead. Narrow: exact concrete-route match only (param/`{$}` routes, trailing-slash/query variants, and bare `/` never match); literals in `==`/`switch` comparisons and `Ref(...)` args are skipped; `_test.go` and generated files are skipped. |
 
 Suppression syntax (place above the call/element, or on the same line):
 

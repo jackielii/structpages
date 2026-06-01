@@ -1,5 +1,6 @@
 // structpages-lint validates structpages.URLFor / ID / IDTarget / Ref
-// call sites against the page tree reconstructed from struct tags.
+// call sites against the page tree reconstructed from struct tags, and
+// flags route string literals that should be resolved through URLFor.
 //
 // Usage:
 //
