@@ -301,9 +301,8 @@ func html() templ.Component {
 	})
 }
 
-func urlFor(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
-	s, err := structpages.URLFor(ctx, page, args...)
-	return templ.SafeURL(s), err
+func urlFor(ctx context.Context, page any, args ...any) (string, error) {
+	return structpages.URLFor(ctx, page, args...)
 }
 
 var _ = templruntime.GeneratedTemplate

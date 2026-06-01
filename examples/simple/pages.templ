@@ -68,6 +68,6 @@ templ html() {
 	</html>
 }
 
-func urlFor(ctx context.Context, page any, args ...any) (templ.string, error) {
-	return := structpages.URLFor(ctx, page, args...)
+func urlFor(ctx context.Context, page any, args ...any) (string, error) {
+	return structpages.URLFor(ctx, page, args...)
 }
