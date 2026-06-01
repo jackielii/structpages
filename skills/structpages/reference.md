@@ -49,7 +49,7 @@ func IDTarget(ctx context.Context, v any) (string, error)
 
 Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[string]any`.
 
-1. **Struct instance**: `URLFor(ctx, MyPage{}, params)` — matches by type. Strict: errors if the type matches multiple nodes (use the chain or Ref form below).
+1. **Struct instance**: `URLFor(ctx, MyPage{}, params)` — matches by type. Strict: errors if the type matches multiple nodes (use the chain or Ref form below). For a subtree **container** (a page with only child routes and no render logic of its own), `URLFor` returns its index child's URL (the `/{$}` route) — i.e. the canonical trailing-slash form `/section/`, not the bare `/section` that would 307-redirect. Leaf pages return their own path unchanged.
 2. **`[]any` chain / composition**: `URLFor(ctx, []any{ParentPage{}, LeafPage{}}, params)` — typed values form a chain (descend by child type). Trailing strings concat as literal URL fragments: `[]any{Page{}, "?q={q}"}`. Mixing typed values after a string fragment is rejected.
 3. **Ref string**: `URLFor(ctx, Ref("Parent.Field"), params)` — qualified path (walks down by `PageNode.Name`). `Ref("PageName")` matches the first node with that name. Use Ref when the typed page can't be imported (cross-package cycle) or for type aliases.
 4. **Predicate**: `URLFor(ctx, func(*PageNode) bool { ... })` — escape hatch for custom matching.

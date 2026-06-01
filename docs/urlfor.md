@@ -31,6 +31,24 @@ href := structpages.URLFor(ctx, &productPage{}, "p-123")
 // → "/products/p-123"
 ```
 
+### Container pages resolve to their index
+
+A subtree container — a page struct that only groups child routes and has no
+render logic of its own — is never served at its bare path: `http.ServeMux`
+matches only its subtree, and the bare path 307-redirects to add the trailing
+slash. `URLFor` on a container therefore returns its index child's URL (the
+`/{$}` route), i.e. the canonical trailing-slash form, so the link serves
+directly with no redirect hop:
+
+```go
+// type sectionRoot struct { Index sectionIndex `route:"/{$}"`; … }
+href := structpages.URLFor(ctx, &sectionRoot{})
+// → "/section/"   (not "/section", which would 307)
+```
+
+Leaf pages — those that render or handle their own route — return their own
+path unchanged.
+
 ### `[]any` chain for nested params
 
 When the target is deeply nested with parameters at multiple levels, pass the chain as a single `[]any`:

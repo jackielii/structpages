@@ -407,6 +407,14 @@ func (p *parseContext) resolveParts(parts []any) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// When the chain is the whole specification, resolve a subtree
+		// container to its index child so the URL carries the canonical
+		// trailing slash. If string fragments follow, the caller is
+		// building the path explicitly (e.g. appending "/{$}"), so leave
+		// the container's own route untouched to avoid doubling it.
+		if len(fragments) == 0 {
+			node = node.urlTarget()
+		}
 		pattern = node.FullRoute()
 	}
 
