@@ -198,6 +198,8 @@ url, err := structpages.URLFor(ctx,
 
 **Always strict.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory.
 
+**Container pages resolve to their index.** A subtree container — a page struct with no render logic of its own, only child routes — is never served at its bare path: ServeMux matches only its subtree, and the bare path 307-redirects to add the trailing slash. So `URLFor` on a container returns its index child's URL (the `/{$}` route), carrying the canonical trailing slash: `URLFor(ctx, Section{})` → `/section/`, not `/section`. Leaf pages return their own bare path unchanged. Link a container by its type and the URL serves a 200 directly, with no redirect hop — don't hand-append a trailing slash, and don't link to the slashless form.
+
 **Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. This is the same as the existing composition slice — the new bit is that *multiple* typed values form a chain.
 
 **Wrong shape — interleaving fails.** The slice is positional: all chain steps first, then all URL fragments. Mixing them rejects at runtime:

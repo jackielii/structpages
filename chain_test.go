@@ -25,9 +25,13 @@ func TestChain_resolvesViaTypedSlice(t *testing.T) {
 		expect string
 	}{
 		{
+			// A reference that stops at a subtree container resolves to
+			// the container's index child, so the URL carries the
+			// canonical trailing slash instead of the bare path that
+			// would 307-redirect.
 			name:   "single typed parent in slice",
 			page:   []any{ambiguousComponentsRoot{}},
-			expect: "/components",
+			expect: "/components/",
 		},
 		{
 			name:   "chain parent -> Index (shared type, parent disambiguates)",
@@ -210,9 +214,12 @@ func TestRef_qualifiedPath(t *testing.T) {
 		expect string
 	}{
 		{
-			name:   "single-segment Ref (existing behaviour, by Name)",
+			// By-Name Ref resolving to a subtree container yields the
+			// container's index URL (canonical trailing slash), matching
+			// the typed-value and qualified-Ref forms.
+			name:   "single-segment Ref by Name resolves to container index",
 			ref:    "Foundations",
-			expect: "/foundations",
+			expect: "/foundations/",
 		},
 		{
 			name:   "qualified Ref descends by Name",

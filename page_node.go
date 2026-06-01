@@ -3,6 +3,7 @@ package structpages
 import (
 	"fmt"
 	"iter"
+	"net/http"
 	"path"
 	"reflect"
 	"strings"
@@ -33,6 +34,82 @@ func (pn *PageNode) FullRoute() string {
 		return pn.Route
 	}
 	return path.Join(pn.Parent.FullRoute(), pn.Route)
+}
+
+// urlTarget returns the node whose route should represent this node in a
+// generated URL.
+//
+// A directly-routable page (one ServeMux registers a handler for at its own
+// FullRoute) represents itself. A pure subtree container — a struct that only
+// groups child routes and has no render logic of its own — is never served at
+// its bare path: ServeMux only matches its subtree, and the bare path
+// 307-redirects to add the trailing slash. For such a container we resolve to
+// its index child (the `/{$}` route), whose URL carries the canonical trailing
+// slash. A container with no index child has no canonical page, so it is left
+// as-is rather than fabricating a slash.
+func (pn *PageNode) urlTarget() *PageNode {
+	if pn.routable() || len(pn.Children) == 0 {
+		return pn
+	}
+	if idx := pn.indexChild(); idx != nil {
+		return idx
+	}
+	return pn
+}
+
+// routable reports whether ServeMux registers a handler at this node's own
+// FullRoute. It mirrors buildHandler: a node is routable if it carries render
+// methods (Components/Props) or implements an ServeHTTP handler. A node that is
+// only a parent of other routes is not routable.
+func (pn *PageNode) routable() bool {
+	if len(pn.Components) > 0 || len(pn.Props) > 0 {
+		return true
+	}
+	return pn.hasServeHTTP()
+}
+
+// hasServeHTTP reports whether the page value declares its own (non-promoted)
+// ServeHTTP method, on either the value or pointer receiver. This is the same
+// detection asHandler uses to decide a node is an http.Handler.
+func (pn *PageNode) hasServeHTTP() bool {
+	if !pn.Value.IsValid() {
+		return false
+	}
+	st, pt := pn.Value.Type(), pn.Value.Type()
+	if st.Kind() == reflect.Pointer {
+		st = st.Elem()
+	} else {
+		pt = reflect.PointerTo(st)
+	}
+	if m, ok := st.MethodByName("ServeHTTP"); ok && !isPromotedMethod(&m) {
+		return true
+	}
+	if m, ok := pt.MethodByName("ServeHTTP"); ok && !isPromotedMethod(&m) {
+		return true
+	}
+	return false
+}
+
+// indexChild returns the child that owns this node's index route — the one
+// registered at `/{$}`, which matches the parent path with a trailing slash.
+// When the index is method-split across several children (e.g. GET landing +
+// POST submit), the GET/ALL child wins since URLFor generates navigable URLs;
+// any method-matched index is used as a fallback. Returns nil when no child is
+// an index route.
+func (pn *PageNode) indexChild() *PageNode {
+	var fallback *PageNode
+	for _, c := range pn.Children {
+		if strings.Trim(c.Route, "/") != "{$}" {
+			continue
+		}
+		if c.Method == http.MethodGet || c.Method == methodAll {
+			return c
+		}
+		if fallback == nil {
+			fallback = c
+		}
+	}
+	return fallback
 }
 
 // getRouteSegments returns pre-parsed route segments, parsing on-demand if not cached

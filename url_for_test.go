@@ -1378,3 +1378,90 @@ func TestURLFor_ambiguousTypeErrorsByDefault(t *testing.T) {
 		t.Errorf("predicate lookup: got %q, want %q", got, "/foundations/")
 	}
 }
+
+// --- container-node URL resolution -------------------------------------
+
+// A subtree container is a page struct with no render logic of its own —
+// it only groups child routes. ServeMux registers its children (the index
+// child carries `/{$}`) but never the bare container path, so a URL that
+// stops at the container would 307-redirect to add the trailing slash.
+// URLFor must therefore resolve a container to its index child and emit the
+// canonical trailing-slash form.
+
+// patientsTab mirrors the his-project receptionist tab: a pure container
+// whose index is method-split (GET landing + POST submit both at `/{$}`).
+type tabLanding struct{}
+type tabSubmit struct{}
+type tabSearch struct{}
+
+func (tabLanding) Page() component { return testComponent{"landing"} }
+func (tabSubmit) Page() component  { return testComponent{"submit"} }
+func (tabSearch) Page() component  { return testComponent{"search"} }
+
+type patientsTab struct {
+	Landing tabLanding `route:"GET /{$}    Patients"`
+	Submit  tabSubmit  `route:"POST /{$}   Register"`
+	Search  tabSearch  `route:"GET /search Search"`
+}
+
+// servicesTab is a container with no index child at all — only a /list
+// subroute. URLFor has nothing canonical to resolve to, so it must leave
+// the bare path untouched rather than inventing a slash.
+type svcList struct{}
+
+func (svcList) Page() component { return testComponent{"list"} }
+
+type servicesTab struct {
+	List svcList `route:"GET /list Services"`
+}
+
+type tabsRoot struct {
+	Patients patientsTab `route:"/patients Patients"`
+	Services servicesTab `route:"/services Services"`
+}
+
+func TestURLFor_containerResolvesToIndexChild(t *testing.T) {
+	pc, err := parsePageTree("/", &tabsRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), pc)
+
+	// Bare container type → canonical trailing-slash index URL, not the
+	// slashless form that would 307.
+	got, err := URLFor(ctx, patientsTab{})
+	if err != nil {
+		t.Fatalf("URLFor(patientsTab{}): %v", err)
+	}
+	if got != "/patients/" {
+		t.Errorf("container lookup: got %q, want %q", got, "/patients/")
+	}
+
+	// Explicit composition keeps working and must NOT double the {$}.
+	got, err = URLFor(ctx, []any{patientsTab{}, "/{$}"})
+	if err != nil {
+		t.Fatalf("URLFor([]any{patientsTab{}, \"/{$}\"}): %v", err)
+	}
+	if got != "/patients/" {
+		t.Errorf("composed lookup: got %q, want %q", got, "/patients/")
+	}
+
+	// A routable leaf under the container resolves to itself, unchanged.
+	got, err = URLFor(ctx, tabSearch{})
+	if err != nil {
+		t.Fatalf("URLFor(tabSearch{}): %v", err)
+	}
+	if got != "/patients/search" {
+		t.Errorf("leaf lookup: got %q, want %q", got, "/patients/search")
+	}
+
+	// Container with no index child has no canonical page — leave the
+	// bare path as-is rather than fabricate a trailing slash.
+	got, err = URLFor(ctx, servicesTab{})
+	if err != nil {
+		t.Fatalf("URLFor(servicesTab{}): %v", err)
+	}
+	if got != "/services" {
+		t.Errorf("index-less container: got %q, want %q", got, "/services")
+	}
+}
