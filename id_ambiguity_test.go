@@ -7,12 +7,12 @@ import (
 )
 
 // Cross-page method expression: when the receiver type is mounted
-// multiple times under different field names, the ids produced by
-// the kebab(Name) + "-" + kebab(method) rule differ. Today's
-// first-match behavior silently picks one — a latent bug. The fix
-// is to collapse same-id matches (the entryPage / topology B case
-// — three mounts with identical field name still produce one id)
-// and error on truly divergent matches with a disambiguation hint.
+// multiple times under different parents, the path-based id scheme
+// gives each mount a DISTINCT id (e.g. "foundations-entry-detail-…"
+// vs "components-entry-detail-…"). A bare method expression doesn't
+// say which mount you mean, so it is genuinely ambiguous and errors
+// with the available mounts listed. Disambiguate via the []any chain
+// form, a Ref, or the self-render path (currentPage context).
 
 type ambDashboard struct{}
 
@@ -22,7 +22,8 @@ type ambSameName struct{}
 
 func (ambSameName) Overlays() component { return testComponent{"Overlays"} }
 
-// Topology B: same field name across all parents → same kebab id.
+// Same field name across both parents — but distinct paths now yield
+// distinct ids, so a bare cross-page expression is ambiguous.
 type ambBRoot struct {
 	Foundations struct {
 		EntryDetail ambSameName `route:"/{slug} Foundation"`
@@ -32,19 +33,25 @@ type ambBRoot struct {
 	} `route:"/components Components"`
 }
 
-func TestID_CrossPageSameKebab_Accepts(t *testing.T) {
+func TestID_CrossPageSameFieldName_Errors(t *testing.T) {
 	pc, err := parsePageTree("/", &ambBRoot{})
 	if err != nil {
 		t.Fatalf("parsePageTree: %v", err)
 	}
 	ctx := pcCtx.WithValue(context.Background(), pc)
 
-	got, err := IDTarget(ctx, ambSameName.Overlays)
-	if err != nil {
-		t.Fatalf("IDTarget: %v (expected silent success; same field name everywhere → same id)", err)
+	_, err = IDTarget(ctx, ambSameName.Overlays)
+	if err == nil {
+		t.Fatal("expected ambiguity error: same field name now yields distinct path-based ids")
 	}
-	if got != "#entry-detail-overlays" {
-		t.Errorf("IDTarget = %q, want %q", got, "#entry-detail-overlays")
+	for _, want := range []string{
+		"multiple fields",
+		"foundations-entry-detail-overlays",
+		"components-entry-detail-overlays",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err.Error(), want)
+		}
 	}
 }
 

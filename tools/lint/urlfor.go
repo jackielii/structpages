@@ -86,68 +86,86 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 	return resolveByType(ctx, expr.Pos(), t)
 }
 
-// dedupByFullRoute collapses runs of PageNodes that resolve to the
-// same FullRoute. Order is preserved (first occurrence wins). Used
-// after gathering matches across multiple roots so equivalent
-// mounts (e.g. a test re-mounting a production sub-tree at the
-// same path) don't trip ambiguity checks.
-func dedupByFullRoute(in []*PageNode) []*PageNode {
-	if len(in) <= 1 {
-		return in
-	}
-	seen := make(map[string]bool, len(in))
-	out := in[:0]
-	for _, n := range in {
-		if seen[n.FullRoute] {
-			continue
-		}
-		seen[n.FullRoute] = true
-		out = append(out, n)
-	}
-	return out
+// nodeMatch pairs a matched node with the root of the tree it belongs
+// to. The root carries binary attribution, used to scope ambiguity per
+// binary.
+type nodeMatch struct {
+	node *PageNode
+	root *PageNode
 }
 
 // resolveByType looks up a named struct type in the page tree. It
 // errors with a suggested chain form on ambiguity, mirroring the
 // runtime "ambiguous: type X matches N nodes" message.
 //
-// Matches are deduplicated by FullRoute: when a test re-mounts a
-// production sub-tree standalone (a structural test that does
-// `Mount(testMux, &subRoot{}, "/subroot")` against the same path
-// the production tree already mounts it at), both mounts produce
-// equivalent nodes at the same FullRoute. The runtime URLFor would
-// be unambiguous in production for those calls — only the static
-// analyzer's two-trees view was reporting spurious ambiguity.
+// Ambiguity is scoped per binary (issue #22): a type is only ambiguous
+// when ≥2 of its mounts resolve to distinct routes within a single
+// main package. A shared page mounted once per binary across separate
+// binaries — a standalone preview/gallery binary plus the same tree
+// embedded in an app — resolves to exactly one route in each process,
+// so it must not be flagged. Within one binary, the same path mounted
+// twice (a structural test re-mounting a production sub-tree at the
+// path it already lives at) collapses by FullRoute and stays
+// unambiguous.
 func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 	wantKey := typeKey(named)
-	var matches []*PageNode
+	var matches []nodeMatch
 	for _, root := range ctx.tree.Roots {
 		root.All(func(n *PageNode) bool {
 			if typeKey(n.Type) == wantKey {
-				matches = append(matches, n)
+				matches = append(matches, nodeMatch{node: n, root: root})
 			}
 			return true
 		})
 	}
-	matches = dedupByFullRoute(matches)
-	switch len(matches) {
-	case 1:
-		return matches[0]
-	case 0:
+	if len(matches) == 0 {
 		ctx.report(pos, "urlfor",
 			"URLFor: no page mounted for type %s", named.Obj().Name())
 		return nil
-	default:
-		routes := make([]string, len(matches))
-		for i, m := range matches {
-			routes[i] = m.FullRoute
-		}
+	}
+	if routes, ok := ambiguousRoutes(matches); ok {
 		ctx.report(pos, "urlfor",
 			"URLFor: type %s is ambiguous (mounted at %s); disambiguate with "+
 				"[]any{Parent{}, %s{}} chain or Ref(\"Parent.Field\")",
 			named.Obj().Name(), strings.Join(routes, ", "), named.Obj().Name())
 		return nil
 	}
+	return matches[0].node
+}
+
+// ambiguousRoutes reports whether the matched nodes are ambiguous
+// within any single binary, returning the conflicting routes when they
+// are. Mounts are grouped by the binaries that can execute them; a type
+// resolving to ≥2 distinct FullRoutes inside one binary is ambiguous.
+// Roots with no binary attribution (library-only analysis) share an
+// implicit default group, so their mutual ambiguity is still caught.
+func ambiguousRoutes(matches []nodeMatch) ([]string, bool) {
+	byBin := map[string]map[string]bool{}
+	for _, m := range matches {
+		bins := m.root.binaries
+		if len(bins) == 0 {
+			bins = map[string]bool{"": true}
+		}
+		for b := range bins {
+			set := byBin[b]
+			if set == nil {
+				set = map[string]bool{}
+				byBin[b] = set
+			}
+			set[m.node.FullRoute] = true
+		}
+	}
+	for _, set := range byBin {
+		if len(set) >= 2 {
+			routes := make([]string, 0, len(set))
+			for r := range set {
+				routes = append(routes, r)
+			}
+			sort.Strings(routes)
+			return routes, true
+		}
+	}
+	return nil, false
 }
 
 // resolveChainLiteralWithFragment is the chain-form walker that
