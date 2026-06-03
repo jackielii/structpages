@@ -43,22 +43,22 @@ func TestID_ChainForm(t *testing.T) {
 		{
 			name:  "chain with string method name",
 			input: []any{chainAdmin{}, chainDashboard{}, "Header"},
-			want:  "#dashboard-header",
+			want:  "#admin-dashboard-header",
 		},
 		{
 			name:  "chain with method expression terminal",
 			input: []any{chainAdmin{}, chainDashboard.Header},
-			want:  "#dashboard-header",
+			want:  "#admin-dashboard-header",
 		},
 		{
 			name:  "chain targeting user's dashboard (different parent, explicit descent)",
 			input: []any{chainUser{}, chainDashboard{}, "Header"},
-			want:  "#dashboard-header",
+			want:  "#user-dashboard-header",
 		},
 		{
 			name:  "chain leaf type matches method expr receiver (collapse duplicate descend)",
 			input: []any{chainAdmin{}, chainDashboard{}, chainDashboard.Header},
-			want:  "#dashboard-header",
+			want:  "#admin-dashboard-header",
 		},
 	}
 

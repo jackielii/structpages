@@ -12,7 +12,7 @@ Main entry point. Parses page tree, registers routes on mux, returns `*StructPag
 - `page`: Root struct with route tags
 - `route`: Base path (usually `"/"`)
 - `title`: Root page title
-- `options`: `WithArgs`, `WithErrorHandler`, `WithMiddlewares`, `WithTargetSelector`, `WithWarnEmptyRoute`
+- `options`: `WithArgs`, `WithErrorHandler`, `WithMiddlewares`, `WithTargetSelector`, `WithWarnEmptyRoute`, `WithMaxIDLength`, `WithURLPrefix`
 
 ## Parse (no-mux variant)
 
@@ -71,9 +71,9 @@ The other forms are also supported. Order of detection inside `formatPathSegment
 
 ### ID / IDTarget Input Types
 
-- **Unbound method**: `ID(ctx, MyPage.UserList)` → `"my-page-user-list"`
+- **Unbound method**: `ID(ctx, MyPage.UserList)` → the page's full field-name path from the root joined with the method — `"my-page-user-list"` for a top-level page, `"admin-users-user-list"` when nested. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form `"user-list"`, with a short stable hash suffix appended when the leaf name is not unique in the tree.
 - **Bound method**: `ID(ctx, p.UserList)` → same result
-- **Standalone function**: `ID(ctx, UserWidget)` → `"user-widget"` (no page prefix, type-stable across all mounts)
+- **Standalone function**: `ID(ctx, UserWidget)` → `"<package>-user-widget"` — prefixed by the function's short package name so two same-named functions in different packages get distinct ids
 - **`[]any` chain form**: leading typed values + trailing method spec; the trailing element is either a string method name or a method expression
   - `IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})` — chain + string
   - `IDTarget(ctx, []any{adminRoot{}, dashboardPage.Header})` — chain + method expression (receiver type collapses with the leaf if both appear, and must agree)
@@ -84,13 +84,15 @@ The other forms are also supported. Order of detection inside `formatPathSegment
 
 #### Mount-context semantics
 
-The id is derived from the matched PageNode's *field name* (mount role), not the struct type name. When the same struct is mounted under multiple field names with different kebabs:
+The id is built from the node's **field-name path from the root** (root excluded) — every ancestor mount field name joined, then the method. That path uniquely identifies the mount, so two different mounts of the same struct always produce different ids (e.g. `foundations-entry-detail-overlays` vs `components-entry-detail-overlays`), even when their leaf field names match.
 
 - **Self-render** (inside the page's own templ): the resolver consults the current request's page node from context, so the id reflects *that mount* — admin's render emits `"admin-dash-header"`, user's emits `"user-dash-header"`.
-- **Cross-page** (call site has no current-page context): the resolver collects every mount of the receiver type. If all share the same field name (entryPage-style: three mounts all named `EntryDetail`), the resulting kebab id is identical → return it. If field names differ → error with the available mounts and three disambiguation primitives:
+- **Cross-page** (call site has no current-page context): a bare method expression for a type mounted in more than one place is ambiguous — each mount has its own path-based id — so it errors with the available mounts and three disambiguation primitives:
   1. `[]any` chain form (type-safe — chain steps are real types)
   2. `Ref("Parent.Field")` (string lookup, lint-validated, useful when the type isn't importable)
-  3. Move the slot to a standalone function (type-stable id, no mount dependency)
+  3. Move the slot to a standalone function (package-prefixed id, no mount dependency)
+
+**Length / readability**: the full-path form is used while it fits the budget set by `WithMaxIDLength` (default 40 chars). Beyond that, the id degrades to the compact leaf-only form (`user-list`), with a stable 4-hex-char hash suffix appended when the leaf name is shared by another node. Each id is a pure function of that node's own path, so it changes only when *that* node is renamed or moved — never because an unrelated sibling changed.
 
 Naming: CamelCase → kebab-case (`HTMLParser` → `html-parser`). The reverse direction (`kebabToPascal`) is lossy: `html-parser` → `HtmlParser`, not `HTMLParser`. HX-Target matching uses suffix and page-prefix rules (see `HTMXRenderTarget` below) rather than simple reverse conversion, so this lossiness rarely matters in practice.
 
@@ -148,6 +150,14 @@ structpages.WithWarnEmptyRoute(func(pn *PageNode) { /* custom warning */ })
 ```
 
 Customize/suppress warnings for pages with no handler and no children.
+
+### WithMaxIDLength
+
+```go
+structpages.WithMaxIDLength(60) // default 40
+```
+
+Character budget for generated element ids (`ID`/`IDTarget`) before they degrade from the readable full-path form (`admin-users-user-list`) to the compact leaf-only form (`user-list`, plus a stable hash suffix when the leaf name is not unique). Affects id generation only, never routing.
 
 ## Page Methods
 

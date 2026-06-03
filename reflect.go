@@ -16,6 +16,7 @@ type methodInfo struct {
 	methodName       string
 	receiverType     reflect.Type // nil for bound methods and standalone functions
 	receiverTypeName string       // for bound methods
+	packageName      string       // short package name, for standalone functions
 	isBound          bool
 	isFunction       bool // true for standalone functions (not methods)
 }
@@ -85,6 +86,7 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 		info = &methodInfo{
 			methodName:   methodName,
 			receiverType: nil, // No receiver type
+			packageName:  packageNameFromFuncName(fullName),
 			isBound:      false,
 			isFunction:   true,
 		}
@@ -155,6 +157,20 @@ func extractMethodNameFromFullName(fullName string) string {
 	}
 
 	return methodName
+}
+
+// packageNameFromFuncName extracts the short package name from a fully
+// qualified standalone-function name. For example
+// "github.com/foo/bar/pkg.Widget" → "pkg" and "main.Widget" → "main".
+func packageNameFromFuncName(fullName string) string {
+	seg := fullName
+	if i := strings.LastIndex(seg, "/"); i != -1 {
+		seg = seg[i+1:]
+	}
+	if i := strings.Index(seg, "."); i != -1 {
+		seg = seg[:i]
+	}
+	return seg
 }
 
 // isMethodPattern checks if a full function name represents a method (vs standalone function).

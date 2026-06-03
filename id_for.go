@@ -2,9 +2,12 @@ package structpages
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -118,20 +121,17 @@ func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, 
 		return "", err
 	}
 
-	// Find the page node (for methods only - functions don't need one)
-	var pageName string
-	if !info.isFunction {
-		pn, err := resolvePageForMethod(pc, currentPage, info)
-		if err != nil {
-			return "", fmt.Errorf("cannot find page for method expression: %w", err)
-		}
-		pageName = pn.Name
+	// Standalone functions are shared components with no tree position;
+	// they are prefixed by their package name instead of a page path.
+	if info.isFunction {
+		return pc.functionID(info, rawID), nil
 	}
-	// Standalone functions have no page prefix (they're shared components)
 
-	// Build ID
-	id := buildID(pageName, info.methodName, rawID)
-	return id, nil
+	pn, err := resolvePageForMethod(pc, currentPage, info)
+	if err != nil {
+		return "", fmt.Errorf("cannot find page for method expression: %w", err)
+	}
+	return pc.componentID(pn, info.methodName, rawID), nil
 }
 
 // idForChain resolves the []any composition form for ID/IDTarget.
@@ -230,7 +230,7 @@ func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool
 			methodName, leafType.Elem().Name())
 	}
 
-	return buildID(leaf.Name, methodName, rawID), nil
+	return pc.componentID(leaf, methodName, rawID), nil
 }
 
 // resolvePageForMethod picks the PageNode whose Name supplies the
@@ -262,14 +262,15 @@ func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodI
 		return matches[0], nil
 	}
 	first := matches[0]
-	allSameName := true
+	firstID := pc.componentID(first, info.methodName, true)
+	allSameID := true
 	for _, m := range matches[1:] {
-		if m.Name != first.Name {
-			allSameName = false
+		if pc.componentID(m, info.methodName, true) != firstID {
+			allSameID = false
 			break
 		}
 	}
-	if allSameName {
+	if allSameID {
 		return first, nil
 	}
 	// Build a useful error: list each distinct (mount, id) pair.
@@ -279,14 +280,15 @@ func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodI
 	seen := map[string]bool{}
 	var opts []opt
 	for _, m := range matches {
-		if seen[m.Name] {
+		id := pc.componentID(m, info.methodName, true)
+		if seen[id] {
 			continue
 		}
-		seen[m.Name] = true
+		seen[id] = true
 		opts = append(opts, opt{
 			name:  m.Name,
 			route: m.FullRoute(),
-			id:    buildID(m.Name, info.methodName, true),
+			id:    id,
 		})
 	}
 	descs := make([]string, len(opts))
@@ -431,26 +433,38 @@ func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 		pageName = matches[0].Name
 	}
 
-	// Find the page
-	var pn *PageNode
+	// Find the page(s) carrying this name. Names are no longer globally
+	// unique (e.g. two embedded types with the same name under different
+	// parents), so collect every match and refuse to guess when more than
+	// one carries the method.
+	var named, withMethod []*PageNode
 	for node := range pc.root.All() {
-		if node.Name == pageName {
-			pn = node
-			break
+		if node.Name != pageName {
+			continue
+		}
+		named = append(named, node)
+		if _, found := node.Value.Type().MethodByName(methodName); found {
+			withMethod = append(withMethod, node)
 		}
 	}
-	if pn == nil {
+	if len(named) == 0 {
 		return "", fmt.Errorf("no page found with name %q", pageName)
 	}
-
-	// Verify method exists on the page
-	pageType := pn.Value.Type()
-	if _, found := pageType.MethodByName(methodName); !found {
+	if len(withMethod) == 0 {
 		return "", fmt.Errorf("method %q not found on page %q", methodName, pageName)
 	}
+	if len(withMethod) > 1 {
+		descs := make([]string, len(withMethod))
+		for i, m := range withMethod {
+			descs[i] = fmt.Sprintf("%s → %q", m.FullRoute(), pc.componentID(m, methodName, true))
+		}
+		return "", fmt.Errorf(
+			"Ref %q is ambiguous: name %q is mounted at multiple routes: %s; "+
+				"disambiguate with the []any chain form or move the slot to a standalone function",
+			ref, pageName, strings.Join(descs, ", "))
+	}
 
-	// Build ID
-	return buildID(pn.Name, methodName, rawID), nil
+	return pc.componentID(withMethod[0], methodName, rawID), nil
 }
 
 // findPagesWithMethod finds all pages that have a method with the given name.
@@ -464,14 +478,120 @@ func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
 	return matches
 }
 
-// buildID constructs the HTML ID string from page name and method name.
-func buildID(pageName, methodName string, rawID bool) string {
+// defaultMaxIDLen is the character budget for a generated element id
+// before it degrades from the readable full-path form to the compact
+// leaf-only form. Overridable via WithMaxIDLength.
+const defaultMaxIDLen = 40
+
+// assignIDPaths populates idPath and idCompactSuffix on every node in
+// the tree. idPath is the kebab-cased field-name path from the root
+// (root excluded) down to the node; for the root itself it is the
+// root's own kebab name. A node whose leaf name is shared by another
+// node gets a stable "-<hash>" compact suffix so the leaf-only id form
+// stays unique.
+func (p *parseContext) assignIDPaths() {
+	leafCount := make(map[string]int)
+	for node := range p.root.All() {
+		node.idPath = idPathFor(node)
+		leafCount[node.idPath[len(node.idPath)-1]]++
+	}
+	for node := range p.root.All() {
+		if leafCount[node.idPath[len(node.idPath)-1]] > 1 {
+			node.idCompactSuffix = "-" + shortHash(strings.Join(node.idPath, "/"))
+		} else {
+			node.idCompactSuffix = ""
+		}
+	}
+}
+
+// idPathFor builds the kebab-cased field-name path from the root
+// (exclusive) down to node. The root node itself has no ancestors, so
+// it falls back to its own kebab name.
+func idPathFor(node *PageNode) []string {
+	var segs []string
+	for n := node; n != nil && n.Parent != nil; n = n.Parent {
+		segs = append(segs, camelToKebab(n.Name))
+	}
+	if len(segs) == 0 {
+		return []string{camelToKebab(node.Name)}
+	}
+	slices.Reverse(segs)
+	return segs
+}
+
+// shortHash returns the first 4 hex characters (16 bits) of the SHA-256
+// of s — a stable, deterministic disambiguator for colliding leaf names.
+func shortHash(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])[:4]
+}
+
+// checkIDUniqueness verifies that no two distinct (node, component
+// method) pairs resolve to the same element id under the current
+// maxIDLen. The path-based scheme guarantees this except for an
+// astronomically unlikely hash collision, which we surface here rather
+// than ship silently.
+func (p *parseContext) checkIDUniqueness() error {
+	type owner struct{ route, method string }
+	seen := make(map[string]owner)
+	for node := range p.root.All() {
+		for method := range node.Components {
+			id := p.componentID(node, method, true)
+			cur := owner{route: node.FullRoute(), method: method}
+			if prev, ok := seen[id]; ok && prev != cur {
+				return fmt.Errorf(
+					"element id %q is produced by both %s.%s and %s.%s; "+
+						"rename a mount field to disambiguate",
+					id, prev.route, prev.method, cur.route, cur.method)
+			}
+			seen[id] = cur
+		}
+	}
+	return nil
+}
+
+// componentID constructs the HTML id string for a method on node.
+//
+// It prefers the readable full-path form (every ancestor field name
+// joined); if that exceeds maxIDLen it degrades to the compact
+// leaf-only form, with a stable hash suffix appended when the leaf name
+// is not unique in the tree. A nil node yields the bare method name.
+func (p *parseContext) componentID(node *PageNode, methodName string, rawID bool) string {
+	if node == nil {
+		return p.idFromPrefix(nil, "", methodName, rawID)
+	}
+	return p.idFromPrefix(node.idPath, node.idCompactSuffix, methodName, rawID)
+}
+
+// functionID constructs the HTML id for a standalone function component.
+// Standalone functions are shared across pages and have no tree position,
+// so they are prefixed by their (short) package name to keep ids from two
+// same-named functions in different packages distinct.
+func (p *parseContext) functionID(info *methodInfo, rawID bool) string {
+	var prefix []string
+	if info.packageName != "" {
+		prefix = []string{camelToKebab(info.packageName)}
+	}
+	return p.idFromPrefix(prefix, "", info.methodName, rawID)
+}
+
+// idFromPrefix joins a pre-kebabed prefix path with the kebab method
+// name. When the full form exceeds maxIDLen it degrades to the last
+// prefix segment plus the method, appending compactSuffix for
+// disambiguation. An empty prefix yields the bare method name.
+func (p *parseContext) idFromPrefix(prefix []string, compactSuffix, methodName string, rawID bool) string {
+	method := camelToKebab(methodName)
 	var id string
-	if pageName != "" {
-		id = camelToKebab(pageName) + "-" + camelToKebab(methodName)
-	} else {
-		// No page name (e.g., standalone function outside page context)
-		id = camelToKebab(methodName)
+	switch {
+	case len(prefix) == 0:
+		id = method
+	default:
+		full := strings.Join(prefix, "-") + "-" + method
+		if len(full) <= p.maxIDLen {
+			id = full
+		} else {
+			id = prefix[len(prefix)-1] + "-" + method + compactSuffix
+		}
 	}
 	if !rawID {
 		id = "#" + id

@@ -21,12 +21,18 @@ type parseContext struct {
 	// does NOT affect route registration — that is controlled by Mount's
 	// route argument.
 	urlPrefix string
+	// maxIDLen is the character budget for a generated element id before
+	// it degrades from the readable full-path form to the compact
+	// leaf-only form. Defaults to defaultMaxIDLen; overridable via
+	// WithMaxIDLength.
+	maxIDLen int
 }
 
 func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
 	pc := &parseContext{
 		args:         make(map[reflect.Type]reflect.Value),
 		segmentCache: make(map[string][]segment),
+		maxIDLen:     defaultMaxIDLen,
 	}
 	for _, v := range args {
 		if err := pc.args.addArg(v); err != nil {
@@ -38,6 +44,10 @@ func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
 		return nil, err
 	}
 	pc.root = topNode
+	pc.assignIDPaths()
+	if err := pc.checkIDUniqueness(); err != nil {
+		return nil, err
+	}
 	return pc, nil
 }
 
