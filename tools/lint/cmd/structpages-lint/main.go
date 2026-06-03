@@ -23,8 +23,11 @@ import (
 )
 
 func main() {
+	tags := flag.String("tags", "", "comma-separated build tags to load packages under "+
+		"(e.g. -tags devtools), so URLFor/ID call sites in code gated behind those tags "+
+		"resolve against the tree that actually mounts them")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: structpages-lint [packages...]\n")
+		fmt.Fprintf(os.Stderr, "Usage: structpages-lint [-tags tag,tag] [packages...]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -38,6 +41,9 @@ func main() {
 			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
 			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
 		Tests: true,
+	}
+	if *tags != "" {
+		cfg.BuildFlags = []string{"-tags=" + *tags}
 	}
 	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
