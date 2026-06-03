@@ -24,6 +24,15 @@ type PageNode struct {
 	Middlewares   *reflect.Method
 	Parent        *PageNode
 	Children      []*PageNode
+
+	// idPath is the kebab-cased field-name path from the root (root
+	// excluded) down to this node — the stable identity used to build
+	// element ids. Populated by parseContext.assignIDPaths.
+	idPath []string
+	// idCompactSuffix is "" when this node's leaf name is unique across
+	// the tree, otherwise "-<hash>" derived from idPath. It disambiguates
+	// the compact (leaf-only) id form used when the full path is too long.
+	idCompactSuffix string
 }
 
 // FullRoute returns the complete route path for this page node,

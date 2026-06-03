@@ -36,6 +36,7 @@ type StructPages struct {
 	warnEmptyRoute func(*PageNode)
 	args           []any
 	urlPrefix      string
+	maxIDLen       int
 }
 
 // ID generates a raw HTML ID for a component method (without "#" prefix).
@@ -150,6 +151,14 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	}
 	pc.root.Title = title
 	pc.urlPrefix = sp.urlPrefix
+	if sp.maxIDLen > 0 && sp.maxIDLen != pc.maxIDLen {
+		// Re-resolve ids against the configured budget. idPath/suffix are
+		// length-independent, so only the uniqueness check must re-run.
+		pc.maxIDLen = sp.maxIDLen
+		if err := pc.checkIDUniqueness(); err != nil {
+			return nil, err
+		}
+	}
 	sp.pc = pc
 
 	// Register all pages
@@ -190,6 +199,21 @@ func WithArgs(args ...any) func(*StructPages) {
 func WithURLPrefix(prefix string) func(*StructPages) {
 	return func(r *StructPages) {
 		r.urlPrefix = prefix
+	}
+}
+
+// WithMaxIDLength sets the character budget for generated element ids
+// (ID/IDTarget) before they degrade from the readable full-path form
+// (every ancestor field name joined, e.g. "admin-users-user-list") to
+// the compact leaf-only form (e.g. "user-list", plus a short stable hash
+// suffix when the leaf name is not unique in the tree). The default is 40.
+//
+// A larger value keeps deeper ids fully readable at the cost of length;
+// a smaller value favors shorter ids. The value only affects id
+// generation, never routing.
+func WithMaxIDLength(n int) func(*StructPages) {
+	return func(r *StructPages) {
+		r.maxIDLen = n
 	}
 }
 

@@ -1032,18 +1032,20 @@ func TestFindPageNodeByTypeName_MethodNotFound(t *testing.T) {
 	}
 }
 
-// Test buildID with empty pageName (standalone function)
-func TestBuildID_StandaloneFunction(t *testing.T) {
+// Test componentID with a nil node (standalone function)
+func TestComponentID_StandaloneFunction(t *testing.T) {
+	pc := &parseContext{maxIDLen: defaultMaxIDLen}
+
 	// Raw ID for standalone function (no page prefix)
-	id := buildID("", "UserStatsWidget", true)
+	id := pc.componentID(nil, "UserStatsWidget", true)
 	if id != "user-stats-widget" {
-		t.Errorf("buildID with empty pageName (raw) = %q, want %q", id, "user-stats-widget")
+		t.Errorf("componentID with nil node (raw) = %q, want %q", id, "user-stats-widget")
 	}
 
 	// Selector for standalone function (with # prefix)
-	id = buildID("", "UserStatsWidget", false)
+	id = pc.componentID(nil, "UserStatsWidget", false)
 	if id != "#user-stats-widget" {
-		t.Errorf("buildID with empty pageName (selector) = %q, want %q", id, "#user-stats-widget")
+		t.Errorf("componentID with nil node (selector) = %q, want %q", id, "#user-stats-widget")
 	}
 }
 

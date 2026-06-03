@@ -42,6 +42,16 @@ type PageNode struct {
 	Parent    *PageNode
 	Children  []*PageNode
 	Methods   map[string]*types.Func
+
+	// binaries is the set of main-package import paths whose transitive
+	// import graph reaches this root's Mount call. Populated only on
+	// root nodes; descendants inherit their root's set. It is nil when
+	// no main package was in scope (library-only analysis), in which
+	// case all such roots share one implicit binary. Used to scope the
+	// URLFor type-ambiguity check per binary (issue #22): a type
+	// mounted once per binary across separate main packages is
+	// unambiguous in each process.
+	binaries map[string]bool
 }
 
 // Diagnostic is a tree-build-time diagnostic. Call-site diagnostics
@@ -82,11 +92,17 @@ func (pn *PageNode) walk(yield func(*PageNode) bool) bool {
 //     mount the same root type at the same route (production main +
 //     test setup) describe the same logical tree; collapse to one
 //     root to avoid spurious "ambiguous: type mounted N times" errors.
+//
+// After deduplication each kept root is tagged with the set of
+// binaries (main packages) that can execute its Mount call, so the
+// URLFor ambiguity check can be scoped per binary rather than module-
+// global (issue #22).
 func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 	tree := &PageTree{}
 	var diags []Diagnostic
 	seenPos := map[string]bool{}
-	seenRoot := map[string]bool{}
+	roots := map[string]*PageNode{}    // root key -> kept root
+	mountPkgs := map[string][]string{} // root key -> Mount-call package paths
 
 	for _, pkg := range pkgs {
 		if pkg.TypesInfo == nil {
@@ -105,14 +121,88 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 				continue
 			}
 			rk := typeKey(root.Type) + "|" + root.Route
-			if seenRoot[rk] {
+			// Record the Mount-call package for every call that maps to
+			// this root — even the dedup-collapsed ones — so a root
+			// mounted by two binaries is attributed to both.
+			mountPkgs[rk] = append(mountPkgs[rk], normalizePkgPath(pkg.PkgPath))
+			if _, ok := roots[rk]; ok {
 				continue
 			}
-			seenRoot[rk] = true
+			roots[rk] = root
 			tree.Roots = append(tree.Roots, root)
 		}
 	}
+
+	closures := mainClosures(pkgs)
+	for rk, root := range roots {
+		root.binaries = binariesFor(mountPkgs[rk], closures)
+	}
 	return tree, diags
+}
+
+// mainClosures maps each main package's normalised import path to the
+// set of package paths reachable from it (including itself). A Mount
+// call in package P belongs to binary M iff P is in M's closure.
+func mainClosures(pkgs []*packages.Package) map[string]map[string]bool {
+	closures := map[string]map[string]bool{}
+	for _, p := range pkgs {
+		if p == nil || p.Name != "main" {
+			continue
+		}
+		mainPath := normalizePkgPath(p.PkgPath)
+		closure := closures[mainPath]
+		if closure == nil {
+			closure = map[string]bool{}
+			closures[mainPath] = closure
+		}
+		// A main package may surface under several test variants; union
+		// their closures under the one normalised path.
+		collectImports(p, closure)
+	}
+	return closures
+}
+
+// collectImports records p and every package transitively imported by
+// p into seen, keyed by normalised import path.
+func collectImports(p *packages.Package, seen map[string]bool) {
+	np := normalizePkgPath(p.PkgPath)
+	if seen[np] {
+		return
+	}
+	seen[np] = true
+	for _, imp := range p.Imports {
+		collectImports(imp, seen)
+	}
+}
+
+// binariesFor returns the set of main-package paths whose closure
+// reaches any of the given Mount-call packages. Returns nil when no
+// main package reaches them (library-only analysis), so such roots
+// fall into the shared default binary group during ambiguity checks.
+func binariesFor(mountPkgPaths []string, closures map[string]map[string]bool) map[string]bool {
+	bins := map[string]bool{}
+	for _, mp := range mountPkgPaths {
+		for mainPath, closure := range closures {
+			if closure[mp] {
+				bins[mainPath] = true
+			}
+		}
+	}
+	if len(bins) == 0 {
+		return nil
+	}
+	return bins
+}
+
+// normalizePkgPath strips go/packages test-variant decorations so a
+// package's source-level import path is stable across the regular,
+// in-test, and external-test compilations packages.Load(Tests:true)
+// produces ("foo [foo.test]" and "foo.test" both normalise to "foo").
+func normalizePkgPath(p string) string {
+	if i := strings.IndexByte(p, ' '); i >= 0 {
+		p = p[:i]
+	}
+	return strings.TrimSuffix(p, ".test")
 }
 
 // buildRoot constructs a PageNode tree starting at the page argument
