@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -258,12 +259,125 @@ func TestMatchComponentByTarget(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := matchComponentByTarget(tt.target, tt.pageNode)
+			result := matchComponentByTarget(tt.target, tt.pageNode, nil)
 			if result != tt.expected {
 				t.Errorf("matchComponentByTarget(%q) = %q, want %q",
 					tt.target, result, tt.expected)
 			}
 		})
+	}
+}
+
+// --- compacted-id routing regression ---------------------------------------
+//
+// A deeply nested tree whose detail id exceeds the default maxIDLen (40) and
+// whose leaf name ("detail") is shared, so ID() degrades it to the compact
+// "<leaf>-<method>-<hash>" form. This mirrors the production topology
+// Authed > Admins > Admin > {Permissions,Roles} > Detail, where the
+// field-name heuristic produced "detail-detail" but ID() emitted
+// "detail-detail-<hash>" — leaving the inspector-pane swap unroutable so the
+// page fell back to rendering Page (the full layout) into the drawer.
+
+type hxPermDetail struct{}
+
+func (hxPermDetail) Page() component    { return testComponent{"PERM-PAGE"} }
+func (hxPermDetail) Content() component { return testComponent{"PERM-CONTENT"} }
+func (hxPermDetail) Detail() component  { return testComponent{"PERM-DETAIL"} }
+
+type hxRoleDetail struct{}
+
+func (hxRoleDetail) Page() component   { return testComponent{"ROLE-PAGE"} }
+func (hxRoleDetail) Detail() component { return testComponent{"ROLE-DETAIL"} }
+
+type hxPerms struct {
+	Detail hxPermDetail `route:"GET /{permID} Detail"`
+}
+type hxRoles struct {
+	Detail hxRoleDetail `route:"GET /{roleID} Detail"`
+}
+type hxAdmin struct {
+	Permissions hxPerms `route:"/permissions Permissions"`
+	Roles       hxRoles `route:"/roles Roles"`
+}
+type hxAdmins struct {
+	Admin hxAdmin `route:"/admin Admin"`
+}
+type hxAuthed struct {
+	Admins hxAdmins `route:"/"`
+}
+type hxDeepRoot struct {
+	Authed hxAuthed `route:"/"`
+}
+
+// nodeByRoute walks the tree for the node at fullRoute.
+func nodeByRoute(pc *parseContext, fullRoute string) *PageNode {
+	for n := range pc.root.All() {
+		if n.FullRoute() == fullRoute {
+			return n
+		}
+	}
+	return nil
+}
+
+func TestMatchComponentByTarget_CompactedID(t *testing.T) {
+	pc, err := parsePageTree("/", &hxDeepRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	// Default budget; the permissions detail id is 45 chars (>40) so it
+	// compacts, and "detail" is a shared leaf so it carries a hash suffix.
+	node := nodeByRoute(pc, "/admin/permissions/{permID}")
+	if node == nil {
+		t.Fatal("permissions detail node not found")
+	}
+
+	id := pc.componentID(node, "Detail", true)
+
+	// Guard: this test is only meaningful if the id actually compacted to the
+	// hashed leaf form. If the generator changes, fail loudly rather than
+	// silently exercising the non-bug path.
+	if !strings.HasPrefix(id, "detail-detail-") || len(id) != len("detail-detail-")+4 {
+		t.Fatalf("precondition: expected compacted hashed id 'detail-detail-<hash>', got %q", id)
+	}
+
+	// Pass 0 (pc-aware) routes the real id to Detail.
+	if got := matchComponentByTarget(id, node, pc); got != "Detail" {
+		t.Errorf("matchComponentByTarget(%q, pc) = %q, want %q", id, got, "Detail")
+	}
+	// Documents the bug: the field-name heuristic alone (pc == nil) cannot
+	// regenerate the hash suffix, so it fails to route the compacted id.
+	if got := matchComponentByTarget(id, node, nil); got == "Detail" {
+		t.Errorf("heuristic-only unexpectedly matched compacted id %q — fix is a no-op", id)
+	}
+}
+
+// TestHTMXv4RenderTarget_CompactedID is the end-to-end proof: a real mount,
+// an HTMX request whose HX-Target is the page's own compacted detail id, must
+// render the Detail component — not fall back to Page.
+func TestHTMXv4RenderTarget_CompactedID(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &hxDeepRoot{}, "/", "App",
+		WithTargetSelector(HTMXv4RenderTarget))
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	id, err := sp.ID(hxPermDetail.Detail)
+	if err != nil {
+		t.Fatalf("sp.ID: %v", err)
+	}
+	if !strings.HasPrefix(id, "detail-detail-") {
+		t.Fatalf("precondition: expected compacted id, got %q", id)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/permissions/24", http.NoBody)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "div#"+id) // htmx 4 sends "<tag>#<id>"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if body := rec.Body.String(); body != "PERM-DETAIL" {
+		t.Errorf("compacted-id HX-Target rendered %q, want %q (Page fallback = bug)", body, "PERM-DETAIL")
 	}
 }
 

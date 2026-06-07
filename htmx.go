@@ -25,7 +25,7 @@ func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 		hxTarget := r.Header.Get("HX-Target")
 		if hxTarget != "" {
 			// Try to match against registered method components
-			componentName := matchComponentByTarget(hxTarget, pn)
+			componentName := matchComponentByTarget(hxTarget, pn, pcCtx.Value(r.Context()))
 			if componentName != "" {
 				method := pn.Components[componentName]
 				return newMethodRenderTarget(componentName, &method), nil
@@ -76,7 +76,7 @@ func HTMXv4RenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	if r.Header.Get("HX-Request") == "true" &&
 		r.Header.Get("HX-Request-Type") != "full" {
 		if key := htmxv4TargetKey(r.Header.Get("HX-Target")); key != "" {
-			if componentName := matchComponentByTarget(key, pn); componentName != "" {
+			if componentName := matchComponentByTarget(key, pn, pcCtx.Value(r.Context())); componentName != "" {
 				method := pn.Components[componentName]
 				return newMethodRenderTarget(componentName, &method), nil
 			}
@@ -103,18 +103,41 @@ func htmxv4TargetKey(target string) string {
 // matchComponentByTarget finds a component that matches the given HX-Target ID.
 // It prioritizes matches from most specific to least specific:
 //
+//  0. Authoritative match against each component's real generated id
+//     (requires pc): pc.componentID(pn, name) == target.
 //  1. Exact match with page prefix: "index-page-todo-list" → TodoList
 //  2. Exact match without page prefix: "todo-list" → TodoList
 //  3. Suffix match (best overlap): "load-more" → EventListLoadMore
 //
+// Pass 0 is the true inverse of ID()/IDTarget(): it reproduces the id the
+// page actually emitted, accounting for the full field-path prefix, the
+// maxIDLen budget, and the compact "<leaf>-<method>-<hash>" degradation a
+// long id collapses to. The field-name heuristic in passes 1–3 reconstructs
+// ids from pn.Name alone and so cannot regenerate that hash suffix — before
+// pass 0, any id that compacted past maxIDLen was unroutable and the request
+// silently fell back to rendering Page (the full layout) into the swap target.
+// Passes 1–3 remain for partial-id ergonomics and for callers with no pc
+// (pc == nil — e.g. a selector invoked outside the request pipeline).
+//
 // This flexible matching allows HTMX targets to work even with partial IDs.
-func matchComponentByTarget(target string, pn *PageNode) string {
+func matchComponentByTarget(target string, pn *PageNode, pc *parseContext) string {
 	if target == "" || strings.Contains(target, " ") {
 		return ""
 	}
 
 	// Remove leading # if present
 	target = strings.TrimPrefix(target, "#")
+
+	// Pass 0: authoritative match against the real generated id. Ids are
+	// unique per (node, method) (checkIDUniqueness), so the first equal id
+	// is the only match and iteration order is irrelevant.
+	if pc != nil {
+		for componentName := range pn.Components {
+			if pc.componentID(pn, componentName, true) == target {
+				return componentName
+			}
+		}
+	}
 
 	pagePrefix := camelToKebab(pn.Name)
 
