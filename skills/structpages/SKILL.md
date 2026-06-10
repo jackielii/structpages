@@ -161,7 +161,7 @@ This is the canonical pattern for POST/DELETE handlers that update state and ret
 
 **A handler method that redirects (no HTML response)**
 
-Don't call `http.Redirect` directly in an HTMX app — during an HTMX request the XHR follows the 3xx and swaps the redirect *target's* body into the partial's swap target. Return a control-flow signal instead and let the global error handler send the right mechanism per request kind (`HX-Location` for HTMX — ajax navigation, like a boosted link; 303 otherwise):
+Don't call `http.Redirect` directly in an HTMX app — during an HTMX request the XHR follows the 3xx and swaps the redirect *target's* body into the partial's swap target. Return a control-flow signal instead and let the global error handler send the right mechanism per request kind: `HX-Location` for HTMX (ajax navigation, like a boosted link; `HX-Redirect` instead when the destination needs a full browser load), 303 otherwise.
 
 ```go
 // Control-flow signal, not a real error — rides the error-return path.
