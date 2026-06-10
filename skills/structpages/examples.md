@@ -961,7 +961,7 @@ Once you've started flushing a stream, returning a non-nil error can no longer p
 
 ## 14. Validating URLs (no dangling URLs in production)
 
-Both the chain form (page names, route strings, and Ref strings remain stringly typed) and `Ref` carry strings somewhere. Strings are fine — they just need to be validated. Two complementary guards:
+`structpages-lint` is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI (see SKILL.md §3). The patterns below are for what static analysis can't see: URLs assembled from runtime data, refs behind dynamic dispatch, or a deploy that skipped CI. Two complementary guards:
 
 ### Guard 1: Init-time validator — fails the boot, not the first request
 

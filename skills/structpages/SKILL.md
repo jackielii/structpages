@@ -262,12 +262,7 @@ url, err := structpages.URLFor(ctx,
 
 #### Validating URLs (no dangling URLs in production)
 
-Page names, route strings, and Ref strings stay stringly typed even in the chain form. Strings are fine — they just need to be validated. Two complementary guards (full listings in examples.md §14):
-
-1. **Init-time validator** — a `validateURLs(sp)` inventory of `sp.URLFor` calls run at boot, so a renamed field, moved route, or broken Ref kills the startup with the list of what's dangling, instead of failing on first request.
-2. **Typed URL helpers + an integration test** — one helper per URL family (the only strings live there), plus a test that mounts the tree, renders real pages, and asserts the expected `href`s appear in the body.
-
-Between them this catches renamed fields (chain step errors), renamed routes/pages (`Ref` resolution errors), new strict-mode ambiguity, and call sites bypassing the helpers. See `examples/url-validation/` in the repo for the runnable version.
+Page names, route strings, and Ref strings stay stringly typed even in the chain form. `structpages-lint` (below) is the primary guard — it validates them statically in CI. For URLs the linter can't see (built from runtime data, or behind dynamic dispatch), examples.md §14 shows a boot-time `validateURLs(sp)` inventory and an integration test that asserts rendered `href`s.
 
 #### Lint your templates and URL calls
 
