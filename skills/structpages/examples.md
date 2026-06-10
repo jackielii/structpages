@@ -1010,12 +1010,9 @@ Once you've started flushing a stream, returning a non-nil error can no longer p
 
 ## 14. Validating URLs (no dangling URLs in production)
 
-`structpages-lint` is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI (see SKILL.md §3). The patterns below are for what static analysis can't see: URLs assembled from runtime data, refs behind dynamic dispatch, or a deploy that skipped CI. Two complementary guards:
-
-### Guard 1: Init-time validator — fails the boot, not the first request
+`structpages-lint` is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI (see SKILL.md §3). For what static analysis can't see (URLs assembled from runtime data, refs behind dynamic dispatch), a boot-time inventory of `URLFor` calls kills the startup with the list of what's dangling — same dynamic as a database migration check:
 
 ```go
-// validate.go
 func validateURLs(sp *structpages.StructPages) error {
     var errs []error
     check := func(label string, gen func() (string, error)) {
@@ -1023,68 +1020,14 @@ func validateURLs(sp *structpages.StructPages) error {
             errs = append(errs, fmt.Errorf("%s: %w", label, err))
         }
     }
-    check("home", func() (string, error) { return sp.URLFor(homePage{}) })
     check("components detail", func() (string, error) {
-        return sp.URLFor([]any{componentsRoot{}, entryPage{}},
-            map[string]any{"slug": "sample"})
+        return sp.URLFor([]any{componentsRoot{}, entryPage{}}, map[string]any{"slug": "sample"})
     })
-    // For Refs (cross-package, where importing would cycle):
     check("admin settings", func() (string, error) {
         return sp.URLFor(structpages.Ref("Admin.Settings"))
     })
     return errors.Join(errs...)
 }
-
-// main.go
-sp, err := structpages.Mount(mux, &root{}, "/", "App")
-if err != nil { log.Fatal(err) }
-if err := validateURLs(sp); err != nil {
-    log.Fatalf("URL validation failed:\n%v", err)
-}
 ```
 
-A renamed field, moved route, or broken Ref now kills the boot with the inventory of what's dangling. Same dynamic as a database migration check: refuse to start serving if the world doesn't look right.
-
-### Guard 2: Typed URL helpers + an integration test
-
-```go
-// urls.go — one helper per URL family. The only strings live here.
-func urlForGroupIndex(ctx context.Context, group string) (string, error) {
-    parent, ok := groupParent(group)
-    if !ok { return "", fmt.Errorf("unknown group %q", group) }
-    return structpages.URLFor(ctx, []any{parent, groupIndex{}})
-}
-
-// integration_test.go — mount, render, assert URLs in the body.
-func TestRenderedURLsResolve(t *testing.T) {
-    mux := http.NewServeMux()
-    structpages.Mount(mux, &root{}, "/", "App")
-    cases := []struct{ path string; wantContains []string }{
-        {"/",            []string{`href="/foundations/"`, `href="/components/"`}},
-        {"/components/", []string{`href="/components/button"`}},
-    }
-    for _, tc := range cases {
-        rec := httptest.NewRecorder()
-        mux.ServeHTTP(rec, httptest.NewRequest("GET", tc.path, nil))
-        for _, want := range tc.wantContains {
-            if !strings.Contains(rec.Body.String(), want) {
-                t.Errorf("%s body missing %q", tc.path, want)
-            }
-        }
-    }
-}
-```
-
-The helper layer narrows the surface of refactorable strings; the integration test catches drift in helpers, parents, fields, routes, or accidental ambiguity, exercised end-to-end through the real renderer.
-
-### Why both?
-
-The validator runs at boot — safety net for production deploys, even if CI was skipped. The integration test runs in CI — fast feedback during development, with a clearer diff when something breaks. A `TestValidateURLs` in your test file that just calls the validator gives you the validator's coverage in CI too, for one extra line.
-
-What this catches:
-- **Renamed field** in a parent page → chain step errors with the parent's available children listed.
-- **Renamed route or page** referenced by `Ref` → `no page found with route/name "..."`.
-- **New page type introducing strict-mode ambiguity** → URLFor errors at the bare lookup.
-- **Call site bypassing helpers** → the rendered body lacks the URL the test asserts.
-
-See `examples/url-validation/` in the repo for the full runnable pattern: `urls.go` (helpers), `validate.go` (init-time inventory), `integration_test.go` (end-to-end). The library's `chain_test.go` covers the URL-shape mechanics at the unit level.
+Call it from `main` after `Mount` (fail the boot) and from a one-line test (coverage in CI). For end-to-end assurance, an integration test that mounts the tree, renders real pages, and asserts expected `href`s in the body also catches call sites that bypass your helpers. Full runnable pattern: `examples/url-validation/` in the repo.
