@@ -180,7 +180,7 @@ The `WithErrorHandler` branch that turns `Redirect` into the response is in exam
 
 **A handler method that serves JSON (API endpoint, no error return)**
 
-API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it:
+API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it. You own the response — including errors, which are JSON like everything else (no `http.Error`; its `text/plain` body is not an API response):
 
 ```go
 type TrackTime struct{}
@@ -188,14 +188,21 @@ type TrackTime struct{}
 func (p TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
     var body trackTimeRequest
     if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-        http.Error(w, "invalid request", http.StatusBadRequest)
+        writeJSONError(w, http.StatusBadRequest, "invalid request")
         return
     }
     if err := appCtx.Store.UpdateTime(r.Context(), body); err != nil {
-        http.Error(w, "update failed", http.StatusInternalServerError)
+        writeJSONError(w, http.StatusInternalServerError, "update failed")
         return
     }
     w.WriteHeader(http.StatusOK)
+}
+
+// One small app-level helper — the API's single error shape:
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 ```
 
@@ -207,7 +214,7 @@ The error-returning forms of `ServeHTTP` — and **every** `Props` method — ru
 
 - **Never call `http.Error` (or write `w`) in an error-returning handler or in `Props`.** If you write then `return err`, the write is discarded; if you write then `return nil`, you bypass the error handler. Just return the error.
 - **For a specific status code, return a typed error** (e.g. `ErrorWithStatus{Status, Title, Message}`) that the global handler unwraps with `errors.As`. Plain errors fall through to a logged 500.
-- **API/JSON endpoints use the no-error handler-method form** — there `http.Error` and direct `w` writes are correct, because you own the status code and skip the buffering wrapper.
+- **API/JSON endpoints use the no-error handler-method form** — direct `w` writes are correct there because you own the status code and skip the buffering wrapper. Write JSON error bodies, not `http.Error`.
 - **For streaming (SSE), flush with `http.NewResponseController(w)`** — it works from either `ServeHTTP` form (the buffered wrapper implements `FlushError()`/`Unwrap()`) and is the only way to *guarantee* unbuffered delivery through other middleware.
 
 See examples.md §13 for the full pattern, including the `WithErrorHandler` wiring.
@@ -499,5 +506,5 @@ This is the recommended fix for two patterns that fail under bare-context render
 10. **Disambiguation primitives:** type mounted under multiple parents → the `[]any{ParentPage{}, LeafPage{}}` chain form (strict `URLFor` errors on bare lookups). Can't import the page type (cycle) → string page arg / `Ref("Parent.Field")`; validate Ref strings at boot (§3) and with `structpages-lint`.
 11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` is `"body"`, not `"#body"` (asymmetric to `URLFor` on purpose: literal CSS selectors are legitimate, literal URL paths are anti-pattern). For an id independent of mount position, define the slot as a component (standalone function) — `IDTarget(ctx, EntryOverlaySlot)` → `"#<package>-entry-overlay-slot"`, package-prefixed, no mount-path dependence. Preferred shape for cross-package slot targeting (§4).
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
-13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).
+13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct — JSON error bodies there, never `http.Error` (see examples.md §13).
 14. **Never hand-write a partial's element id** — derive all three sites (composition `id={ID(…)}`, trigger `hx-target={IDTarget(…)}`, server `sel.Is(…)`) from the same method reference (§4).

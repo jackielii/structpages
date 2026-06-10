@@ -208,7 +208,7 @@ func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, target stru
 **Choosing a form, and the `http.Error` anti-pattern.** The buffered (error-returning) forms exist so that on error the framework can discard a partial response and render through `WithErrorHandler` instead. Therefore:
 
 - In signatures 2 and 4 (and in any `Props` method) **never write `w` directly** — no `http.Error`, no `w.WriteHeader`. Writing then `return err` discards the write when the buffer resets; writing then `return nil` bypasses the error handler. Return the error and let `WithErrorHandler` render it. For a specific status code, return a typed error (e.g. `ErrorWithStatus{Status, Title, Message}`) that the handler unwraps via `errors.As`.
-- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. There `http.Error` and direct `w` writes are the correct tools — you own the status code.
+- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. Direct `w` writes are the correct tool there — you own the status code. Match the error body to the content type (JSON errors for a JSON API); avoid `http.Error`, whose `text/plain` body fits neither an API client nor an HTMX swap.
 
 See examples.md §13 for the full worked pattern.
 
