@@ -933,7 +933,7 @@ For endpoints that serve JSON (or any non-HTML response), do **not** use the err
 1. The error-returning form buffers the whole response in memory before anything reaches the client.
 2. `WithErrorHandler` renders an **HTML** error page. An API client expects a JSON body or a bare status code, not an AppShell document.
 
-Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself. Here `http.Error` *is* the right tool — the Rule 1 prohibition only applies to the buffered, error-returning form.
+Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself — and the error *bodies*: a JSON API returns JSON errors. Don't reach for `http.Error`; its `text/plain` body is the wrong shape for an API client (the Rule 1 prohibition covers the buffered forms; here it's wrong for content-type reasons instead).
 
 ```go
 type TrackTime struct{}
@@ -945,18 +945,23 @@ func (TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppCo
         TimeSpent int32 `json:"time_spent"`
     }
     if err := json.UnmarshalRead(r.Body, &body); err != nil {
-        http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+        writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
         return
     }
     if err := appCtx.Store.UpdateTimeSpent(r.Context(), body.ViewID, body.TimeSpent); err != nil {
-        http.Error(w, "update failed", http.StatusInternalServerError)
+        writeJSONError(w, http.StatusInternalServerError, "update failed")
         return
     }
     w.WriteHeader(http.StatusOK)
 }
-```
 
-For a JSON error body instead of `http.Error`'s plain text, set the header and encode your own error shape — still in the no-return form.
+// The API's single error shape, defined once:
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+```
 
 ### Rule 4 — for streaming (SSE), flush with `http.ResponseController`
 
@@ -996,7 +1001,7 @@ Once you've started flushing a stream, returning a non-nil error can no longer p
 | Handler does…                                  | `ServeHTTP` signature              | Errors via                          |
 |-------------------------------------------------|------------------------------------|-------------------------------------|
 | Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err`; redirects via `return Redirect{To: …}` |
-| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | `http.Error` / JSON body, write `w` directly |
+| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | write `w` directly with a JSON error body (`writeJSONError`) |
 | Streams (SSE, progress)                         | either form, flush via `http.NewResponseController(w)` | SSE `event: error` frame, then `return nil` |
 
 `Props` methods always follow the first row — they are buffered and their error flows to `WithErrorHandler`, so return `ErrorWithStatus{…}` for status-coded failures, never write `w`.
