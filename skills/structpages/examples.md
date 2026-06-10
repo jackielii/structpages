@@ -186,8 +186,10 @@ func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel struc
         return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
 
     case sel.Is(p.Page), sel.Is(p.Content):
-        users, _ := p.userListData(r, appCtx)
-        groups, _ := p.groupListData(r, appCtx)
+        users, err := p.userListData(r, appCtx)
+        if err != nil { return TeamManagementProps{}, err }
+        groups, err := p.groupListData(r, appCtx)
+        if err != nil { return TeamManagementProps{}, err }
         return TeamManagementProps{
             UserPaneProps:  UserPaneProps{Users: users},
             GroupPaneProps: GroupPaneProps{Groups: groups},
@@ -413,7 +415,11 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
                 if !isAuthenticated(r) {
                     // Middleware is outside the error-return path, so do the
                     // HTMX check here: a 3xx would be swapped into the partial.
-                    loginURL := must(structpages.URLFor(r.Context(), LoginPage{}))
+                    loginURL, err := structpages.URLFor(r.Context(), LoginPage{})
+                    if err != nil {
+                        http.Error(w, "internal error", http.StatusInternalServerError)
+                        return
+                    }
                     if r.Header.Get("HX-Request") == "true" {
                         w.Header().Set("HX-Redirect", loginURL) // full browser navigation
                         return
@@ -618,7 +624,8 @@ Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted b
 ```go
 func (p tpl) Render(ctx context.Context, w io.Writer) error {
     base := pageTmpls[p.page]
-    t, _ := base.Clone()
+    t, err := base.Clone()
+    if err != nil { return err }
     t.Funcs(template.FuncMap{
         "urlFor": func(name string, a ...any) (string, error) {
             return structpages.URLFor(ctx, structpages.Ref(name), a...)
