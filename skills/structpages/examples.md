@@ -186,8 +186,10 @@ func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel struc
         return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
 
     case sel.Is(p.Page), sel.Is(p.Content):
-        users, _ := p.userListData(r, appCtx)
-        groups, _ := p.groupListData(r, appCtx)
+        users, err := p.userListData(r, appCtx)
+        if err != nil { return TeamManagementProps{}, err }
+        groups, err := p.groupListData(r, appCtx)
+        if err != nil { return TeamManagementProps{}, err }
         return TeamManagementProps{
             UserPaneProps:  UserPaneProps{Users: users},
             GroupPaneProps: GroupPaneProps{Groups: groups},
@@ -342,6 +344,8 @@ templ (p EntityDetailPage) Content(props EntityDetailProps) {
 
 ### Delete Handler (no HTML, redirect)
 
+Redirects go through the `Redirect` control-flow signal (see §13), never `http.Redirect` — an HTMX XHR follows a 3xx and swaps the target page's body into the partial's swap target:
+
 ```go
 func (p EntityDeletePage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     id := r.PathValue("entity_id")
@@ -350,8 +354,7 @@ func (p EntityDeletePage) ServeHTTP(w http.ResponseWriter, r *http.Request, appC
     }
     listURL, err := structpages.URLFor(r.Context(), EntityListPage{})
     if err != nil { return err }
-    http.Redirect(w, r, listURL, http.StatusSeeOther)
-    return nil
+    return Redirect{To: listURL}
 }
 ```
 
@@ -410,7 +413,20 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
         func(next http.Handler, pn *structpages.PageNode) http.Handler {
             return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
                 if !isAuthenticated(r) {
-                    http.Redirect(w, r, "/login", http.StatusSeeOther)
+                    // Middleware is outside the error-return path, so do the
+                    // HTMX check here: a 3xx would be swapped into the partial.
+                    loginURL, err := structpages.URLFor(r.Context(), LoginPage{})
+                    if err != nil {
+                        // http.Error is ok here because it's outside of structpages' error handling.
+                        // This is a fallback for framework-level errors.
+                        http.Error(w, "internal error", http.StatusInternalServerError)
+                        return
+                    }
+                    if r.Header.Get("HX-Request") == "true" {
+                        w.Header().Set("HX-Location", loginURL) // ajax navigation; status must stay 2xx
+                        return
+                    }
+                    http.Redirect(w, r, loginURL, http.StatusSeeOther)
                     return
                 }
                 next.ServeHTTP(w, r)
@@ -459,13 +475,16 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
 
 ## 9. RenderComponent Variants
 
-`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction when you have the receiver in scope; reach for reflective dispatch only when you don't.
+`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction — page structs are stateless, so a zero-value receiver constructs another page's component too. Reach for reflective dispatch only when the method's parameters should be DI-injected by the framework.
 
 ### Preferred: direct construction
 
 ```go
 // Same-page method — receiver is in scope, just call it.
 return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
+
+// Another page's method — zero-value receiver works; pages are stateless.
+return structpages.RenderComponent(MyPage{}.ItemList(items))
 
 // Standalone function component — call it directly.
 return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(stats))
@@ -478,11 +497,12 @@ return nil, structpages.RenderComponent(comp)
 return structpages.RenderComponent(templ.NopComponent)
 ```
 
-### Reflective dispatch (when you don't have the receiver)
+### Reflective dispatch (when params need framework DI)
 
 ```go
-// Cross-page method expression — framework finds the page and applies DI.
-// Use this from ServeHTTP handlers that re-render a sibling page's component.
+// Method expression — framework finds the mounted page, DI-injects the
+// method's params (e.g. *http.Request, *AppContext), and invokes it.
+// Explicit args fill the non-injected params, checked at runtime.
 return structpages.RenderComponent(MyPage.ItemList, items)
 
 // Bound method expression — equivalent to the unbound form; useful when the
@@ -601,12 +621,13 @@ func main() {
 }
 ```
 
-Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{id}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
+Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{userId}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
 
 ```go
 func (p tpl) Render(ctx context.Context, w io.Writer) error {
     base := pageTmpls[p.page]
-    t, _ := base.Clone()
+    t, err := base.Clone()
+    if err != nil { return err }
     t.Funcs(template.FuncMap{
         "urlFor": func(name string, a ...any) (string, error) {
             return structpages.URLFor(ctx, structpages.Ref(name), a...)
@@ -694,7 +715,7 @@ The `URLFor` argument forms (in order of detection):
 
 - **Map** (recommended): a single `map[string]any` first arg. Refactor-safe and self-documenting.
 - **Positional**: arg count exactly matches placeholder count. Brittle if placeholders are added or reordered.
-- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"id", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
+- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"userId", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
 - **Auto-fill from request**: any unfilled placeholders that match the *current request's* path params get filled automatically.
 
 ---
@@ -856,10 +877,20 @@ func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) er
     case err != nil:
         return fmt.Errorf("scheduling.book: GetPatientByMRN: %w", err) // plain error -> 500
     }
-    // ... success path writes normally; the buffer flushes when we return nil
-    http.Redirect(w, r, detailURL, http.StatusSeeOther)
-    return nil
+    // ... success: redirect to the detail page via the control-flow signal
+    return Redirect{To: detailURL}
 }
+```
+
+Redirects ride the same error-return path as a control-flow signal — **never call `http.Redirect` from a handler**: during an HTMX request the XHR follows the 3xx and swaps the redirect target's body into the partial's swap target. The signal type:
+
+```go
+// Redirect is control flow, not a real error — it implements error only to
+// ride the error-return path, which is what unwinds the render flow without
+// writing the ResponseWriter directly.
+type Redirect struct{ To string }
+
+func (Redirect) Error() string { return "redirect" }
 ```
 
 The matching global handler, wired once at `Mount`:
@@ -868,6 +899,17 @@ The matching global handler, wired once at `Mount`:
 structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
     if errors.Is(err, context.Canceled) || r.Context().Err() != nil {
         w.WriteHeader(499) // client closed request — expected, don't log as error
+        return
+    }
+    var redir Redirect
+    if errors.As(err, &redir) {
+        if r.Header.Get("HX-Request") == "true" {
+            // Ajax navigation, like a boosted link. The status must stay 2xx:
+            // htmx does not process response headers on 3xx responses.
+            w.Header().Set("HX-Location", redir.To)
+            return
+        }
+        http.Redirect(w, r, redir.To, http.StatusSeeOther)
         return
     }
     status, title, message := http.StatusInternalServerError, "Server error", err.Error()
@@ -882,6 +924,8 @@ structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err er
 })
 ```
 
+(Use `HX-Redirect` instead of `HX-Location` only when the destination genuinely needs a full browser load — a non-htmx endpoint, or a page with different `<head>` content/scripts. `HX-Location` also accepts a JSON object — `{"path": "...", "target": "..."}` — for finer swap control.)
+
 `errors.As` unwraps, so `fmt.Errorf("...: %w", ErrorWithStatus{...})` still resolves to its status. A plain `error` (a wrapped DB failure, say) falls through to a logged 500 — exactly what you want for an unexpected fault.
 
 ### Rule 3 — API endpoints use the *no-error* `ServeHTTP` form
@@ -891,7 +935,7 @@ For endpoints that serve JSON (or any non-HTML response), do **not** use the err
 1. The error-returning form buffers the whole response in memory before anything reaches the client.
 2. `WithErrorHandler` renders an **HTML** error page. An API client expects a JSON body or a bare status code, not an AppShell document.
 
-Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself. Here `http.Error` *is* the right tool — the Rule 1 prohibition only applies to the buffered, error-returning form.
+Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself — and the error *bodies*: a JSON API returns JSON errors. Don't reach for `http.Error`; its `text/plain` body is the wrong shape for an API client (the Rule 1 prohibition covers the buffered forms; here it's wrong for content-type reasons instead).
 
 ```go
 type TrackTime struct{}
@@ -903,18 +947,23 @@ func (TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppCo
         TimeSpent int32 `json:"time_spent"`
     }
     if err := json.UnmarshalRead(r.Body, &body); err != nil {
-        http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+        writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
         return
     }
     if err := appCtx.Store.UpdateTimeSpent(r.Context(), body.ViewID, body.TimeSpent); err != nil {
-        http.Error(w, "update failed", http.StatusInternalServerError)
+        writeJSONError(w, http.StatusInternalServerError, "update failed")
         return
     }
     w.WriteHeader(http.StatusOK)
 }
-```
 
-For a JSON error body instead of `http.Error`'s plain text, set the header and encode your own error shape — still in the no-return form.
+// The API's single error shape, defined once:
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+```
 
 ### Rule 4 — for streaming (SSE), flush with `http.ResponseController`
 
@@ -953,8 +1002,32 @@ Once you've started flushing a stream, returning a non-nil error can no longer p
 
 | Handler does…                                  | `ServeHTTP` signature              | Errors via                          |
 |-------------------------------------------------|------------------------------------|-------------------------------------|
-| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err` |
-| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | `http.Error` / JSON body, write `w` directly |
+| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err`; redirects via `return Redirect{To: …}` |
+| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | write `w` directly with a JSON error body (`writeJSONError`) |
 | Streams (SSE, progress)                         | either form, flush via `http.NewResponseController(w)` | SSE `event: error` frame, then `return nil` |
 
 `Props` methods always follow the first row — they are buffered and their error flows to `WithErrorHandler`, so return `ErrorWithStatus{…}` for status-coded failures, never write `w`.
+
+## 14. Validating URLs (no dangling URLs in production)
+
+`structpages-lint` is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI (see SKILL.md §3). For what static analysis can't see (URLs assembled from runtime data, refs behind dynamic dispatch), a boot-time inventory of `URLFor` calls kills the startup with the list of what's dangling — same dynamic as a database migration check:
+
+```go
+func validateURLs(sp *structpages.StructPages) error {
+    var errs []error
+    check := func(label string, gen func() (string, error)) {
+        if _, err := gen(); err != nil {
+            errs = append(errs, fmt.Errorf("%s: %w", label, err))
+        }
+    }
+    check("components detail", func() (string, error) {
+        return sp.URLFor([]any{componentsRoot{}, entryPage{}}, map[string]any{"slug": "sample"})
+    })
+    check("admin settings", func() (string, error) {
+        return sp.URLFor(structpages.Ref("Admin.Settings"))
+    })
+    return errors.Join(errs...)
+}
+```
+
+Call it from `main` after `Mount` (fail the boot) and from a one-line test (coverage in CI). For end-to-end assurance, an integration test that mounts the tree, renders real pages, and asserts expected `href`s in the body also catches call sites that bypass your helpers. Full runnable pattern: `examples/url-validation/` in the repo.

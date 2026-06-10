@@ -2,9 +2,10 @@
 name: structpages
 description: >
   Guide for building Go web applications with the structpages framework (struct-based routing + templ + HTMX).
-  Use when writing routes, page handlers, Props methods, templ templates, HTMX partial rendering,
-  URL generation (URLFor/ID/IDTarget), RenderTarget/RenderComponent patterns, or middleware with structpages.
-  Also use when the user asks about structpages patterns, conventions, or debugging structpages issues.
+  Use when writing routes, pages, page groups, Props methods, handler methods (ServeHTTP), page components,
+  partials, HTMX partial rendering and nested swap levels, URL generation (URLFor/ID/IDTarget),
+  RenderTarget/RenderComponent patterns, or middleware with structpages.
+  Also use when the user asks about structpages patterns, conventions, vocabulary, or debugging structpages issues.
 ---
 
 # structpages Framework Guide
@@ -15,6 +16,62 @@ structpages provides struct-based routing for Go web apps, integrating with `htt
 
 For detailed API docs, see [reference.md](reference.md).
 For real-world patterns and examples, see [examples.md](examples.md).
+
+## Vocabulary
+
+structpages has its own canonical terms for its recurring patterns. Where a React / Next.js / React Router concept maps cleanly, it's noted as a cross-reference for knowledge transfer — but the structpages term is primary. Two guardrails: Go wins where Go owns the concept (`ServeHTTP` is a **handler method**, not a "server action"), and pure composition isn't named (a layout is just a **component** that takes **children** — there's no "layout route").
+
+### Core nouns
+
+| Term | What it is | Cross-ref |
+|---|---|---|
+| **page** | a route-tagged struct — a node in the route tree | Next/RR route/page |
+| **page group** | a page with no render of its own (no `Page` or `ServeHTTP`), only child pages; served through its `/{$}` page | — (not a "layout route") |
+| **component** | a standalone `templ Foo()` block — reusable, mount-independent, package-prefixed id | React component |
+| **page component** | a `templ (p Page) Foo()` method — mount-aware, receiver in scope (incl. `Page`, `Content`). Used two ways: **composition** (called inside another page component) and **re-rendering** (returned alone as a partial) | React component (bound) |
+| **children** | templ `{ children... }` composition | React children |
+| **partial** | a page component returned on its own as an HTMX response to re-render just that region — a *role* a page component plays, not a distinct kind | HTMX |
+
+### The props cluster
+
+| Term | What it is | Cross-ref |
+|---|---|---|
+| **Props method** | the `Props(...)` method that loads data via DI | *like RR `loader` / Next `getServerSideProps`* |
+| **props struct** | the named struct type the Props method returns and page components accept | *like a React props type* |
+| **props** | a value of the props struct, in flight into a page component | React props (the value) |
+
+The chain reads: the **Props method** returns a **props struct**; that **props** value is handed to a **page component**.
+
+### Methods on a page
+
+| Term | Method | Job |
+|---|---|---|
+| **Page method** | `Page(props)` | the main render entry — a page component that composes the full page (layout + content) |
+| **Props method** | `Props(...)` | loads data via DI → returns the props struct |
+| **handler method** | `ServeHTTP(...)` | imperative entry: mutate / redirect / serve JSON, or render a partial via `RenderComponent` — the Go `http.Handler` shape |
+| **Middlewares method** | `Middlewares()` | declares middleware for the page + descendants |
+
+(`Content` is not a framework concept — just a conventional page component name for a layout's main region; the matcher treats it like any other page component.)
+
+The two render entries differ in flavor: the **Page method** renders declaratively (compose page components); the **handler method** renders imperatively (write the response, or hand a page component to `RenderComponent`). Both ultimately render through page components.
+
+### API helpers (literal — these are the public API)
+
+`RenderComponent`, `RenderTarget`, `URLFor`, `ID` / `IDTarget`, `Ref`, `WithArgs` (dependency injection / **args**).
+
+### Loose comparisons (analogies, not structpages terms)
+
+For readers arriving from React/Next — transfer aids, not structpages vocabulary.
+
+| structpages | React/Next analogy | note |
+|---|---|---|
+| `/{$}` route of a page group | RR **index route** | nothing special — just the group's own page |
+| **Page method** vs **handler method** | declarative `page` vs imperative **Route Handler / API route** | two ways to respond within one router — **not** "Page Router vs App Router" |
+| **component** composition | Server Component composition | both render on the server |
+
+## Request Lifecycle
+
+For a rendering page: **route match → Props method** (with `RenderTarget` injected to pick the region) **→ page component render** — `Page` for full loads, a partial for HTMX requests targeting that region's id. A handler method (`ServeHTTP`) bypasses this pipeline: it responds imperatively, optionally handing a page component to `RenderComponent`.
 
 ## Core Concepts
 
@@ -27,12 +84,14 @@ type pages struct {
     home    `route:"/{$}   Home"`            // exact root match
     about   `route:"/about About"`           // all methods (default)
     create  `route:"POST /create Create"`    // POST only
-    detail  `route:"/item/{id} Item"`        // path parameter
+    detail  `route:"/item/{itemId} Item"`    // path parameter
     files   `route:"/files/{path...} Files"` // wildcard
 }
 ```
 
 If no method is given, the route accepts all methods (internally stored as `"ALL"`).
+
+**Name path params specifically — `{itemId}`, not `{id}`.** Nested routes compose into a single pattern, so two levels each declaring `{id}` collide: ServeMux rejects duplicate wildcard names in a pattern (`/order/{id}/item/{id}` panics at mount), and `URLFor`'s `map[string]any` params couldn't tell them apart anyway. Specific names compose cleanly: `/order/{orderId}/item/{itemId}`.
 
 Nesting creates URL hierarchies:
 
@@ -46,32 +105,13 @@ type adminPages struct {
 }
 ```
 
-**Mounting a module's static-asset subtree alongside its pages.** Use the wildcard form for prefix subtrees — `path.Join` strips trailing slashes when computing the full route, so `route:"/static/"` registers as an exact `GET /admin/static` (no prefix match). Use `{path...}` instead:
+**Mounting a module's static-asset subtree alongside its pages.** Use the wildcard form for prefix subtrees — `path.Join` strips trailing slashes when computing the full route, so `route:"/static/"` registers as an exact `GET /admin/static` (no prefix match). Mount `route:"GET /static/{path...} Assets"` on a small `ServeHTTP` page serving an embedded FS instead. This keeps the module self-contained: `/admin` and `/admin/static/*` register together, with no separate `pub.Handle(…)` call to keep in sync. Full pattern (embed, middleware, link-side considerations): examples.md §12.
 
-```go
-type adminPages struct {
-    dashboard `route:"/{$} Dashboard"`
-    users     `route:"/users Users"`
-    Assets    staticFiles `route:"GET /static/{path...} Assets"`
-}
+### 2. Page Response Patterns
 
-//go:embed all:static
-var staticFS embed.FS
-var staticRoot = must(fs.Sub(staticFS, "static"))
+There are four main shapes — choose based on what the page does. The first renders declaratively (Props method + Page method); the other three are handler methods (`ServeHTTP`).
 
-type staticFiles struct{}
-func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    http.ServeFileFS(w, r, staticRoot, r.PathValue("path"))
-}
-```
-
-This keeps the module self-contained: `/admin` and `/admin/static/*` register together, with no separate `pub.Handle("/admin/static/", …)` call to keep in sync. See examples.md §12 for the full pattern, including middleware and link-side considerations.
-
-### 2. Page Handler Patterns
-
-There are three main patterns — choose based on what the page does.
-
-**Pattern A: Props + Page/Content (renders HTML)**
+**A page that renders: Props method + Page method**
 
 ```go
 type MyPage struct{}
@@ -102,7 +142,9 @@ templ (p MyPage) Content(props MyPageProps) {
 }
 ```
 
-**Pattern B: ServeHTTP that writes, then re-renders a sibling component (most common HTMX form action)**
+For regions inside `Content` that must swap independently (master-detail panes, dialogs), add inner levels — see §5c.
+
+**A handler method that returns a partial (most common HTMX form action)**
 
 ```go
 type AddTodo struct{}
@@ -112,28 +154,35 @@ func (a AddTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
     if text != "" {
         store.Add(text)
     }
-    // Render the sibling page's TodoList component as the response
-    return structpages.RenderComponent(Index.TodoList)
+    // Construct the refreshed partial and return it as the response
+    return structpages.RenderComponent(Index{}.TodoList(store.List()))
 }
 ```
 
-`RenderComponent(SomePage.SomeMethod)` is a method-expression: the framework finds that page, applies DI, and invokes the method. This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial *belonging to another page*. When you're rendering a component on the *same* page (you have its receiver in scope), prefer constructing the component directly — see §5.
+This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial. **Pass a constructed component** — a normal Go call the compiler checks. Page structs are stateless, so a zero-value receiver (`Index{}`) constructs a *sibling* page's component just as well as your own. The reflective method-expression form (`RenderComponent(Index.TodoList)`) is reserved for components whose parameters the framework should DI-inject — see §5b.
 
-**Pattern C: ServeHTTP for redirects (no HTML response)**
+**A handler method that redirects (no HTML response)**
+
+Don't call `http.Redirect` directly in an HTMX app — during an HTMX request the XHR follows the 3xx and swaps the redirect *target's* body into the partial's swap target. Return a control-flow signal instead and let the global error handler send the right mechanism per request kind: `HX-Location` for HTMX (ajax navigation, like a boosted link; `HX-Redirect` instead when the destination needs a full browser load), 303 otherwise.
 
 ```go
-type SubmitForm struct{}
+// Control-flow signal, not a real error — rides the error-return path.
+type Redirect struct{ To string }
+func (Redirect) Error() string { return "redirect" }
 
 func (p SubmitForm) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     // perform action...
-    http.Redirect(w, r, "/somewhere", http.StatusSeeOther)
-    return nil
+    url, err := structpages.URLFor(r.Context(), DetailPage{}, map[string]any{"itemId": id})
+    if err != nil { return err }
+    return Redirect{To: url}
 }
 ```
 
-**Pattern D: ServeHTTP for API/JSON endpoints (no error return)**
+The `WithErrorHandler` branch that turns `Redirect` into the response is in examples.md §13. The URL comes from `URLFor`, never a string literal (`route-literal` lint).
 
-API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it:
+**A handler method that serves JSON (API endpoint, no error return)**
+
+API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it. You own the response — including errors, which are JSON like everything else (no `http.Error`; its `text/plain` body is not an API response):
 
 ```go
 type TrackTime struct{}
@@ -141,14 +190,21 @@ type TrackTime struct{}
 func (p TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
     var body trackTimeRequest
     if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-        http.Error(w, "invalid request", http.StatusBadRequest)
+        writeJSONError(w, http.StatusBadRequest, "invalid request")
         return
     }
     if err := appCtx.Store.UpdateTime(r.Context(), body); err != nil {
-        http.Error(w, "update failed", http.StatusInternalServerError)
+        writeJSONError(w, http.StatusInternalServerError, "update failed")
         return
     }
     w.WriteHeader(http.StatusOK)
+}
+
+// One small app-level helper — the API's single error shape:
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 ```
 
@@ -160,7 +216,7 @@ The error-returning forms of `ServeHTTP` — and **every** `Props` method — ru
 
 - **Never call `http.Error` (or write `w`) in an error-returning handler or in `Props`.** If you write then `return err`, the write is discarded; if you write then `return nil`, you bypass the error handler. Just return the error.
 - **For a specific status code, return a typed error** (e.g. `ErrorWithStatus{Status, Title, Message}`) that the global handler unwraps with `errors.As`. Plain errors fall through to a logged 500.
-- **API/JSON endpoints use Pattern D** (no error return) — there `http.Error` and direct `w` writes are correct, because you own the status code and skip the buffering wrapper.
+- **API/JSON endpoints use the no-error handler-method form** — direct `w` writes are correct there because you own the status code and skip the buffering wrapper. Write JSON error bodies, not `http.Error`.
 - **For streaming (SSE), flush with `http.NewResponseController(w)`** — it works from either `ServeHTTP` form (the buffered wrapper implements `FlushError()`/`Unwrap()`) and is the only way to *guarantee* unbuffered delivery through other middleware.
 
 See examples.md §13 for the full pattern, including the `WithErrorHandler` wiring.
@@ -171,8 +227,8 @@ See examples.md §13 for the full pattern, including the `WithErrorHandler` wiri
 
 ```templ
 <a href={ structpages.URLFor(ctx, MyPage{}) }>Link</a>
-<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"id": item.ID}) }>Detail</a>
-<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"id": item.ID}) } method="POST">
+<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"itemId": item.ID}) }>Detail</a>
+<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"itemId": item.ID}) } method="POST">
 ```
 
 **Prefer `map[string]any` for path parameters.** It's explicit at the call site, survives route changes, and reads as a single value rather than a sequence of positional or alternating args. Positional and key/value-pair forms also work (see reference.md §URLFor Args Formats) but are easier to misalign during refactors.
@@ -198,26 +254,9 @@ url, err := structpages.URLFor(ctx,
 
 **Always strict.** A bare type that matches multiple nodes errors instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory.
 
-**Container pages resolve to their index.** A subtree container — a page struct with no render logic of its own, only child routes — is never served at its bare path: ServeMux matches only its subtree, and the bare path 307-redirects to add the trailing slash. So `URLFor` on a container returns its index child's URL (the `/{$}` route), carrying the canonical trailing slash: `URLFor(ctx, Section{})` → `/section/`, not `/section`. Leaf pages return their own bare path unchanged. Link a container by its type and the URL serves a 200 directly, with no redirect hop — don't hand-append a trailing slash, and don't link to the slashless form.
+**Page groups resolve to their index.** A page group — a page with no render of its own, only child pages — is never served at its bare path: ServeMux matches only its subtree, and the bare path 307-redirects to add the trailing slash. So `URLFor` on a page group returns its index child's URL (the `/{$}` route), carrying the canonical trailing slash: `URLFor(ctx, Section{})` → `/section/`, not `/section`. Leaf pages return their own bare path unchanged. Link a page group by its type and the URL serves a 200 directly, with no redirect hop — don't hand-append a trailing slash, and don't link to the slashless form.
 
-**Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. This is the same as the existing composition slice — the new bit is that *multiple* typed values form a chain.
-
-**Wrong shape — interleaving fails.** The slice is positional: all chain steps first, then all URL fragments. Mixing them rejects at runtime:
-
-```go
-// Wrong — typed value after a string fragment:
-url, _ := structpages.URLFor(ctx,
-    []any{componentsRoot{}, "?tab={tab}", entryPage{}},
-    map[string]any{"slug": "x", "tab": "props"})
-// → error: URLFor: typed value at slice position 2 follows a string
-//   fragment; chain steps must all come before any string fragment
-
-// Right — chain first, fragments after:
-url, _ := structpages.URLFor(ctx,
-    []any{componentsRoot{}, entryPage{}, "?tab={tab}"},
-    map[string]any{"slug": "x", "tab": "props"})
-// → "/components/x?tab=props"
-```
+**Chain semantics.** Inside `[]any{...}`, leading typed values form a chain through the page tree: the first resolves to a node via the normal lookup; each subsequent typed value descends into a child of that type (must be unique among siblings, else error). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. The slice is positional — all chain steps first, then all URL fragments; a typed value after a string fragment errors at runtime with the offending position.
 
 ```go
 type root struct {
@@ -239,157 +278,68 @@ url, err := structpages.URLFor(ctx,
 
 #### Validating URLs (no dangling URLs in production)
 
-Both the chain form (field-name strings show up as type identity once compiled — but page names, route strings, and Ref strings remain stringly typed) and `Ref` carry strings somewhere. Strings are fine — they just need to be validated. Two complementary guards:
-
-**1. Init-time validator — fails the boot, not the first request.**
-
-```go
-// validate.go
-func validateURLs(sp *structpages.StructPages) error {
-    var errs []error
-    check := func(label string, gen func() (string, error)) {
-        if _, err := gen(); err != nil {
-            errs = append(errs, fmt.Errorf("%s: %w", label, err))
-        }
-    }
-    check("home", func() (string, error) { return sp.URLFor(homePage{}) })
-    check("components detail", func() (string, error) {
-        return sp.URLFor([]any{componentsRoot{}, entryPage{}},
-            map[string]any{"slug": "sample"})
-    })
-    // For Refs (cross-package, where importing would cycle):
-    check("admin settings", func() (string, error) {
-        return sp.URLFor(structpages.Ref("Admin.Settings"))
-    })
-    return errors.Join(errs...)
-}
-
-// main.go
-sp, err := structpages.Mount(mux, &root{}, "/", "App")
-if err != nil { log.Fatal(err) }
-if err := validateURLs(sp); err != nil {
-    log.Fatalf("URL validation failed:\n%v", err)
-}
-```
-
-A renamed field, moved route, or broken Ref now kills the boot with the inventory of what's dangling. Same dynamic as a database migration check: refuse to start serving if the world doesn't look right.
-
-**2. Wrap URL generation in typed helpers + an integration test.**
-
-```go
-// urls.go — one helper per URL family. The only strings live here.
-func urlForGroupIndex(ctx context.Context, group string) (string, error) {
-    parent, ok := groupParent(group)
-    if !ok { return "", fmt.Errorf("unknown group %q", group) }
-    return structpages.URLFor(ctx, []any{parent, groupIndex{}})
-}
-
-// integration_test.go — mount, render, assert URLs in the body.
-func TestRenderedURLsResolve(t *testing.T) {
-    mux := http.NewServeMux()
-    structpages.Mount(mux, &root{}, "/", "App")
-    cases := []struct{ path string; wantContains []string }{
-        {"/",            []string{`href="/foundations/"`, `href="/components/"`}},
-        {"/components/", []string{`href="/components/button"`}},
-    }
-    for _, tc := range cases {
-        rec := httptest.NewRecorder()
-        mux.ServeHTTP(rec, httptest.NewRequest("GET", tc.path, nil))
-        for _, want := range tc.wantContains {
-            if !strings.Contains(rec.Body.String(), want) {
-                t.Errorf("%s body missing %q", tc.path, want)
-            }
-        }
-    }
-}
-```
-
-The helper layer narrows the surface of refactorable strings; the integration test catches drift in helpers, parents, fields, routes, or accidental ambiguity, exercised end-to-end through the real renderer.
-
-**Why both?** The validator runs at boot — safety net for production deploys, even if CI was skipped. The integration test runs in CI — fast feedback during development, with a clearer diff when something breaks. A `TestValidateURLs` in your test file that just calls the validator gives you the validator's coverage in CI too, for one extra line.
-
-What this catches:
-- **Renamed field** in a parent struct → chain step errors with the parent's available children listed.
-- **Renamed route or page** referenced by `Ref` → `no page found with route/name "..."`.
-- **New page type introducing strict-mode ambiguity** → URLFor errors at the bare lookup.
-- **Call site bypassing helpers** → the rendered body lacks the URL the test asserts.
-
-See `examples/url-validation/` for the full pattern: `urls.go` (helpers), `validate.go` (init-time inventory), `integration_test.go` (end-to-end). The library's `chain_test.go` covers the URL-shape mechanics at the unit level.
+Page names, route strings, and Ref strings stay stringly typed even in the chain form. `structpages-lint` (below) is the primary guard — it validates them statically in CI. For URLs the linter can't see (built from runtime data, or behind dynamic dispatch), examples.md §14 shows a boot-time `validateURLs(sp)` inventory and an integration test that asserts rendered `href`s.
 
 #### Lint your templates and URL calls
 
-`structpages-lint ./...` catches four classes of bug in CI:
-
-- Dangling `URLFor` / `Ref` calls — renamed routes, ambiguous lookups, wrong params (`urlfor`, `ref`, `params`).
-- Bad `ID` / `IDTarget` method expressions — receiver not mounted as a page (`id`, `idtarget`).
-- **URL-bearing HTML attributes** in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` — i.e. cases where you should have called `structpages.URLFor` (`url-attr`). Allows `https://`, `mailto:`, `#`, `//cdn.example.com/...`.
-- **Route string literals** in `.go` files whose value exactly equals a mounted route — e.g. `return "/admin/queues"` or `http.Redirect(w, r, "/orders", …)` — where you should resolve the URL by page type via `structpages.URLFor(ctx, SomePage{})` so renames are caught here instead of drifting (`route-literal`). Deliberately narrow: only an exact concrete-route match counts (param/`{$}` routes, trailing-slash and query variants, and the bare `/` never match); literals in `==`/`switch` comparisons and `Ref("…")` args are skipped (they read a route, they don't generate a URL); `_test.go` and generated files are skipped.
-
 **Rule of thumb: never write an in-app URL as a string literal.** Resolve it by page type — `structpages.URLFor(ctx, SomePage{})` — so the literal can't drift when routes move; the typed call breaks the build instead. When an import cycle blocks naming the page type (a shared chrome package that its own leaf pages import), register a URL resolver from the package that *can* see the types, rather than reaching for a hard-coded route string.
 
-Install once, then wire into CI alongside `go test`:
+`structpages-lint` enforces this in CI. Install once, then wire in alongside `go test`:
 
 ```shell
 go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
 structpages-lint ./...
 ```
 
-Suppress a single diagnostic with a comment. **Prefer `//` in both `.go` and `.templ`** — Go-style comments are stripped from the generated HTML, while `<!-- … -->` HTML comments render into every response.
+It catches four classes of bug: dangling `URLFor`/`Ref` calls (`urlfor`, `ref`, `params`), unmounted `ID`/`IDTarget` receivers (`id`, `idtarget`), hard-coded URLs in `.templ` URL-bearing attributes (`url-attr`), and `.go` string literals that equal a mounted route (`route-literal`). See reference.md §Lint Tool for the full category table and the `structpages:lint:ignore` suppression syntax (prefer `//`-style directives in both `.go` and `.templ` — HTML comments render into every response).
 
-```go
-//structpages:lint:ignore url-attr
-url := structpages.URLFor(...)            // in .go files
-```
-
-```templ
-// structpages:lint:ignore url-attr
-<a href="/legacy">…</a>                    // in .templ files (preferred)
-```
-
-`<!-- structpages:lint:ignore url-attr -->` also works in `.templ` for the rare case where you actually want the directive visible to anyone viewing source, but the `//` form is the default.
-
-The directive applies to its own line and the line immediately below, so placing it above an element works the same as inline. Multiple categories are comma-separated; bare `structpages:lint:ignore` suppresses every category on that line.
-
-When you need a plain string (not in a templ attribute that handles errors), wrap with a small `must` helper:
+Templ attribute expressions take `(string, error)` directly — no wrapper needed there. The exception, still inside templ, is a context that needs a plain string, like `templ.Attributes` map values; use a small `must` helper for those (and only those):
 
 ```go
 func must[T any](v T, err error) T {
     if err != nil { panic(err) }
     return v
 }
-
-myURL := must(structpages.URLFor(ctx, MyPage{}))
 ```
 
-**Optional convenience wrappers.** Some apps define short local wrappers like `urlFor`, `idFor`, `idForTarget` — e.g. to return `templ.URL` or to shorten the package qualifier. These are app-level conveniences, not framework functions:
-
-```go
-// in your app — purely optional
-func urlFor(ctx context.Context, page any, args ...any) (string, error) {
-    return structpages.URLFor(ctx, page, args...)
-}
-func idFor(ctx context.Context, v any) (string, error)        { return structpages.ID(ctx, v) }
-func idTarget(ctx context.Context, v any) (string, error)     { return structpages.IDTarget(ctx, v) }
+```templ
+@PrimaryButton(templ.Attributes{
+    "hx-get": must(structpages.URLFor(ctx, UserNewModal{})),
+}) { + New User }
 ```
-
-The rest of this guide uses the framework names (`structpages.URLFor`, `structpages.ID`, `structpages.IDTarget`) directly.
 
 ### 4. HTMX Partial Rendering
 
-All HTMX requests for a page go to the SAME route. structpages picks which component to render from the `HX-Target` header by matching element IDs against component method names.
+This is the framework's central loop. **One method reference — e.g. `MyPage.UserList` — drives three sites that must agree, and `ID`/`IDTarget` make them agree by construction:**
 
-`structpages.ID` / `structpages.IDTarget` generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method (`ID` returns `"my-page-user-list"` for a top-level page, `"admin-users-user-list"` when nested; `IDTarget` prepends `#`). Including the ancestor path guarantees two different mounts never collide. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form (`"user-list"`) with a stable hash suffix when the leaf name is shared. Standalone-function components are prefixed by their package name (`ID(ctx, UserWidget)` → `"<package>-user-widget"`). For plain string arguments both functions return the string unchanged — `IDTarget("body")` is `"body"`, not `"#body"`.
+1. **Composition site** — where the page component is composed in, wrap it in an element with `id={ structpages.ID(ctx, MyPage.UserList) }`.
+2. **Trigger site** — the element that fires the update points `hx-target={ structpages.IDTarget(ctx, MyPage.UserList) }` at the page's own route (`hx-get={ structpages.URLFor(ctx, MyPage{}) }`).
+3. **Server site** — all HTMX requests for a page go to the SAME route; structpages matches the `HX-Target` header back to the page component by id, and the Props method branches on the injected `RenderTarget` with `sel.Is(p.UserList)` to load just that region's data and render it (§5).
+
+Because all three derive from the same method reference, renaming the method or moving the mount can't desynchronize them — there is no string id to drift. Never hand-write the id at one site and generate it at another.
+
+`structpages.ID` / `structpages.IDTarget` generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method (`ID` returns `"my-page-user-list"` for a top-level page, `"admin-users-user-list"` when nested; `IDTarget` prepends `#`). Including the ancestor path guarantees two different mounts never collide. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form (`"user-list"`) with a stable hash suffix when the leaf name is shared. Components (standalone `templ` blocks) are prefixed by their package name (`ID(ctx, UserWidget)` → `"<package>-user-widget"`). For plain string arguments both functions return the string unchanged — `IDTarget("body")` is `"body"`, not `"#body"`.
 
 ```templ
-// Set element ID on the component's wrapper
+// Site 1 — composition: set the element ID on the component's wrapper
 <div id={ structpages.ID(ctx, MyPage.UserList) }>
     @p.UserList(props.Users)
 </div>
 
-// HTMX targeting
+// Site 2 — trigger: target that id, hit the page's own route
 <input hx-get={ structpages.URLFor(ctx, MyPage{}) }
        hx-target={ structpages.IDTarget(ctx, MyPage.UserList) }
        hx-swap="outerHTML" />
+```
+
+```go
+// Site 3 — server: Props branches on the injected RenderTarget
+func (p MyPage) Props(r *http.Request, sel structpages.RenderTarget) (MyPageProps, error) {
+    if sel.Is(p.UserList) {
+        return MyPageProps{}, structpages.RenderComponent(p.UserList(loadUsers(r)))
+    }
+    return MyPageProps{Users: loadUsers(r) /* … everything for the full page */}, nil
+}
 ```
 
 **Self-render uses the current mount.** When `ID` / `IDTarget` runs inside a page's own templ, the id derives from *that mount's* field name — so the same struct type mounted under different parents produces different ids per render context:
@@ -439,30 +389,56 @@ func (p MyPage) Props(r *http.Request, appCtx *AppContext, sel structpages.Rende
 }
 ```
 
-Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when you genuinely don't have the receiver in scope (see §5b).
+Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when the method's params should be DI-injected by the framework (see §5b).
 
 Note: only methods named `Props` are auto-invoked. `*Props`-suffixed helpers (e.g. `userListData` above; some codebases call them `UserListProps`) are *just regular methods* the user calls from inside `Props` — there's no priority resolution.
 
-Standalone function components work the same way — just call the function:
+Components (standalone `templ` blocks) work the same way — just call the function:
 
 ```go
 case sel.Is(UserStatsWidget):
     return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(loadStats()))
 ```
 
-### 5b. Cross-page RenderComponent (method expression)
+### 5b. RenderComponent by method expression (DI-injected params)
 
-When `ServeHTTP` (or another handler) needs to render a component owned by a *different* page, you don't have that page's receiver. Pass a method expression — the framework finds the page, applies DI, and invokes the method:
+Page structs are stateless, so even a *different* page's component is normally constructed directly with a zero-value receiver — `RenderComponent(MyPage{}.ItemList(items))` — and that stays the preferred form. The reflective method-expression form is for components whose parameters the framework should DI-inject rather than you supplying them:
 
 ```go
+// ItemList takes DI-injectable params (e.g. *http.Request, *AppContext) —
+// the framework finds the mounted page, fills them, and invokes the method:
 func (p MyDelete) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     if err := store.Delete(...); err != nil { return err }
-    items, _ := loadItems(r, appCtx)
-    return structpages.RenderComponent(MyPage.ItemList, items)
+    return structpages.RenderComponent(MyPage.ItemList)
 }
 ```
 
-This is the one case where the reflection path earns its keep: you can't construct `MyPage.ItemList(items)` directly because you don't have a `MyPage` instance, and the method may rely on DI-injected dependencies the framework will fill in.
+Explicit args are matched into the non-injected parameters (`RenderComponent(MyPage.ItemList, items)`), validated by reflection before the call — readable errors, but at runtime, not compile time. If you're loading the data yourself anyway, construct the component instead.
+
+### 5c. Nested swap levels (Page → Content → Detail)
+
+A page's page components can be composed into **nested swap levels**, each an independent HTMX target. The outer level wraps the next in its templ; the levels are *not* a tree the matcher walks — they're sibling page components on one page, each with its own id (§4). Because `HX-Target` selects the page component whose id it matches exactly, an `HX-Target` of a given level's id re-renders *only* that level, even though `Page` composes `Content` composes `Detail`. Compose one level per region you need to swap on its own:
+
+- **`Page`** (the Page method) — the full document. Rendered on a cold load / `hx-boost` body swap. Composes the app layout around `Content`.
+- **`Content`** — the page's main region (a naming convention, not a framework concept). Holds the page chrome — heading, back-link, toolbar — around the inner level. Rendered when only the main content swaps (boosted nav between pages).
+- **`Detail`** (or another inner name) — a region *inside* `Content` that must swap on its own, independently of the chrome. Holds **none** of the page chrome.
+
+```templ
+templ (d FooDetail) Page(p Props)    { @ui.Layout(title) { <main class="…">@d.Content(p)</main> } }
+templ (d FooDetail) Content(p Props) { <div id={ structpages.ID(ctx, FooDetail.Content) }>
+                                          <a href={ back }>&larr; Foos</a>   // standalone-page chrome
+                                          @d.Detail(p)
+                                        </div> }
+templ (FooDetail) Detail(p Props)    { <div id={ structpages.ID(ctx, FooDetail.Detail) } class="@container …">
+                                          … fields, lifecycle actions, dialog mount …   // NO back-link, NO header
+                                        </div> }
+```
+
+**Why three levels, not two.** The trap is reusing `Content` as the swap fragment for an embedded region — e.g. a master-detail inspector pane hosting the *standalone detail page's* `Content`. That drags the page chrome (back-link, page header, outer container) into the pane, where it's wrong. Splitting out `Detail` gives the embedded region a chrome-less partial while `Content` keeps the standalone-page chrome. **The level you embed/swap is the one with no chrome of its own.**
+
+**Master-detail rule of thumb.** The list page renders a detail *mount* whose id is `ID(ctx, FooDetail.Detail)`; rows `hx-get` the detail route with `hx-target = IDTarget(ctx, FooDetail.Detail)`. Lifecycle actions and dialog handlers that re-render the detail also target — and `RenderComponent` — `FooDetail.Detail`, never `.Content`. The standalone detail page (deep-link / no-JS) is the only thing that renders `Content` (chrome + `Detail`).
+
+Add a fourth level whenever a sub-region needs to swap independently again — the rule generalizes: **one page component per independently-swappable region, outer wraps inner, embed/target the innermost that has no chrome above it.**
 
 ### 6. Middleware
 
@@ -522,14 +498,15 @@ This is the recommended fix for two patterns that fail under bare-context render
 
 1. **Props methods extract path params** via `r.PathValue("param")`, not function arguments.
 2. **Never hardcode URLs** — always use `structpages.URLFor`.
-3. **Partial templ methods** take ONLY their specific data, not the full props struct.
+3. **Partials take ONLY their specific data**, not the full props struct.
 4. **`RenderComponent` is returned as an error** — when returned, the Props return values (other than the error) are ignored.
-5. **Prefer `RenderComponent(p.X(args))` to `RenderComponent(MyPage.X, args)` or `RenderComponent(target, args)`** when the receiver is in scope — direct construction is compile-time-checked; the reflective forms defer arg/type checks to runtime. The reflective forms are still correct, just slower and more error-prone; reserve them for cross-page renders where you don't have the receiver.
+5. **Prefer `RenderComponent(p.X(args))` / `RenderComponent(MyPage{}.X(args))`** — constructed components are compile-time-checked; zero-value receivers make this work cross-page too. Reserve the reflective method-expression form for components whose params the framework should DI-inject (§5b).
 6. **Children are registered before parents** on the mux (so nested-route conflicts resolve correctly).
 7. **Promoted (embedded) methods are skipped** — only methods defined directly on the struct count.
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
 9. **`ErrSkipPageRender` is only honored from `Props`** (e.g. after writing a redirect). Returning it from `ServeHTTP` does nothing special.
-10. **Disambiguation primitives:** when the same page type is mounted under multiple parents, use the `[]any{ParentPage{}, LeafPage{}}` chain form — strict `URLFor` (the default) errors on bare lookups. When a package needs to URL-to a page it can't import (importing would cycle), pass a string as the page arg — `URLFor(ctx, "Parent.Field", ...)` — or use the explicit `Ref("Parent.Field")` form; both resolve the same way. Ref also handles Go type aliases that collapse to one `reflect.Type`. Ref strings are validated at startup via the init-time validator pattern (see §3 "Validating URLs") and by `structpages-lint` (which also validates string args to `URLFor`).
-11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` returns `"body"`, not `"#body"`. This is intentionally asymmetric to `URLFor`, where a top-level string is auto-`Ref`; literal CSS selectors are legitimate, literal URL paths are anti-pattern. **For an id that doesn't depend on a page's mount position** (e.g. a slot rendered the same way regardless of which section root mounts the page), define the slot as a standalone function: `func EntryOverlaySlot() templ.Component { ... }` then `IDTarget(ctx, EntryOverlaySlot)` returns `"#<package>-entry-overlay-slot"` — prefixed by the function's package name (so same-named slots in different packages stay distinct), with no dependence on any page's mount path. This is the preferred shape for cross-package slot targeting.
+10. **Disambiguation primitives:** type mounted under multiple parents → the `[]any{ParentPage{}, LeafPage{}}` chain form (strict `URLFor` errors on bare lookups). Can't import the page type (cycle) → string page arg / `Ref("Parent.Field")`; validate Ref strings at boot (§3) and with `structpages-lint`.
+11. **Plain strings pass through `ID` and `IDTarget` unchanged** — `IDTarget("body")` is `"body"`, not `"#body"` (asymmetric to `URLFor` on purpose: literal CSS selectors are legitimate, literal URL paths are anti-pattern). For an id independent of mount position, define the slot as a component (standalone function) — `IDTarget(ctx, EntryOverlaySlot)` → `"#<package>-entry-overlay-slot"`, package-prefixed, no mount-path dependence. Preferred shape for cross-package slot targeting (§4).
 12. **The `form:` struct tag is not read by the framework** — only `route:` is. Anything else on a route field is ignored.
-13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct (see examples.md §13).
+13. **Never write `w` (e.g. `http.Error`) in `Props` or an error-returning `ServeHTTP`** — they are buffered; return the error instead. Use a typed error like `ErrorWithStatus` for a specific status code. API/JSON endpoints use the no-error `ServeHTTP(w, r, deps...)` form, where direct writes are correct — JSON error bodies there, never `http.Error` (see examples.md §13).
+14. **Never hand-write a partial's element id** — derive all three sites (composition `id={ID(…)}`, trigger `hx-target={IDTarget(…)}`, server `sel.Is(…)`) from the same method reference (§4).
