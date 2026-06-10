@@ -621,7 +621,7 @@ func main() {
 }
 ```
 
-Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{id}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
+Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{userId}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
 
 ```go
 func (p tpl) Render(ctx context.Context, w io.Writer) error {
@@ -715,7 +715,7 @@ The `URLFor` argument forms (in order of detection):
 
 - **Map** (recommended): a single `map[string]any` first arg. Refactor-safe and self-documenting.
 - **Positional**: arg count exactly matches placeholder count. Brittle if placeholders are added or reordered.
-- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"id", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
+- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"userId", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
 - **Auto-fill from request**: any unfilled placeholders that match the *current request's* path params get filled automatically.
 
 ---

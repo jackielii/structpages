@@ -59,14 +59,14 @@ Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[str
 **Recommended: `map[string]any`** — explicit, position-independent, refactor-safe.
 
 ```go
-URLFor(ctx, page{}, map[string]any{"id": 123, "slug": "hello"})
+URLFor(ctx, page{}, map[string]any{"userId": 123, "slug": "hello"})
 ```
 
 The other forms are also supported. Order of detection inside `formatPathSegments`:
 
 - **Map**: a single `map[string]any` first arg. Recommended; values are looked up by placeholder name.
 - **Positional**: arg count exactly matches placeholder count → `URLFor(ctx, page{}, "val1", "val2")` fills left to right. Brittle if placeholders are reordered.
-- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "id", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
+- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "userId", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
 - **Auto-fill from request**: unfilled placeholders that match path params from the *current request's route* are filled automatically. Other routes' params do not auto-fill.
 
 ### ID / IDTarget Input Types

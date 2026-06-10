@@ -84,12 +84,14 @@ type pages struct {
     home    `route:"/{$}   Home"`            // exact root match
     about   `route:"/about About"`           // all methods (default)
     create  `route:"POST /create Create"`    // POST only
-    detail  `route:"/item/{id} Item"`        // path parameter
+    detail  `route:"/item/{itemId} Item"`    // path parameter
     files   `route:"/files/{path...} Files"` // wildcard
 }
 ```
 
 If no method is given, the route accepts all methods (internally stored as `"ALL"`).
+
+**Name path params specifically — `{itemId}`, not `{id}`.** Nested routes compose into a single pattern, so two levels each declaring `{id}` collide: ServeMux rejects duplicate wildcard names in a pattern (`/order/{id}/item/{id}` panics at mount), and `URLFor`'s `map[string]any` params couldn't tell them apart anyway. Specific names compose cleanly: `/order/{orderId}/item/{itemId}`.
 
 Nesting creates URL hierarchies:
 
@@ -170,7 +172,7 @@ func (Redirect) Error() string { return "redirect" }
 
 func (p SubmitForm) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     // perform action...
-    url, err := structpages.URLFor(r.Context(), DetailPage{}, map[string]any{"id": id})
+    url, err := structpages.URLFor(r.Context(), DetailPage{}, map[string]any{"itemId": id})
     if err != nil { return err }
     return Redirect{To: url}
 }
@@ -225,8 +227,8 @@ See examples.md §13 for the full pattern, including the `WithErrorHandler` wiri
 
 ```templ
 <a href={ structpages.URLFor(ctx, MyPage{}) }>Link</a>
-<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"id": item.ID}) }>Detail</a>
-<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"id": item.ID}) } method="POST">
+<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"itemId": item.ID}) }>Detail</a>
+<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"itemId": item.ID}) } method="POST">
 ```
 
 **Prefer `map[string]any` for path parameters.** It's explicit at the call site, survives route changes, and reads as a single value rather than a sequence of positional or alternating args. Positional and key/value-pair forms also work (see reference.md §URLFor Args Formats) but are easier to misalign during refactors.
