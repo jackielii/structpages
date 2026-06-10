@@ -423,7 +423,7 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
                         return
                     }
                     if r.Header.Get("HX-Request") == "true" {
-                        w.Header().Set("HX-Redirect", loginURL) // full browser navigation
+                        w.Header().Set("HX-Location", loginURL) // ajax navigation; status must stay 2xx
                         return
                     }
                     http.Redirect(w, r, loginURL, http.StatusSeeOther)
@@ -904,7 +904,9 @@ structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err er
     var redir Redirect
     if errors.As(err, &redir) {
         if r.Header.Get("HX-Request") == "true" {
-            w.Header().Set("HX-Redirect", redir.To) // full browser navigation
+            // Ajax navigation, like a boosted link. The status must stay 2xx:
+            // htmx does not process response headers on 3xx responses.
+            w.Header().Set("HX-Location", redir.To)
             return
         }
         http.Redirect(w, r, redir.To, http.StatusSeeOther)
@@ -922,7 +924,7 @@ structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err er
 })
 ```
 
-(Use `HX-Location` instead of `HX-Redirect` if you want an ajax-style navigation that swaps without a full page load.)
+(Use `HX-Redirect` instead of `HX-Location` only when the destination genuinely needs a full browser load — a non-htmx endpoint, or a page with different `<head>` content/scripts. `HX-Location` also accepts a JSON object — `{"path": "...", "target": "..."}` — for finer swap control.)
 
 `errors.As` unwraps, so `fmt.Errorf("...: %w", ErrorWithStatus{...})` still resolves to its status. A plain `error` (a wrapped DB failure, say) falls through to a logged 500 — exactly what you want for an unexpected fault.
 
