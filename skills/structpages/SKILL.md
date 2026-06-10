@@ -152,24 +152,31 @@ func (a AddTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
     if text != "" {
         store.Add(text)
     }
-    // Render the sibling page's TodoList component as the response
-    return structpages.RenderComponent(Index.TodoList)
+    // Construct the refreshed partial and return it as the response
+    return structpages.RenderComponent(Index{}.TodoList(store.List()))
 }
 ```
 
-`RenderComponent(SomePage.SomeMethod)` is a method-expression: the framework finds that page, applies DI, and invokes the method. This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial *belonging to another page*. When you're rendering a component on the *same* page (you have its receiver in scope), prefer constructing the component directly — see §5.
+This is the canonical pattern for POST/DELETE handlers that update state and return a refreshed partial. **Pass a constructed component** — a normal Go call the compiler checks. Page structs are stateless, so a zero-value receiver (`Index{}`) constructs a *sibling* page's component just as well as your own. The reflective method-expression form (`RenderComponent(Index.TodoList)`) is reserved for components whose parameters the framework should DI-inject — see §5b.
 
 **A handler method that redirects (no HTML response)**
 
+Don't call `http.Redirect` directly in an HTMX app — during an HTMX request the XHR follows the 3xx and swaps the redirect *target's* body into the partial's swap target. Return a control-flow signal instead and let the global error handler send the right mechanism per request kind (`HX-Redirect`/`HX-Location` for HTMX, 303 otherwise):
+
 ```go
-type SubmitForm struct{}
+// Control-flow signal, not a real error — rides the error-return path.
+type Redirect struct{ To string }
+func (Redirect) Error() string { return "redirect" }
 
 func (p SubmitForm) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     // perform action...
-    http.Redirect(w, r, "/somewhere", http.StatusSeeOther)
-    return nil
+    url, err := structpages.URLFor(r.Context(), DetailPage{}, map[string]any{"id": id})
+    if err != nil { return err }
+    return Redirect{To: url}
 }
 ```
+
+The `WithErrorHandler` branch that turns `Redirect` into the response is in examples.md §13. The URL comes from `URLFor`, never a string literal (`route-literal` lint).
 
 **A handler method that serves JSON (API endpoint, no error return)**
 
@@ -277,15 +284,19 @@ structpages-lint ./...
 
 It catches four classes of bug: dangling `URLFor`/`Ref` calls (`urlfor`, `ref`, `params`), unmounted `ID`/`IDTarget` receivers (`id`, `idtarget`), hard-coded URLs in `.templ` URL-bearing attributes (`url-attr`), and `.go` string literals that equal a mounted route (`route-literal`). See reference.md §Lint Tool for the full category table and the `structpages:lint:ignore` suppression syntax (prefer `//`-style directives in both `.go` and `.templ` — HTML comments render into every response).
 
-When you need a plain string (not in a templ attribute that handles errors), wrap with a small `must` helper:
+Templ attribute expressions take `(string, error)` directly — no wrapper needed there. The exception, still inside templ, is a context that needs a plain string, like `templ.Attributes` map values; use a small `must` helper for those (and only those):
 
 ```go
 func must[T any](v T, err error) T {
     if err != nil { panic(err) }
     return v
 }
+```
 
-myURL := must(structpages.URLFor(ctx, MyPage{}))
+```templ
+@PrimaryButton(templ.Attributes{
+    "hx-get": must(structpages.URLFor(ctx, UserNewModal{})),
+}) { + New User }
 ```
 
 ### 4. HTMX Partial Rendering
@@ -301,15 +312,25 @@ Because all three derive from the same method reference, renaming the method or 
 `structpages.ID` / `structpages.IDTarget` generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method (`ID` returns `"my-page-user-list"` for a top-level page, `"admin-users-user-list"` when nested; `IDTarget` prepends `#`). Including the ancestor path guarantees two different mounts never collide. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form (`"user-list"`) with a stable hash suffix when the leaf name is shared. Components (standalone `templ` blocks) are prefixed by their package name (`ID(ctx, UserWidget)` → `"<package>-user-widget"`). For plain string arguments both functions return the string unchanged — `IDTarget("body")` is `"body"`, not `"#body"`.
 
 ```templ
-// Set element ID on the component's wrapper
+// Site 1 — composition: set the element ID on the component's wrapper
 <div id={ structpages.ID(ctx, MyPage.UserList) }>
     @p.UserList(props.Users)
 </div>
 
-// HTMX targeting
+// Site 2 — trigger: target that id, hit the page's own route
 <input hx-get={ structpages.URLFor(ctx, MyPage{}) }
        hx-target={ structpages.IDTarget(ctx, MyPage.UserList) }
        hx-swap="outerHTML" />
+```
+
+```go
+// Site 3 — server: Props branches on the injected RenderTarget
+func (p MyPage) Props(r *http.Request, sel structpages.RenderTarget) (MyPageProps, error) {
+    if sel.Is(p.UserList) {
+        return MyPageProps{}, structpages.RenderComponent(p.UserList(loadUsers(r)))
+    }
+    return MyPageProps{Users: loadUsers(r) /* … everything for the full page */}, nil
+}
 ```
 
 **Self-render uses the current mount.** When `ID` / `IDTarget` runs inside a page's own templ, the id derives from *that mount's* field name — so the same struct type mounted under different parents produces different ids per render context:
@@ -359,7 +380,7 @@ func (p MyPage) Props(r *http.Request, appCtx *AppContext, sel structpages.Rende
 }
 ```
 
-Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when you genuinely don't have the receiver in scope (see §5b).
+Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when the method's params should be DI-injected by the framework (see §5b).
 
 Note: only methods named `Props` are auto-invoked. `*Props`-suffixed helpers (e.g. `userListData` above; some codebases call them `UserListProps`) are *just regular methods* the user calls from inside `Props` — there's no priority resolution.
 
@@ -370,19 +391,20 @@ case sel.Is(UserStatsWidget):
     return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(loadStats()))
 ```
 
-### 5b. Cross-page RenderComponent (method expression)
+### 5b. RenderComponent by method expression (DI-injected params)
 
-When `ServeHTTP` (or another handler) needs to render a component owned by a *different* page, you don't have that page's receiver. Pass a method expression — the framework finds the page, applies DI, and invokes the method:
+Page structs are stateless, so even a *different* page's component is normally constructed directly with a zero-value receiver — `RenderComponent(MyPage{}.ItemList(items))` — and that stays the preferred form. The reflective method-expression form is for components whose parameters the framework should DI-inject rather than you supplying them:
 
 ```go
+// ItemList takes DI-injectable params (e.g. *http.Request, *AppContext) —
+// the framework finds the mounted page, fills them, and invokes the method:
 func (p MyDelete) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     if err := store.Delete(...); err != nil { return err }
-    items, _ := loadItems(r, appCtx)
-    return structpages.RenderComponent(MyPage.ItemList, items)
+    return structpages.RenderComponent(MyPage.ItemList)
 }
 ```
 
-This is the one case where the reflection path earns its keep: you can't construct `MyPage.ItemList(items)` directly because you don't have a `MyPage` instance, and the method may rely on DI-injected dependencies the framework will fill in.
+Explicit args are matched into the non-injected parameters (`RenderComponent(MyPage.ItemList, items)`), validated by reflection before the call — readable errors, but at runtime, not compile time. If you're loading the data yourself anyway, construct the component instead.
 
 ### 5c. Nested swap levels (Page → Content → Detail)
 
@@ -469,7 +491,7 @@ This is the recommended fix for two patterns that fail under bare-context render
 2. **Never hardcode URLs** — always use `structpages.URLFor`.
 3. **Partials take ONLY their specific data**, not the full props struct.
 4. **`RenderComponent` is returned as an error** — when returned, the Props return values (other than the error) are ignored.
-5. **Prefer `RenderComponent(p.X(args))`** — compile-time-checked. Reserve the reflective forms (`RenderComponent(MyPage.X, args)`) for cross-page renders where you don't have the receiver (§5/§5b).
+5. **Prefer `RenderComponent(p.X(args))` / `RenderComponent(MyPage{}.X(args))`** — constructed components are compile-time-checked; zero-value receivers make this work cross-page too. Reserve the reflective method-expression form for components whose params the framework should DI-inject (§5b).
 6. **Children are registered before parents** on the mux (so nested-route conflicts resolve correctly).
 7. **Promoted (embedded) methods are skipped** — only methods defined directly on the struct count.
 8. **URL params auto-fill from current request's route only** — sibling routes with different param names do not auto-fill.
