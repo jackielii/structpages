@@ -417,6 +417,8 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
                     // HTMX check here: a 3xx would be swapped into the partial.
                     loginURL, err := structpages.URLFor(r.Context(), LoginPage{})
                     if err != nil {
+                        // http.Error is ok here because it's outside of structpages' error handling.
+                        // This is a fallback for framework-level errors.
                         http.Error(w, "internal error", http.StatusInternalServerError)
                         return
                     }
