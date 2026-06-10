@@ -59,14 +59,14 @@ Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[str
 **Recommended: `map[string]any`** — explicit, position-independent, refactor-safe.
 
 ```go
-URLFor(ctx, page{}, map[string]any{"id": 123, "slug": "hello"})
+URLFor(ctx, page{}, map[string]any{"userId": 123, "slug": "hello"})
 ```
 
 The other forms are also supported. Order of detection inside `formatPathSegments`:
 
 - **Map**: a single `map[string]any` first arg. Recommended; values are looked up by placeholder name.
 - **Positional**: arg count exactly matches placeholder count → `URLFor(ctx, page{}, "val1", "val2")` fills left to right. Brittle if placeholders are reordered.
-- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "id", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
+- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "userId", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
 - **Auto-fill from request**: unfilled placeholders that match path params from the *current request's route* are filled automatically. Other routes' params do not auto-fill.
 
 ### ID / IDTarget Input Types
@@ -208,7 +208,7 @@ func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, target stru
 **Choosing a form, and the `http.Error` anti-pattern.** The buffered (error-returning) forms exist so that on error the framework can discard a partial response and render through `WithErrorHandler` instead. Therefore:
 
 - In signatures 2 and 4 (and in any `Props` method) **never write `w` directly** — no `http.Error`, no `w.WriteHeader`. Writing then `return err` discards the write when the buffer resets; writing then `return nil` bypasses the error handler. Return the error and let `WithErrorHandler` render it. For a specific status code, return a typed error (e.g. `ErrorWithStatus{Status, Title, Message}`) that the handler unwraps via `errors.As`.
-- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. There `http.Error` and direct `w` writes are the correct tools — you own the status code.
+- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. Direct `w` writes are the correct tool there — you own the status code. Match the error body to the content type (JSON errors for a JSON API); avoid `http.Error`, whose `text/plain` body fits neither an API client nor an HTMX swap.
 
 See examples.md §13 for the full worked pattern.
 
@@ -274,7 +274,7 @@ Patterns, split by whether they go through reflection:
 
 **Reflective dispatch (framework looks up the method and applies DI)**
 
-3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Necessary when the caller doesn't have the target page's receiver in scope (typical `ServeHTTP` handlers re-rendering a sibling page's partial).
+3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Use when the method's params should be framework-injected; for plain data params, prefer direct construction with a zero-value receiver — `RenderComponent(MyPage{}.ItemList(items))` — since pages are stateless.
 4. **Bound method value**: `RenderComponent(p.EditSection, props)` — same as #3 with the receiver already bound. Equivalent to direct form #1 (`RenderComponent(p.EditSection(props))`), but goes through reflection; prefer the direct form when `p` is in scope.
 5. **Via target**: `RenderComponent(target, args...)` after `target.Is()` matched (required for function targets — `Is()` stores the function pointer). Works for method targets too, but if the receiver is in scope, `RenderComponent(p.X(args))` is clearer and faster.
 
@@ -385,7 +385,7 @@ Diagnostic categories:
 | `ref` | `structpages.Ref(...)` strings that don't resolve to a page tree node. |
 | `id`, `idtarget` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted. |
 | `params` | `URLFor` params that don't appear in the route pattern. |
-| `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. |
+| `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — resolve by page type via `URLFor` instead. Narrow: exact concrete-route match only (param/`{$}` routes, trailing-slash/query variants, and bare `/` never match); literals in `==`/`switch` comparisons and `Ref(...)` args are skipped; `_test.go` and generated files are skipped. |
 
 Suppression syntax (place above the call/element, or on the same line):
