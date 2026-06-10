@@ -274,7 +274,7 @@ Patterns, split by whether they go through reflection:
 
 **Reflective dispatch (framework looks up the method and applies DI)**
 
-3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Necessary when the caller doesn't have the target page's receiver in scope (typical `ServeHTTP` handlers re-rendering a sibling page's partial).
+3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Use when the method's params should be framework-injected; for plain data params, prefer direct construction with a zero-value receiver — `RenderComponent(MyPage{}.ItemList(items))` — since pages are stateless.
 4. **Bound method value**: `RenderComponent(p.EditSection, props)` — same as #3 with the receiver already bound. Equivalent to direct form #1 (`RenderComponent(p.EditSection(props))`), but goes through reflection; prefer the direct form when `p` is in scope.
 5. **Via target**: `RenderComponent(target, args...)` after `target.Is()` matched (required for function targets — `Is()` stores the function pointer). Works for method targets too, but if the receiver is in scope, `RenderComponent(p.X(args))` is clearer and faster.
 

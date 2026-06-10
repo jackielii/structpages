@@ -342,6 +342,8 @@ templ (p EntityDetailPage) Content(props EntityDetailProps) {
 
 ### Delete Handler (no HTML, redirect)
 
+Redirects go through the `Redirect` control-flow signal (see §13), never `http.Redirect` — an HTMX XHR follows a 3xx and swaps the target page's body into the partial's swap target:
+
 ```go
 func (p EntityDeletePage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     id := r.PathValue("entity_id")
@@ -350,8 +352,7 @@ func (p EntityDeletePage) ServeHTTP(w http.ResponseWriter, r *http.Request, appC
     }
     listURL, err := structpages.URLFor(r.Context(), EntityListPage{})
     if err != nil { return err }
-    http.Redirect(w, r, listURL, http.StatusSeeOther)
-    return nil
+    return Redirect{To: listURL}
 }
 ```
 
@@ -410,7 +411,14 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
         func(next http.Handler, pn *structpages.PageNode) http.Handler {
             return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
                 if !isAuthenticated(r) {
-                    http.Redirect(w, r, "/login", http.StatusSeeOther)
+                    // Middleware is outside the error-return path, so do the
+                    // HTMX check here: a 3xx would be swapped into the partial.
+                    loginURL := must(structpages.URLFor(r.Context(), LoginPage{}))
+                    if r.Header.Get("HX-Request") == "true" {
+                        w.Header().Set("HX-Redirect", loginURL) // full browser navigation
+                        return
+                    }
+                    http.Redirect(w, r, loginURL, http.StatusSeeOther)
                     return
                 }
                 next.ServeHTTP(w, r)
@@ -459,13 +467,16 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
 
 ## 9. RenderComponent Variants
 
-`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction when you have the receiver in scope; reach for reflective dispatch only when you don't.
+`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction — page structs are stateless, so a zero-value receiver constructs another page's component too. Reach for reflective dispatch only when the method's parameters should be DI-injected by the framework.
 
 ### Preferred: direct construction
 
 ```go
 // Same-page method — receiver is in scope, just call it.
 return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
+
+// Another page's method — zero-value receiver works; pages are stateless.
+return structpages.RenderComponent(MyPage{}.ItemList(items))
 
 // Standalone function component — call it directly.
 return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(stats))
@@ -478,11 +489,12 @@ return nil, structpages.RenderComponent(comp)
 return structpages.RenderComponent(templ.NopComponent)
 ```
 
-### Reflective dispatch (when you don't have the receiver)
+### Reflective dispatch (when params need framework DI)
 
 ```go
-// Cross-page method expression — framework finds the page and applies DI.
-// Use this from ServeHTTP handlers that re-render a sibling page's component.
+// Method expression — framework finds the mounted page, DI-injects the
+// method's params (e.g. *http.Request, *AppContext), and invokes it.
+// Explicit args fill the non-injected params, checked at runtime.
 return structpages.RenderComponent(MyPage.ItemList, items)
 
 // Bound method expression — equivalent to the unbound form; useful when the
@@ -856,10 +868,20 @@ func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) er
     case err != nil:
         return fmt.Errorf("scheduling.book: GetPatientByMRN: %w", err) // plain error -> 500
     }
-    // ... success path writes normally; the buffer flushes when we return nil
-    http.Redirect(w, r, detailURL, http.StatusSeeOther)
-    return nil
+    // ... success: redirect to the detail page via the control-flow signal
+    return Redirect{To: detailURL}
 }
+```
+
+Redirects ride the same error-return path as a control-flow signal — **never call `http.Redirect` from a handler**: during an HTMX request the XHR follows the 3xx and swaps the redirect target's body into the partial's swap target. The signal type:
+
+```go
+// Redirect is control flow, not a real error — it implements error only to
+// ride the error-return path, which is what unwinds the render flow without
+// writing the ResponseWriter directly.
+type Redirect struct{ To string }
+
+func (Redirect) Error() string { return "redirect" }
 ```
 
 The matching global handler, wired once at `Mount`:
@@ -868,6 +890,15 @@ The matching global handler, wired once at `Mount`:
 structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
     if errors.Is(err, context.Canceled) || r.Context().Err() != nil {
         w.WriteHeader(499) // client closed request — expected, don't log as error
+        return
+    }
+    var redir Redirect
+    if errors.As(err, &redir) {
+        if r.Header.Get("HX-Request") == "true" {
+            w.Header().Set("HX-Redirect", redir.To) // full browser navigation
+            return
+        }
+        http.Redirect(w, r, redir.To, http.StatusSeeOther)
         return
     }
     status, title, message := http.StatusInternalServerError, "Server error", err.Error()
@@ -881,6 +912,8 @@ structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err er
     renderHTTPError(w, r, status, title, message)
 })
 ```
+
+(Use `HX-Location` instead of `HX-Redirect` if you want an ajax-style navigation that swaps without a full page load.)
 
 `errors.As` unwraps, so `fmt.Errorf("...: %w", ErrorWithStatus{...})` still resolves to its status. A plain `error` (a wrapped DB failure, say) falls through to a logged 500 — exactly what you want for an unexpected fault.
 
@@ -953,7 +986,7 @@ Once you've started flushing a stream, returning a non-nil error can no longer p
 
 | Handler does…                                  | `ServeHTTP` signature              | Errors via                          |
 |-------------------------------------------------|------------------------------------|-------------------------------------|
-| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err` |
+| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err`; redirects via `return Redirect{To: …}` |
 | Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | `http.Error` / JSON body, write `w` directly |
 | Streams (SSE, progress)                         | either form, flush via `http.NewResponseController(w)` | SSE `event: error` frame, then `return nil` |
 
