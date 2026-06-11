@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'intro',
         'quick-start',
+        'concepts',
       ],
     },
     {
@@ -21,6 +22,7 @@ const sidebars: SidebarsConfig = {
         'templ',
         'htmx',
         'urlfor',
+        'error-handling',
         'middleware',
         'advanced',
       ],
@@ -31,6 +33,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'api',
+        'lint',
         'reference/package',
       ],
     },
