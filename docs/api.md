@@ -1,360 +1,179 @@
-# API Reference
+---
+title: API Guide
+slug: /api
+sidebar_position: 12
+---
 
-## Core Functions
+# API Guide
 
-### Mount
+Hand-written guide to the public API. For generated godoc, see the [package reference](./reference/package.md).
+
+## Mount
 
 ```go
 func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPages, error)
 ```
 
-Mount is the main entry point for setting up routes. It parses the page structure, registers routes on the provided mux, and returns a `StructPages` instance for URL generation.
+Main entry point. Parses the page tree, registers routes on the mux, and returns a `*StructPages` for URL/id generation.
 
-**Parameters:**
-- `mux`: HTTP router implementing the `Mux` interface (e.g., `*http.ServeMux`). Pass `nil` to use `http.DefaultServeMux`.
-- `page`: Struct containing route definitions using struct tags
-- `route`: Base route path (e.g., `"/"`)
-- `title`: Page title for the root route
-- `options`: Configuration options (WithArgs, WithErrorHandler, WithMiddlewares, etc.)
+- `mux`: anything implementing `Handle(pattern string, handler http.Handler)` — e.g. `*http.ServeMux`. Pass `nil` for `http.DefaultServeMux`.
+- `page`: root struct with route tags
+- `route`: base path (usually `"/"`)
+- `title`: root page title
+- `options`: see [Options](#options)
 
-**Returns:**
-- `*StructPages`: Instance for generating type-safe URLs via `URLFor`, `ID`, and `IDTarget`
-- `error`: Error if mounting fails
-
-**Example:**
 ```go
 mux := http.NewServeMux()
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home")
+sp, err := structpages.Mount(mux, &pages{}, "/", "App")
 if err != nil {
     log.Fatal(err)
 }
-
-// Use mux for serving HTTP
-http.ListenAndServe(":8080", mux)
-
-// Use sp for generating URLs
-url, _ := sp.URLFor(productPage{}, "123")
-```
-
-## Mux Interface
-
-```go
-type Mux interface {
-    Handle(pattern string, handler http.Handler)
+if err := http.ListenAndServe(":8080", mux); err != nil {
+    log.Fatal(err)
 }
 ```
 
-The `Mux` interface allows StructPages to work with any HTTP router that follows Go's standard routing pattern. `*http.ServeMux` implements this interface.
-
-## StructPages
+## Parse (no-mux variant)
 
 ```go
-type StructPages struct {
-    // Internal fields
-}
+func Parse(page any, route, title string, options ...Option) (*StructPages, error)
 ```
 
-Returned by `Mount()`, StructPages provides methods for type-safe URL generation.
+Builds the page tree without registering routes. Use in tests and tooling that need `URLFor`/`ID`/`IDTarget` against the real page tree but don't want an HTTP server. Accepts the same options as `Mount`; mux-shaped options (middlewares) are inert.
 
-### Methods
-
-#### URLFor
+## StructPages methods
 
 ```go
 func (sp *StructPages) URLFor(page any, args ...any) (string, error)
-```
-
-Generate a URL for a page. Recommended shape: `URLFor(page, params)` with `params` as `map[string]any`.
-
-**Strict.** If the page type is mounted under multiple parents, a bare type lookup errors instead of silently returning the first match. Disambiguate with the `[]any{ParentType{}, LeafType{}}` chain form or `Ref("Parent.Field")`. No opt-out.
-
-**Example:**
-```go
-// Simple path
-url, _ := sp.URLFor(homePage{})  // "/"
-
-// With path parameter
-url, _ := sp.URLFor(userPage{}, map[string]any{"id": "123"})  // "/users/123"
-
-// Multiple parameters
-url, _ := sp.URLFor(postPage{}, map[string]any{
-    "year": 2024,
-    "slug": "hello",
-})  // "/blog/2024/hello"
-
-// Chain disambiguation when the same leaf type is mounted under multiple parents
-url, _ := sp.URLFor([]any{componentsRoot{}, entryPage{}},
-    map[string]any{"slug": "button"})  // "/components/button"
-
-// Composition: chain + literal URL fragment
-url, _ := sp.URLFor([]any{componentsRoot{}, entryPage{}, "?tab={tab}"},
-    map[string]any{"slug": "button", "tab": "props"})  // "/components/button?tab=props"
-
-// Ref fallback (cross-package callers that can't import the typed page)
-url, _ := sp.URLFor(structpages.Ref("Components.Detail"),
-    map[string]any{"slug": "button"})
-```
-
-See `skills/structpages/SKILL.md` §3 "URL Generation" for the full pattern including the recommended validation strategy (typed helpers + boot-time `validateURLs` + integration test). The `examples/url-validation/` directory ships the end-to-end demo.
-
-#### ID and IDTarget
-
-```go
 func (sp *StructPages) ID(v any) (string, error)
 func (sp *StructPages) IDTarget(v any) (string, error)
+func (sp *StructPages) PageContext(ctx context.Context) context.Context
 ```
 
-Generate consistent HTML IDs for component methods.
-- `ID` returns raw ID (for HTML `id` attributes): `"todo-page-todo-list"`
-- `IDTarget` returns CSS selector (for HTMX `hx-target`): `"#todo-page-todo-list"`
+Use the method forms outside request context (initialization, boot-time validation, tests). Within request handlers and templ renders, use the context-based package functions — the framework injects the parse context via internal middleware.
 
-**Example:**
-```go
-id, _ := sp.ID((*todoPage).TodoList)         // "todo-page-todo-list"
-target, _ := sp.IDTarget((*todoPage).TodoList)  // "#todo-page-todo-list"
-```
+`PageContext` wraps a bare context with `sp`'s page tree so the context-form functions resolve against it. The recommended test pattern: `Parse` once per package, wrap `context.Background()` in `PageContext`, render against the wrapped ctx (see [Templ Patterns](./templ.md#testing-renders-with-a-bare-context)).
 
-## Options
-
-Options are passed to `Mount()` to configure behavior.
-
-### WithArgs
-
-```go
-func WithArgs(args ...any) func(*StructPages)
-```
-
-Add global dependency injection arguments available to all page methods.
-
-**Example:**
-```go
-type Database struct { /* ... */ }
-type Logger struct { /* ... */ }
-
-db := &Database{}
-logger := &Logger{}
-
-// Pass dependencies using WithArgs
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithArgs(db, logger),
-    structpages.WithErrorHandler(errorHandler),
-)
-```
-
-Handler methods can receive injected dependencies:
-
-```go
-func (p productPage) Props(r *http.Request, db *Database, logger *Logger) (ProductProps, error) {
-    // Use db and logger
-}
-```
-
-### WithErrorHandler
-
-```go
-func WithErrorHandler(handler func(w http.ResponseWriter, r *http.Request, err error)) func(*StructPages)
-```
-
-Set a custom error handler for handling errors during request processing.
-
-**Example:**
-```go
-errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
-    log.Printf("Error: %v", err)
-    http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-}
-
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithErrorHandler(errorHandler),
-)
-```
-
-### WithMiddlewares
-
-```go
-func WithMiddlewares(middlewares ...MiddlewareFunc) func(*StructPages)
-```
-
-Add global middleware that applies to all routes.
-
-**Example:**
-```go
-loggingMiddleware := func(next http.Handler, pn *PageNode) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        log.Printf("%s %s", r.Method, r.URL.Path)
-        next.ServeHTTP(w, r)
-    })
-}
-
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithMiddlewares(loggingMiddleware),
-)
-```
-
-### WithTargetSelector
-
-```go
-func WithTargetSelector(selector TargetSelector) func(*StructPages)
-```
-
-Set a global target selector function that determines which component to render. The selector returns a `RenderTarget` that is passed to your Props method, enabling conditional data loading and component selection.
-
-The default selector is `HTMXRenderTarget`, which handles HTMX partial rendering automatically.
-
-A custom selector returns any type that implements the `RenderTarget` interface (`Is(method any) bool`). The framework's own `methodRenderTarget` and `functionRenderTarget` constructors are unexported, so a custom selector typically either: (a) delegates to `HTMXRenderTarget` and returns its result for the cases it doesn't want to override, or (b) returns its own type that implements `RenderTarget` (and optionally `Component() component` for direct rendering — see *RenderComponent* below).
-
-**Example — content negotiation that falls back to HTMX:**
-
-```go
-// Custom RenderTarget for JSON responses
-type jsonTarget struct{ data any }
-
-func (t jsonTarget) Is(method any) bool { return false } // never matches normal components
-func (t jsonTarget) Component() component {
-    return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
-        return json.NewEncoder(w).Encode(t.data)
-    })
-}
-
-selector := func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
-    if r.Header.Get("Accept") == "application/json" {
-        return jsonTarget{data: loadJSON(r, pn)}, nil
-    }
-    return structpages.HTMXRenderTarget(r, pn)
-}
-
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithTargetSelector(selector),
-)
-```
-
-When `Props` calls `RenderComponent(target)` (no args) on a target that implements `Component()`, the framework calls `Component()` to get the component to render — useful for selectors that already know the data.
-
-### WithWarnEmptyRoute
-
-```go
-func WithWarnEmptyRoute(warnFunc func(*PageNode)) func(*StructPages)
-```
-
-Customize or suppress warnings for pages with no handler and no children.
-
-**Example:**
-```go
-// Use default warning (prints to stdout)
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithWarnEmptyRoute(nil),
-)
-
-// Custom warning function
-customWarn := func(pn *PageNode) {
-    log.Printf("Skipping empty page: %s", pn.Name)
-}
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithWarnEmptyRoute(customWarn),
-)
-
-// Suppress warnings entirely
-sp, err := structpages.Mount(mux, &pages{}, "/", "Home",
-    structpages.WithWarnEmptyRoute(func(*PageNode) {}),
-)
-```
-
-## Page Methods
-
-Pages can implement several optional methods:
-
-### Page
-
-```go
-func (p PageType) Page() Component
-```
-
-Required for pages that render content. Returns the component to render.
-
-### Props
-
-Optional. Prepare data before rendering. The framework matches each parameter by **type** (not position), so any of these signatures work and parameters can appear in any order:
-
-```go
-func (p PageType) Props(r *http.Request) (PropsType, error)
-func (p PageType) Props(r *http.Request, store *Store) (PropsType, error)
-func (p PageType) Props(r *http.Request, w http.ResponseWriter, store *Store) (PropsType, error)
-func (p PageType) Props(r *http.Request, target RenderTarget, store *Store) (PropsType, error)
-```
-
-Injectable parameter types: `*http.Request`, `http.ResponseWriter`, `RenderTarget`, `*PageNode`, and any type registered via `WithArgs`. **DI is positional+typed, not variadic** — there is no `deps ...any` form; declare each dep as its own typed parameter.
-
-Use `target.Is(component)` to conditionally load data based on which component is being rendered.
-
-**Example:**
-```go
-func (p DashboardPage) Props(r *http.Request, target RenderTarget, db *Database) (DashboardProps, error) {
-    switch {
-    case target.Is(p.UserList):
-        // Only load user data for partial update
-        users := db.LoadUsers()
-        return DashboardProps{}, RenderComponent(target, users)
-
-    case target.Is(p.Page):
-        // Load all data for full page
-        return DashboardProps{
-            Users: db.LoadUsers(),
-            Stats: db.LoadStats(),
-        }, nil
-    }
-    return DashboardProps{}, nil
-}
-```
-
-### ServeHTTP
-
-Optional. Handle HTTP requests directly. Four signatures are supported (DI form takes typed params, not variadic `any`):
-
-```go
-func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request)                               // standard http.Handler
-func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request) error                          // buffered, error → handler
-func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)                  // DI, no return
-func (p PageType) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error            // DI, buffered
-```
-
-In the DI forms, `RenderTarget` is also injectable (the framework computes one and adds it to the available args), so `ServeHTTP` can decide which partial to render via `target.Is(...)` + `RenderComponent(...)`.
-
-### Middlewares
-
-```go
-func (p PageType) Middlewares() []MiddlewareFunc
-```
-
-Optional. Return page-specific middleware.
-
-## Context Functions
-
-For use within handlers:
-
-### URLFor
+## Context functions
 
 ```go
 func URLFor(ctx context.Context, page any, args ...any) (string, error)
-```
-
-Generate URLs using context (available during request handling). Same `page` and `args` semantics as `(*StructPages).URLFor` above — strict by default, supports `[]any` chain composition, `Ref` qualified paths, and `map[string]any` params.
-
-### ID and IDTarget
-
-```go
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
 ```
 
-Generate IDs using context (available during request handling).
-- `ID` returns raw ID (for HTML `id` attributes)
-- `IDTarget` returns CSS selector (for HTMX `hx-target`)
+Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated).
+
+## Options
+
+### WithArgs
+
+```go
+structpages.WithArgs(store, sessionManager, logger)
+```
+
+Register dependency-injection values, matched by type into `Props` / `ServeHTTP` / `Middlewares` / `Init` parameters. Each type registers once; see [Advanced](./advanced.md#dependency-injection) for coercion rules and named-type disambiguation.
+
+### WithErrorHandler
+
+```go
+structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) { ... })
+```
+
+The single callback that owns every error response from buffered handlers and Props. See [Error Handling](./error-handling.md#the-global-handler) for the full pattern — typed statuses, the `Redirect` signal, cancellation, logged-500 fallback.
+
+### WithMiddlewares
+
+```go
+structpages.WithMiddlewares(loggingMiddleware, authMiddleware)
+```
+
+Global middleware applied to all routes. `MiddlewareFunc` is `func(next http.Handler, pn *PageNode) http.Handler`. See [Middleware](./middleware.md) for execution order.
+
+### WithTargetSelector
+
+```go
+structpages.WithTargetSelector(structpages.HTMXv4RenderTarget)
+```
+
+Replace the default `HTMXRenderTarget` — e.g. with the htmx 4 variant, or a custom selector for content negotiation. See [HTMX Integration](./htmx.md#custom-target-selectors).
+
+### WithMaxIDLength
+
+```go
+structpages.WithMaxIDLength(60) // default 40
+```
+
+Character budget for generated element ids before they degrade from the readable full-path form (`admin-users-user-list`) to the compact leaf-only form (`user-list`, plus a stable hash suffix when the leaf name is not unique). Affects id generation only, never routing.
+
+### WithURLPrefix
+
+```go
+structpages.WithURLPrefix("/app")
+```
+
+Prefix prepended to all generated URLs — for apps served under a sub-path.
+
+### WithWarnEmptyRoute
+
+```go
+structpages.WithWarnEmptyRoute(func(pn *structpages.PageNode) {
+    log.Printf("skipping empty page: %s", pn.Name)
+})
+```
+
+Customize or suppress (`func(*PageNode) {}`) warnings for pages with no handler and no children.
+
+## Page methods
+
+Pages can implement these optional methods. Parameters on `Props`, `ServeHTTP`, `Middlewares`, and `Init` are matched by **type**, in any order; injectable types are `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and anything registered via `WithArgs`.
+
+### Page
+
+```go
+templ (p myPage) Page(props MyProps) { ... }
+```
+
+The main render entry — a page component composing the full page. Pages without a `Page` method can still render by returning `RenderComponent(...)` from Props.
+
+### Props
+
+```go
+func (p myPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (MyProps, error)
+```
+
+Loads data before render; the returned props struct is passed to the selected page component. Only the method literally named `Props` is auto-invoked. Runs against a buffered writer — return errors, never write `w` (see [Error Handling](./error-handling.md)).
+
+### ServeHTTP
+
+Four signatures:
+
+```go
+func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request)                      // standard http.Handler, unbuffered
+func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request) error                // buffered; error → WithErrorHandler
+func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)        // DI, no return, unbuffered
+func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error  // DI, buffered
+```
+
+In the DI forms, `RenderTarget` is also injectable, so a handler method can branch on `target.Is(...)` before responding.
+
+### Middlewares
+
+```go
+func (p T) Middlewares(deps ...) []structpages.MiddlewareFunc
+```
+
+Page-specific middleware, also applied to all descendants.
+
+### Init
+
+```go
+func (p *T) Init(deps ...) error
+```
+
+One-time setup at `Mount`; errors abort the mount. See [Advanced](./advanced.md#initialization).
 
 ## RenderTarget
-
-The `RenderTarget` interface represents the component that will be rendered for a request. It's passed to your Props method, enabling conditional data loading.
-
-### Interface
 
 ```go
 type RenderTarget interface {
@@ -362,84 +181,58 @@ type RenderTarget interface {
 }
 ```
 
-### Is Method
+Represents the page component selected for this request. Injected into Props (and DI-form `ServeHTTP`). `Is` accepts page component references (`target.Is(p.UserList)`) and standalone component functions (`target.Is(UserStatsWidget)`).
 
-```go
-func (target RenderTarget) Is(method any) bool
-```
-
-Check if the target matches a specific component. Works with:
-- **Page methods**: `target.Is(p.Page)`, `target.Is(p.UserList)`
-- **Standalone functions**: `target.Is(UserStatsWidget)` (templ components that are functions)
-
-**Example:**
-```go
-func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
-    // Check against page method
-    if target.Is(p.UserList) {
-        users := loadUsers()
-        return DashboardProps{}, RenderComponent(target, users)
-    }
-
-    // Check against standalone function component
-    if target.Is(UserStatsWidget) {
-        stats := loadUserStats()
-        return DashboardProps{}, RenderComponent(target, stats)
-    }
-
-    // Full page
-    return loadFullPageData(), nil
-}
-```
-
-### RenderComponent
+## RenderComponent
 
 ```go
 func RenderComponent(targetOrMethod any, args ...any) error
 ```
 
-Override which component to render and pass specific arguments to it. Can be called from Props:
+Returns a sentinel error instructing the framework to render a specific component. Honored in the Props error path and the buffered-`ServeHTTP` error path; when returned from Props, the other return values are ignored.
 
-**Same-page component:**
+**Direct (preferred — compile-time-checked):**
+
 ```go
-// Render the component specified by target with custom args
-return DashboardProps{}, RenderComponent(target, userData)
+return MyProps{}, structpages.RenderComponent(p.UserList(users))      // same page
+return structpages.RenderComponent(index{}.TodoList(todos))           // another page — zero-value receiver
+return MyProps{}, structpages.RenderComponent(UserStatsWidget(stats)) // standalone component
 ```
 
-**Cross-page component:**
+**Reflective (framework finds the page and applies DI):**
+
 ```go
-// Render a component from another page using method expression
-return DashboardProps{}, RenderComponent(OtherPage{}.Content, data)
+return structpages.RenderComponent(MyPage.ItemList)        // params DI-injected by the framework
+return structpages.RenderComponent(MyPage.ItemList, items) // explicit args fill non-injected params, checked at runtime
 ```
 
-**Standalone function:**
-```go
-// Render a standalone function component
-return DashboardProps{}, RenderComponent(target, stats)
-```
+Reserve the reflective form for components whose parameters the framework should DI-inject. Argument count and assignability are validated before the call — mismatches surface as readable errors, but at runtime, not compile time.
 
-### HTMXRenderTarget
+A custom `RenderTarget` that also implements `Component() component` can be rendered with `RenderComponent(target)` (no args).
+
+## HTMXRenderTarget
 
 ```go
 func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error)
 ```
 
-The default `TargetSelector` that handles HTMX partial rendering. Algorithm:
+The default `TargetSelector`. Non-HTMX requests (no `HX-Request: true`), or HTMX requests with no `HX-Target`, select the `Page` method. Otherwise the `HX-Target` value is matched against the page's components:
 
-1. Non-HTMX requests (no `HX-Request: true` header), or HTMX requests with no `HX-Target` → returns `methodRenderTarget` for the page's `Page()` method.
-2. HTMX request with `HX-Target` → tries to match it against the page's component methods:
-   - **Pass 1, exact match**: first against `<pageprefix>-<componentid>`, then against bare `<componentid>`.
-   - **Pass 2, suffix match (longest wins)**: with three rules — full ID ends with target; target ends with full ID; or target ends with `<componentid>` (only when target also starts with `<pageprefix>-`, which guards against cross-page false matches).
-3. If a method matches → returns `methodRenderTarget` for it.
-4. If no method matches → returns `functionRenderTarget` carrying the raw `HX-Target`. The actual function value is bound lazily when `Props` calls `target.Is(SomeFunc)`.
+- **Pass 0 — authoritative**: compare against each component's *real generated id* — the same value `ID()` emits, including the full field-path prefix and any length-budget compaction. This is the true inverse of `ID`/`IDTarget`.
+- **Pass 1 — exact heuristics**: `<pageprefix>-<componentid>`, then bare `<componentid>`.
+- **Pass 2 — suffix match (longest wins)**: full id ends with target; target ends with full id; or target ends with `<componentid>` *only when* target starts with `<pageprefix>-` (guards against cross-page false matches).
 
-**Examples** (page named `IndexPage`, components `Content`, `TodoList`):
-- `HX-Target: "content"` → `Content()` (exact match without page prefix)
-- `HX-Target: "index-page-todo-list"` → `TodoList()` (exact match with page prefix)
-- `HX-Target: "todo-list"` → `TodoList()` (exact match without page prefix)
-- `HX-Target: "dashboard-page-user-stats-widget"` (no method by that name) → `functionRenderTarget`; resolved to `UserStatsWidget` standalone function only after Props calls `target.Is(UserStatsWidget)`.
+If no method matches, the raw target is carried as a function target and bound lazily when Props calls `target.Is(SomeFunc)` — this is how standalone component functions become HTMX targets.
 
-## Error Types
+### HTMXv4RenderTarget
+
+```go
+structpages.WithTargetSelector(structpages.HTMXv4RenderTarget)
+```
+
+htmx 4 variant. htmx 4 sends `HX-Target` as `"<tag>#<id>"` (or bare `"<tag>"`) and adds `HX-Request-Type: full|partial`. The v4 selector treats `HX-Request-Type: full` as a hard hint to render `Page`, prefers the id portion of the target, falls back to the tag for id-less targets, and otherwise applies the same matching rules.
+
+## Error types
 
 ### ErrSkipPageRender
 
@@ -447,15 +240,8 @@ The default `TargetSelector` that handles HTMX partial rendering. Algorithm:
 var ErrSkipPageRender = errors.New("skip page render")
 ```
 
-Return this error from `Props` to skip rendering (useful for redirects). **Only the Props error path checks for this sentinel** — returning it from `ServeHTTP` does nothing special.
+Return from `Props` to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-httpredirect)). Only the Props error path checks this sentinel.
 
-**Example:**
-```go
-func (p loginPage) Props(r *http.Request, w http.ResponseWriter) (LoginProps, error) {
-    if isAuthenticated(r) {
-        http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-        return LoginProps{}, structpages.ErrSkipPageRender
-    }
-    return LoginProps{}, nil
-}
-```
+## Buffered response
+
+Error-returning `ServeHTTP` (and every `Props`) runs against a buffered writer: on error the buffer is discarded and `WithErrorHandler` renders instead. The no-return forms are unbuffered. For streaming through either form, `http.NewResponseController(w)` reaches the real flusher via the `Unwrap()` chain. Full rules and patterns: [Error Handling](./error-handling.md).
