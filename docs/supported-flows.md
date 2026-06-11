@@ -117,7 +117,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 }
 ```
 
-**Pass a constructed component.** Page structs are stateless, so a zero-value receiver (`index{}`) constructs a *sibling* page's component just as well as your own. The reflective method-expression form (`RenderComponent(index.TodoList)`) is reserved for components whose parameters the framework should DI-inject — see [HTMX Integration](./htmx.md).
+**Prefer passing the component instance.** `index{}.TodoList(todos)` is a normal Go call — the compiler checks argument types and counts — and page structs are stateless, so a zero-value receiver constructs a *sibling* page's component just as well as your own. Passing the component method itself is also supported — `RenderComponent(index.TodoList, todos)` — and the framework will find the page, DI-inject any injectable parameters, and fill the rest from the args; but those checks happen at runtime, so reserve it for components whose parameters genuinely need framework DI (see [HTMX Integration](./htmx.md)).
 
 ## A handler method that redirects
 
