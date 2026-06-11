@@ -1,65 +1,70 @@
+---
+title: Routing
+slug: /routing
+sidebar_position: 4
+---
+
 # Routing Patterns and Struct Tags
 
-### Basic Route Definition
-
-Routes are defined using struct tags with the `route:` prefix. Each struct field with a route tag becomes a route in your application.
+Routes are struct fields with `route:` tags. Format: `route:"[METHOD] /path [Title]"`.
 
 ```go
 type pages struct {
-    home    `route:"/ Home"`           // ALL / with title "Home"
-    about   `route:"/about About Us"`  // ALL /about with title "About Us"
-    contact `route:"/contact"`         // ALL /contact without title
+    home    `route:"/{$}   Home"`             // exact root match
+    about   `route:"/about About"`            // all methods (default)
+    create  `route:"POST /create Create"`     // POST only
+    detail  `route:"/item/{itemId} Item"`     // path parameter
+    files   `route:"/files/{path...} Files"`  // wildcard
 }
 ```
 
-### Route Tag Format
+## Route tag format
 
-The route tag supports several formats:
+1. **Path only**: `route:"/path"` — all HTTP methods, no page title.
+2. **Path with title**: `route:"/path Page Title"` — all methods, title "Page Title".
+3. **Method and path**: `route:"POST /path"` — POST only, no title.
+4. **Full format**: `route:"PUT /path Update Page"` — PUT only, title "Update Page".
 
-1. **Path only**: `route:"/path"`
-   - Matches all HTTP methods
-   - No page title
+Supported HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`. If no method is given, the route accepts all methods (internally stored as `ALL`).
 
-2. **Path with title**: `route:"/path Page Title"`
-   - Matches all HTTP methods
-   - Sets page title to "Page Title"
+Only the `route:` tag is read by the framework — any other tag on a route field is ignored.
 
-3. **Method and path**: `route:"POST /path"`
-   - Matches only specified HTTP method
-   - No page title
+## `/{$}` — exact match
 
-4. **Full format**: `route:"PUT /path Update Page"`
-   - Matches only PUT requests
-   - Sets page title to "Update Page"
+Go's ServeMux treats a trailing `/` as a prefix match: `route:"/"` would swallow every unmatched path under the mount point. Use `/{$}` for "exactly this path" — most commonly the index page of a [page group](./concepts.md):
 
-Supported HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`. A special `ALL` method can be used to match all methods.
+```go
+type adminPages struct {
+    dashboard `route:"/{$} Dashboard"`    // matches /admin/ exactly
+    users     `route:"/users Users"`      // matches /admin/users
+}
+```
 
-### Path Parameters
+## Path parameters
 
-Path parameters use Go 1.22+ `http.ServeMux` syntax:
+Path parameters use Go 1.22+ `http.ServeMux` syntax. Extract them in the Props method via `r.PathValue` — they are not passed as function arguments:
 
 ```go
 type pages struct {
-    userProfile `route:"/users/{id} User Profile"`
+    userProfile `route:"/users/{userId} User Profile"`
     blogPost    `route:"/blog/{year}/{month}/{slug}"`
 }
 
-// Access parameters in your Props method:
 func (p userProfile) Props(r *http.Request) (UserProfileProps, error) {
-    userID := r.PathValue("id") // "123" if URL is /users/123
-    // Pass the userID via the props to the Page renderer
+    userID := r.PathValue("userId") // "123" if URL is /users/123
     return UserProfileProps{UserID: userID}, nil
 }
 
 templ (p userProfile) Page(props UserProfileProps) {
     @layout() {
         <h1>User Profile for { props.UserID }</h1>
-        // Render user details
     }
 }
 ```
 
-### Nested Routes
+**Name path params specifically — `{itemId}`, not `{id}`.** Nested routes compose into a single pattern, so two levels each declaring `{id}` collide: ServeMux rejects duplicate wildcard names in a pattern (`/order/{id}/item/{id}` panics at mount), and `URLFor`'s `map[string]any` params couldn't tell them apart anyway. Specific names compose cleanly: `/order/{orderId}/item/{itemId}`.
+
+## Nested routes
 
 Create hierarchical URL structures by nesting structs:
 
@@ -69,9 +74,44 @@ type pages struct {
 }
 
 type adminPages struct {
-    dashboard `route:"/ Dashboard"`        // Becomes /admin/
-    users     `route:"/users User List"`   // Becomes /admin/users
-    settings  `route:"/settings Settings"` // Becomes /admin/settings
+    dashboard `route:"/{$} Dashboard"`        // -> /admin/
+    users     `route:"/users User List"`      // -> /admin/users
+    settings  `route:"/settings Settings"`    // -> /admin/settings
 }
 ```
 
+A struct like `adminPages` that has no render of its own — no `Page` or `ServeHTTP`, only child pages — is a **page group**. It is never served at its bare path; `/admin` 307-redirects to `/admin/`, which its `/{$}` page serves. `URLFor` on a page group returns the index child's URL with the canonical trailing slash (see [URLFor](./urlfor.md)).
+
+Children register before parents on the mux, so nested-route conflicts resolve correctly without you ordering anything by hand.
+
+## Wildcard routes and static assets
+
+Use the wildcard form for prefix subtrees — the framework joins nested paths with `path.Join`, which strips trailing slashes, so `route:"/static/"` would register as an exact match, not a prefix. `{path...}` is the right shape:
+
+```go
+type adminPages struct {
+    dashboard `route:"/{$} Dashboard"`
+    users     `route:"/users Users"`
+    Assets    staticFiles `route:"GET /static/{path...} Assets"`
+}
+
+//go:embed all:static
+var staticFS embed.FS
+
+type staticFiles struct{}
+
+func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    root, err := fs.Sub(staticFS, "static")
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
+    http.ServeFileFS(w, r, root, r.PathValue("path"))
+}
+```
+
+This keeps the module self-contained: `/admin` and `/admin/static/*` register together, with no separate `mux.Handle` call to keep in sync.
+
+## Never write an in-app URL as a string literal
+
+Resolve URLs by page type — `structpages.URLFor(ctx, somePage{})` — so a moved route breaks the build (or the boot) instead of silently dangling. The [`structpages-lint`](./lint.md) `route-literal` check flags `.go` string literals that exactly equal a mounted route, and `url-attr` flags hard-coded paths in `.templ` URL attributes.

@@ -1,123 +1,160 @@
 ---
 title: URLFor & ID
 slug: /urlfor
-sidebar_position: 5
+sidebar_position: 8
 ---
 
 # URLFor & ID Generation
 
-`structpages` provides four related helpers for generating URLs and DOM identifiers that stay in sync with the route tree:
+structpages provides type-safe helpers for generating URLs and DOM identifiers that stay in sync with the route tree:
 
-- **`URLFor(target)`** — build a URL for a page from its struct (pointer to a leaf, or `Ref`).
-- **`Ref{...}`** — dynamic reference for cases the static type lookup can't handle.
-- **`ID(target)`** — raw HTML `id` attribute string for a page or component.
-- **`IDTarget(target)`** — `#`-prefixed CSS selector for HTMX `hx-target`.
+- **`URLFor(ctx, page, params)`** — build a URL for a page from its type.
+- **`Ref("Parent.Field")`** — string reference for cases the static type lookup can't handle.
+- **`ID(ctx, Page.Method)`** — raw HTML `id` attribute for a page component.
+- **`IDTarget(ctx, Page.Method)`** — `#`-prefixed CSS selector for HTMX `hx-target`.
 
-All four are checked at build time by the [`structpages-lint`](../tools/lint) analyzer.
+All are validated by the [`structpages-lint`](./lint.md) analyzer. **The rule of thumb: never write an in-app URL as a string literal** — resolve it by page type so the literal can't drift when routes move.
 
 ## URLFor
 
-Generate a URL by passing a pointer to the target page struct:
+`structpages.URLFor(ctx, page, args...)` returns `(string, error)`. Templ attribute values accept `(string, error)` directly:
 
-```go
-href := structpages.URLFor(ctx, &productPage{})
-// → "/products"
+```templ
+<a href={ structpages.URLFor(ctx, MyPage{}) }>Link</a>
+<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"itemId": item.ID}) }>Detail</a>
+<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"itemId": item.ID}) } method="POST">
 ```
 
-If the route has path parameters, pass them as additional arguments in tag order:
+**The recommended shape is two arguments**: `URLFor(ctx, page, params)` with `params` as a `map[string]any`. It's explicit at the call site, survives route changes, and fills both path and query placeholders by name. Positional and key/value-pair forms also work but are easier to misalign during refactors.
+
+| form | shape | use when |
+|---|---|---|
+| bare typed page | `URLFor(ctx, MyPage{}, params)` | the type is mounted exactly once |
+| typed chain | `URLFor(ctx, []any{Parent{}, Leaf{}}, params)` | same leaf type mounted under multiple parents — parent disambiguates |
+| chain + URL fragment | `URLFor(ctx, []any{Parent{}, Leaf{}, "?tab={t}"}, params)` | need to append a query template or path suffix |
+| string (auto-Ref) | `URLFor(ctx, "Parent.Field", params)` | can't import the page type (cross-package cycle); top-level strings only — strings inside `[]any` are URL fragments |
+| Ref by qualified name | `URLFor(ctx, Ref("Parent.Field"), params)` | explicit form of the string sugar above |
+
+### Always strict
+
+A bare type that matches multiple mounted nodes **errors** instead of silently picking one. The error lists every match and recommends the chain form. There is no opt-out — silent first-match is always wrong, so disambiguating at the call site is mandatory:
 
 ```go
-href := structpages.URLFor(ctx, &productPage{}, "p-123")
-// → "/products/p-123"
+type root struct {
+    Components componentsRoot `route:"/components Components"`
+    Patterns   patternsRoot   `route:"/patterns Patterns"`
+}
+type componentsRoot struct { Detail entryPage `route:"/{slug} Component"` }
+type patternsRoot   struct { Detail entryPage `route:"/{slug} Pattern"` }
+
+// Bare URLFor errors — entryPage matches two nodes.
+url, err := structpages.URLFor(ctx, entryPage{}, map[string]any{"slug": "button"})
+
+// Chain anchors at the parent struct; descends into the entryPage child.
+url, err := structpages.URLFor(ctx,
+    []any{componentsRoot{}, entryPage{}},
+    map[string]any{"slug": "button"})
+// → "/components/button"
 ```
 
-### Container pages resolve to their index
+**Chain semantics:** inside `[]any{...}`, leading typed values form a chain through the page tree; each subsequent typed value descends into a child of that type (must be unique among siblings). Once a string appears, no more typed values are allowed; remaining strings concat literally to the pattern. A typed value after a string fragment errors at runtime.
 
-A subtree container — a page struct that only groups child routes and has no
-render logic of its own — is never served at its bare path: `http.ServeMux`
-matches only its subtree, and the bare path 307-redirects to add the trailing
-slash. `URLFor` on a container therefore returns its index child's URL (the
-`/{$}` route), i.e. the canonical trailing-slash form, so the link serves
-directly with no redirect hop:
+### Query strings
+
+Pass a `[]any` whose trailing strings form the URL template; the `map[string]any` fills both path and query placeholders:
 
 ```go
-// type sectionRoot struct { Index sectionIndex `route:"/{$}"`; … }
-href := structpages.URLFor(ctx, &sectionRoot{})
+url, err := structpages.URLFor(ctx,
+    []any{MyList{}, "?page={page}&q={q}"},
+    map[string]any{"page": pageNum, "q": query},
+)
+```
+
+### Page groups resolve to their index
+
+A [page group](./concepts.md) is never served at its bare path — ServeMux matches only its subtree, and the bare path 307-redirects to add the trailing slash. So `URLFor` on a page group returns its index child's URL (the `/{$}` route) with the canonical trailing slash:
+
+```go
+href, err := structpages.URLFor(ctx, sectionRoot{})
 // → "/section/"   (not "/section", which would 307)
 ```
 
-Leaf pages — those that render or handle their own route — return their own
-path unchanged.
+Link a page group by its type and the URL serves a 200 directly. Don't hand-append a trailing slash, and don't link to the slashless form. Leaf pages return their own bare path unchanged.
 
-### `[]any` chain for nested params
+### Params auto-fill from the current request
 
-When the target is deeply nested with parameters at multiple levels, pass the chain as a single `[]any`:
-
-```go
-// route: /orgs/{org}/products/{id}/edit
-href := structpages.URLFor(ctx, &editPage{}, []any{"acme", "p-123"})
-// → "/orgs/acme/products/p-123/edit"
-```
-
-This disambiguates from the variadic form when a single argument is itself a slice.
-
-### Inheriting params from the current request
-
-If the current request already has matching path params in its context, `URLFor` reuses them automatically. You only need to pass params that differ from the current route:
+Unfilled placeholders that match path params from the *current request's route* are filled automatically — you only pass what differs:
 
 ```go
-// Inside a handler for /orgs/{org}/products/{id}, where org="acme", id="p-123":
-href := structpages.URLFor(ctx, &siblingPage{})
+// Inside a handler for /orgs/{org}/products/{productId}:
+href, err := structpages.URLFor(ctx, siblingPage{})
 // → "/orgs/acme/products/p-123/sibling"  (params inherited)
 ```
 
-### Strict mode (default)
-
-`URLFor` is strict by default: if a required param isn't provided and can't be inherited from the request, it returns an error rather than silently emitting a broken URL like `/orgs//products//edit`. Boot-time validation via `URLForValidate` lets you fail fast in tests.
+Only the current route's params auto-fill; sibling routes with different param names do not.
 
 ## Ref
 
-When the target page can't be referenced by static type (e.g. you have multiple identical leaf types at different routes), use `Ref`:
+When the target page can't be referenced by static type — a cross-package import would cycle, or a Go type alias collapses two routes onto one `reflect.Type` — use `Ref` (a string type):
 
 ```go
-href := structpages.URLFor(ctx, structpages.Ref{Name: "admin.productPage"})
+url, err := structpages.URLFor(ctx, structpages.Ref("Admin.Settings"))
 ```
 
-`Ref` resolves by the fully-qualified node name in the page tree. The lint analyzer also verifies `Ref` strings.
+`Ref` resolves by field-name path in the page tree. The anchor segment matches a top-level node if one has that name, otherwise any uniquely-named node anywhere in the tree. An ambiguous anchor errors — qualify it with a parent segment. Ref strings are validated by `structpages-lint` (including refs stored in struct fields, e.g. a nav table), so a lint-passing Ref resolves at runtime.
 
 ## ID and IDTarget
 
-For HTMX, you want consistent DOM ids that match across server-rendered HTML and client-side `hx-target` selectors:
+For HTMX you need the server-rendered `id` attribute and the client-side `hx-target` selector to agree. Generate both from the same method reference:
+
+```templ
+<div id={ structpages.ID(ctx, index.TodoList) }>
+    @p.TodoList(props.Todos)
+</div>
+
+<form hx-post={ structpages.URLFor(ctx, addTodo{}) }
+      hx-target={ structpages.IDTarget(ctx, index.TodoList) }>
+```
+
+`ID(ctx, index.TodoList)` returns the page's full field-name path joined with the method — `"index-todo-list"` for a top-level page, `"admin-users-todo-list"` when nested; `IDTarget` prepends `#`. Plain strings pass through both functions unchanged — `IDTarget("body")` is `"body"`, not `"#body"`. The full id scheme, multi-mount disambiguation, and the swap loop are covered in [HTMX Integration](./htmx.md).
+
+## Validation: no dangling URLs in production
+
+[`structpages-lint`](./lint.md) is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI. For what static analysis can't see (URLs assembled from runtime data, refs behind dynamic dispatch), add a boot-time inventory that kills the startup with the list of what's dangling:
 
 ```go
-// In the template:
-<div id={ structpages.ID(&commentList{}) }>...</div>
-
-// In a form posting to a partial endpoint:
-<form hx-post="/comments" hx-target={ structpages.IDTarget(&commentList{}) }>
+func validateURLs(sp *structpages.StructPages) error {
+    var errs []error
+    check := func(label string, gen func() (string, error)) {
+        if _, err := gen(); err != nil {
+            errs = append(errs, fmt.Errorf("%s: %w", label, err))
+        }
+    }
+    check("components detail", func() (string, error) {
+        return sp.URLFor([]any{componentsRoot{}, entryPage{}}, map[string]any{"slug": "sample"})
+    })
+    check("admin settings", func() (string, error) {
+        return sp.URLFor(structpages.Ref("Admin.Settings"))
+    })
+    return errors.Join(errs...)
+}
 ```
 
-`ID` returns `"commentList"`; `IDTarget` returns `"#commentList"`. Use `IDTarget` for `hx-target` (it expects a CSS selector) and `ID` for the actual `id` attribute on the element.
+Call it from `main` after `Mount` (fail the boot) and from a one-line test (coverage in CI). See [`examples/url-validation/`](https://github.com/jackielii/structpages/tree/main/examples/url-validation) for the runnable pattern.
 
-## Build-time checking
+## Plain strings outside templ attributes
 
-Install the analyzer:
+Templ attribute expressions take `(string, error)` directly — no wrapper needed. The exception, still inside templ, is a context that needs a plain string, like `templ.Attributes` map values; use a small `must` helper for those (and only those):
 
-```bash
-go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
-structpages-lint ./...
+```go
+func must[T any](v T, err error) T {
+    if err != nil { panic(err) }
+    return v
+}
 ```
 
-It catches:
-- `URLFor` calls with wrong param count for the target route.
-- `Ref` strings that don't resolve to any page.
-- `ID` / `IDTarget` calls against types that aren't mounted.
-- Mismatches between `URLFor` target and the surrounding `Mount` tree.
-
-Wire it into CI alongside `go vet` for fast feedback.
-
-## See also
-
-- Hand-written API signatures: [`api.md`](./api.md#urlfor).
-- End-to-end demonstration: [`examples/url-validation/`](../examples/url-validation/).
-- Authoritative reference for library consumers: [`skills/structpages/SKILL.md`](../skills/structpages/SKILL.md) §3 "URL Generation".
+```templ
+@PrimaryButton(templ.Attributes{
+    "hx-get": must(structpages.URLFor(ctx, UserNewModal{})),
+}) { + New User }
+```
