@@ -1,411 +1,240 @@
-# HTMX Integration
-
-Structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. This makes `ID` and `IDTarget` work seamlessly with HTMX partial rendering out of the box.
-
-### How It Works
-
-When an HTMX request is detected (via `HX-Request` header), the framework automatically:
-
-1. Reads the `HX-Target` header value
-2. Matches it to a component method or standalone function
-3. Renders that specific component instead of the full page
-
-For example (page named `index`, with `Content` and `TodoList` components):
-- `HX-Target: "content"` → matches `Content()` (exact match, no prefix needed)
-- `HX-Target: "index-todo-list"` → matches `TodoList()` (exact match with page prefix)
-- `HX-Target: "todo-list"` → matches `TodoList()` (exact match without prefix)
-- `HX-Target: "dashboard-page-user-stats-widget"` (no method by that name) → returns a function-target placeholder; the actual `UserStatsWidget` standalone function is bound lazily when Props calls `target.Is(UserStatsWidget)`
-- No `HX-Target` or non-HTMX request → falls back to `Page()` method
-
-Detailed matching algorithm and the page-prefix guard for cross-page false matches are described in [api.md → HTMXRenderTarget](./api.md#htmxrendertarget).
-
-This works automatically with `ID` and `IDTarget`:
-
-```go
-// In your template
-<div id={ structpages.ID(ctx, index.TodoList) }>
-    @p.TodoList()
-</div>
-
-// In HTMX attributes
-hx-target={ structpages.IDTarget(ctx, index.TodoList) }  // Generates "#index-todo-list"
-```
-
-The HTMX request will automatically extract the component name from the target ID and render just that component.
-
+---
+title: HTMX Integration
+slug: /htmx
+sidebar_position: 7
 ---
 
-## RenderTarget and Props Integration
+# HTMX Integration
 
-The real power of HTMX integration comes from the `RenderTarget` parameter in your `Props` method. RenderTarget tells your Props method **which component will be rendered**, allowing you to:
+structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. All HTMX requests for a page go to the SAME route; the framework picks which page component to render from the `HX-Target` header.
 
-- ✅ Load only the data needed for that specific component
-- ✅ Optimize database queries for partial updates
-- ✅ Override component selection based on application logic
-- ✅ Maintain type safety throughout the flow
-- ✅ Use standalone function components shared across pages
+## The central loop
 
-**Important:** While `HTMXRenderTarget` is configurable (you can customize how components are selected from HTMX requests), `RenderTarget.Is()` works regardless of your configuration. Whatever component selection logic you use, the `RenderTarget` passed to Props will correctly identify which component was selected, making your Props code independent of the selection mechanism.
+**One method reference — e.g. `index.TodoList` — drives three sites that must agree, and `ID`/`IDTarget` make them agree by construction:**
 
-### How Component Selection Works
+1. **Composition site** — where the page component is composed in, wrap it in an element with `id={ structpages.ID(ctx, index.TodoList) }`.
+2. **Trigger site** — the element that fires the update points `hx-target={ structpages.IDTarget(ctx, index.TodoList) }` at the page's own route.
+3. **Server site** — structpages matches the `HX-Target` header back to the page component by id, and the Props method branches on the injected `RenderTarget` with `target.Is(p.TodoList)` to load just that region's data.
 
-When an HTMX request arrives:
+```templ
+// Site 1 — composition: set the element ID on the component's wrapper
+<div id={ structpages.ID(ctx, index.TodoList) }>
+    @p.TodoList(props.Todos)
+</div>
 
+// Site 2 — trigger: target that id, hit the page's own route
+<input hx-get={ structpages.URLFor(ctx, index{}) }
+       hx-target={ structpages.IDTarget(ctx, index.TodoList) }
+       hx-swap="outerHTML" />
 ```
-1. Request arrives with HX-Target header
-   ↓
-2. HTMXRenderTarget extracts target ID (e.g., "index-todo-list")
-   ↓
-3. Component is determined (e.g., TodoList method or UserStatsWidget function)
-   ↓
-4. RenderTarget is created with that component (lazy evaluation for functions)
-   ↓
-5. Props(r, target) is called with the RenderTarget
-   ↓
-6. Props loads appropriate data based on target.Is(component)
-   ↓
-7. Component renders with the data
-```
-
-### Basic Pattern: Conditional Data Loading
-
-Use `RenderTarget` to load only what you need:
 
 ```go
-type index struct{}
-
-type IndexProps struct {
-    Todos      []Todo
-    Stats      DashboardStats
-    UserInfo   UserInfo
-}
-
+// Site 3 — server: Props branches on the injected RenderTarget
 func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, error) {
-    switch {
-    case target.Is(p.TodoList):
-        // HTMX is updating just the todo list - only load todos
-        return IndexProps{
-            Todos: getTodos(),
-        }, nil
-
-    case target.Is(p.Page):
-        // Full page load - load everything
-        return IndexProps{
-            Todos:    getTodos(),
-            Stats:    getDashboardStats(),
-            UserInfo: getCurrentUser(),
-        }, nil
-
-    default:
-        // Fallback
-        return IndexProps{}, nil
+    if target.Is(p.TodoList) {
+        todos, err := getActiveTodos()
+        if err != nil {
+            return IndexProps{}, err
+        }
+        return IndexProps{}, structpages.RenderComponent(p.TodoList(todos))
     }
-}
-
-templ (p index) Page(props IndexProps) {
-    <div class="dashboard">
-        <div class="header">{ props.UserInfo.Name }</div>
-        <div class="stats">{ props.Stats.String() }</div>
-
-        <div id={ structpages.ID(ctx, index.TodoList) }>
-            @p.TodoList(props.Todos)
-        </div>
-    </div>
-}
-
-templ (p index) TodoList(todos []Todo) {
-    for _, todo := range todos {
-        <div>{ todo.Text }</div>
+    todos, err := getAllTodos()
+    if err != nil {
+        return IndexProps{}, err
     }
+    return IndexProps{Todos: todos}, nil
 }
 ```
 
-**What happens:**
-- Initial page load → `target.Is(index.Page)` is true → loads all data
-- HTMX updates todo list → `target.Is(index.TodoList)` is true → loads only todos
-- Database queries are minimized for partial updates ⚡
+Because all three sites derive from the same method reference, renaming the method or moving the mount can't desynchronize them — there is no string id to drift. **Never hand-write the id at one site and generate it at another.**
 
-### Advanced Pattern: RenderComponent Override
+## How ids are generated
 
-Sometimes you need to render a different component than what was selected, or you want to pass specific data to a component. Use `RenderComponent` within Props:
+`structpages.ID` / `structpages.IDTarget` generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method:
+
+- `ID(ctx, index.TodoList)` → `"index-todo-list"` for a top-level page
+- the same component on a page mounted at `admin.users` → `"admin-users-todo-list"`
+- `IDTarget` prepends `#`
+
+Including the ancestor path guarantees two different mounts of the same struct never collide. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form with a stable hash suffix when the leaf name is shared.
+
+**Components** (standalone templ functions) are prefixed by their package name: `ID(ctx, UserWidget)` → `"<package>-user-widget"`. Plain strings pass through unchanged — `IDTarget("body")` is `"body"`, not `"#body"` (literal CSS selectors are legitimate; literal URL paths are not).
+
+**Self-render uses the current mount.** When `ID` runs inside a page's own templ, the id derives from *that mount's* field name — the same struct mounted under different parents produces different ids per render context. **Cross-page references with multiple mounts must be unambiguous** — a bare method expression errors with the available mounts listed; disambiguate with the `[]any` chain form, a `Ref`, or a standalone function:
 
 ```go
-type TeamManagementView struct{}
+// IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})  // chain + string
+// IDTarget(ctx, []any{adminRoot{}, dashboardPage.Header})       // chain + method expr
+// IDTarget(ctx, Ref("AdminDash.Header"))                        // by field name
+// IDTarget(ctx, EntryOverlaySlot)                               // standalone func: package-prefixed id
+```
 
-type TeamManagementProps struct {
-    UserPaneProps  UserPaneProps
-    GroupPaneProps GroupPaneProps
-}
+## RenderTarget in Props
 
-type UserPaneProps struct {
-    Users           []UserWithGroups
-    UserSearchQuery string
-}
+The `RenderTarget` parameter tells your Props method **which page component will render**, so it can load only that region's data. Whatever selector configuration you use, `target.Is()` works the same — Props code is decoupled from the selection mechanism.
 
-type GroupPaneProps struct {
-    Groups           []Group
-    GroupSearchQuery string
-}
-
-func (p TeamManagementView) Props(r *http.Request, target structpages.RenderTarget) (TeamManagementProps, error) {
+```go
+func (p TeamManagementView) Props(r *http.Request, target structpages.RenderTarget, store *Store) (TeamManagementProps, error) {
     switch {
     case target.Is(p.GroupList):
-        // Load only group data
-        groups, err := loadGroups(r)
+        groups, err := store.SearchGroups(r.Context(), r.FormValue("group-search"))
         if err != nil {
             return TeamManagementProps{}, err
         }
-        // Override: render GroupList with just the groups data
-        return TeamManagementProps{}, structpages.RenderComponent(target, groups)
+        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groups))
 
     case target.Is(p.UserList):
-        // Load only user data
-        users, err := loadUsers(r)
+        users, err := store.SearchUsers(r.Context(), r.FormValue("user-search"))
         if err != nil {
             return TeamManagementProps{}, err
         }
-        // Override: render UserList with just the users data
-        return TeamManagementProps{}, structpages.RenderComponent(target, users)
+        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
 
-    case target.Is(p.Page), target.Is(p.Content):
-        // Full page - load everything
-        users, err := loadUsers(r)
+    default: // full page — load everything
+        users, err := store.SearchUsers(r.Context(), "")
         if err != nil {
             return TeamManagementProps{}, err
         }
-
-        groups, err := loadGroups(r)
+        groups, err := store.SearchGroups(r.Context(), "")
         if err != nil {
             return TeamManagementProps{}, err
         }
-
         return TeamManagementProps{
-            UserPaneProps: UserPaneProps{
-                Users:           users,
-                UserSearchQuery: r.FormValue("user-search"),
-            },
-            GroupPaneProps: GroupPaneProps{
-                Groups:           groups,
-                GroupSearchQuery: r.FormValue("group-search"),
-            },
+            UserPaneProps:  UserPaneProps{Users: users},
+            GroupPaneProps: GroupPaneProps{Groups: groups},
         }, nil
-
-    default:
-        // Fallback to full props
-        // ... load everything
     }
 }
 
 templ (p TeamManagementView) Page(props TeamManagementProps) {
     <div class="team-management">
         <div class="user-pane">
-            <input hx-get="/search-users"
+            <input hx-get={ structpages.URLFor(ctx, TeamManagementView{}) }
                    hx-target={ structpages.IDTarget(ctx, TeamManagementView.UserList) }
                    name="user-search" />
-
             <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
                 @p.UserList(props.UserPaneProps.Users)
             </div>
         </div>
 
         <div class="group-pane">
-            <input hx-get="/search-groups"
+            <input hx-get={ structpages.URLFor(ctx, TeamManagementView{}) }
                    hx-target={ structpages.IDTarget(ctx, TeamManagementView.GroupList) }
                    name="group-search" />
-
             <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
                 @p.GroupList(props.GroupPaneProps.Groups)
             </div>
         </div>
     </div>
 }
-
-templ (p TeamManagementView) UserList(users []UserWithGroups) {
-    for _, user := range users {
-        <div>{ user.Name }</div>
-    }
-}
-
-templ (p TeamManagementView) GroupList(groups []Group) {
-    for _, group := range groups {
-        <div>{ group.Name }</div>
-    }
-}
 ```
 
-**Key Points:**
+Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running.
 
-1. **Props returns full structure** (`TeamManagementProps`) for the Page component
-2. **Individual components** have simpler signatures (`UserList([]UserWithGroups)`)
-3. **RenderComponent override** passes specific data to specific components
-4. **Type safety** is maintained - component signatures enforce correct data types
+### Why `RenderComponent(p.X(args))` and not `RenderComponent(target, args)`
 
-**When to use RenderComponent in Props:**
-- ✅ Complex pages with multiple independent sections
-- ✅ Different components need different data structures
-- ✅ Want to avoid returning empty/partial complex props
-- ✅ Need to optimize data loading per component
+`p.GroupList(groups)` is a normal Go call — the compiler checks argument types and counts. The reflective forms (`RenderComponent(target, args)`, `RenderComponent(index.TodoList, args)`) defer those checks to runtime. Use the reflective method-expression form only for components whose parameters the framework should DI-inject; for everything else, construct the component.
 
-### Complete Example: Search with Dynamic Rendering
+### Overriding the selection
+
+Props can render a different component than the one selected — return any constructed component:
 
 ```go
-type search struct {
-    query `route:"GET /search"`
-}
-
-func (p search) Props(r *http.Request, target structpages.RenderTarget) ([]Result, error) {
+func (p search) Props(r *http.Request, target structpages.RenderTarget) (SearchProps, error) {
     query := r.URL.Query().Get("q")
-
-    // Override based on application logic
     if query == "" {
-        // No search query - show empty state instead of results
-        return nil, structpages.RenderComponent(p.EmptyState)
+        return SearchProps{}, structpages.RenderComponent(p.EmptyState())
     }
-
-    // Check which component was selected
-    switch {
-    case target.Is(p.Results):
-        // Perform search and return results
-        return performSearch(query), nil
-
-    case target.Is(p.Page):
-        // Full page with recent searches
-        return performSearch(query), nil
-
-    default:
-        return nil, nil
+    results, err := performSearch(query)
+    if err != nil {
+        return SearchProps{}, err
     }
-}
-
-templ (p search) Page(results []Result) {
-    <div class="search-page">
-        <input hx-get={ structpages.URLFor(ctx, query{}) }
-               hx-target={ structpages.IDTarget(ctx, search.Results) }
-               name="q"
-               placeholder="Search..." />
-
-        <div id={ structpages.ID(ctx, search.Results) }>
-            @p.Results(results)
-        </div>
-    </div>
-}
-
-templ (p search) Results(results []Result) {
-    if len(results) == 0 {
-        <p>No results found</p>
+    if target.Is(p.Results) {
+        return SearchProps{}, structpages.RenderComponent(p.Results(results))
     }
-    for _, result := range results {
-        <div>{ result.Title }</div>
-    }
-}
-
-templ (p search) EmptyState() {
-    <div class="empty-state">
-        <p>Enter a search query to get started</p>
-    </div>
+    return SearchProps{Results: results}, nil
 }
 ```
 
-**What happens:**
-- User types → HTMX sends request with HX-Target: "search-results"
-- If query is empty → Props returns `RenderComponent(search.EmptyState)`
-- If query exists → Props loads results and renders Results component
-- Component selection can be overridden based on business logic ✨
+### Standalone components shared across pages
 
----
+A component (standalone templ function) can be an HTMX target without belonging to any page. `target.Is(UserStatsWidget)` matches it, and the package-prefixed id is stable regardless of which pages embed it:
 
-## Common Patterns Summary
-
-### Pattern 1: Simple Conditional Loading
 ```go
-func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
-    if target.Is(p.Component) {
-        return loadMinimalData(), nil
-    }
-    return loadFullData(), nil
-}
-```
-**Use when:** Single props type works for all components, just need to load different amounts of data.
-
-### Pattern 2: RenderComponent Override
-```go
-func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
-    if target.Is(p.Component) {
-        data := loadSpecificData()
-        return Props{}, structpages.RenderComponent(target, data)
-    }
-    return loadFullProps(), nil
-}
-```
-**Use when:** Individual components need different data types than the full page props.
-
-### Pattern 3: Dynamic Component Selection
-```go
-func (p index) Props(r *http.Request, target structpages.RenderTarget) (Props, error) {
-    if someCondition {
-        return Props{}, structpages.RenderComponent(p.AlternateComponent)
-    }
-    // Normal flow
-    return loadData(), nil
-}
-```
-**Use when:** Need to change which component renders based on request data or application state.
-
-### Pattern 4: Standalone Function Components
-```go
-// Shared widget component (standalone function)
 templ UserStatsWidget(stats UserStats) {
-    <div>{ stats.ActiveUsers } active users</div>
+    <div id={ structpages.ID(ctx, UserStatsWidget) }>{ stats.ActiveUsers } active users</div>
 }
 
-func (p DashboardPage) Props(r *http.Request, target structpages.RenderTarget) (DashboardProps, error) {
-    // Check against standalone function
+func (p dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardProps, error) {
     if target.Is(UserStatsWidget) {
-        stats := loadUserStats()
-        return DashboardProps{}, structpages.RenderComponent(target, stats)
+        stats, err := store.LoadUserStats(r.Context())
+        if err != nil {
+            return DashboardProps{}, err
+        }
+        return DashboardProps{}, structpages.RenderComponent(UserStatsWidget(stats))
     }
-    return loadFullData(), nil
+    // ... full page
 }
 ```
-**Use when:** Need to share components across multiple pages without creating wrapper methods.
 
----
+## Nested swap levels (Page → Content → Detail)
 
-### Custom Target Selector
+A page's page components can be composed into **nested swap levels**, each an independent HTMX target. The levels are *not* a tree the matcher walks — they're sibling page components on one page, each with its own id. Because `HX-Target` selects the page component whose id it matches exactly, targeting a given level re-renders *only* that level, even though `Page` composes `Content` composes `Detail`:
 
-The default `HTMXRenderTarget` works for most use cases. For custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`). The framework's own constructors (`methodRenderTarget`, `functionRenderTarget`) are unexported, so a custom selector typically delegates to `HTMXRenderTarget` for the cases it doesn't override.
+- **`Page`** — the full document. Cold loads and `hx-boost` body swaps. Composes the app layout around `Content`.
+- **`Content`** — the page's main region. Holds the page chrome — heading, back-link, toolbar — around the inner level. Swapped on boosted nav between pages.
+- **`Detail`** (or another inner name) — a region *inside* `Content` that must swap on its own. Holds **none** of the page chrome.
 
-If your custom target type also implements `Component() component`, then `RenderComponent(target)` (no args) inside Props will call `Component()` directly to get the component to render — handy for selectors that already know the data.
+```templ
+templ (d FooDetail) Page(p Props)    { @layout(title) { <main>@d.Content(p)</main> } }
+templ (d FooDetail) Content(p Props) { <div id={ structpages.ID(ctx, FooDetail.Content) }>
+                                          <a href={ structpages.URLFor(ctx, FooList{}) }>&larr; Foos</a>
+                                          @d.Detail(p)
+                                        </div> }
+templ (FooDetail) Detail(p Props)    { <div id={ structpages.ID(ctx, FooDetail.Detail) }>
+                                          // fields, actions — NO back-link, NO header
+                                        </div> }
+```
+
+**Why three levels, not two.** The trap is reusing `Content` as the swap fragment for an embedded region — e.g. a master-detail inspector pane hosting the standalone detail page's `Content`. That drags the page chrome into the pane. Splitting out `Detail` gives the embedded region a chrome-less partial while `Content` keeps the standalone-page chrome. **The level you embed/swap is the one with no chrome of its own.**
+
+The rule generalizes: **one page component per independently-swappable region, outer wraps inner, embed/target the innermost that has no chrome above it.**
+
+## Custom target selectors
+
+The default `HTMXRenderTarget` covers HTMX 1.x/2.x. For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — wire the v4 variant:
 
 ```go
-type customRenderTarget struct {
-    component component
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
+    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
+)
+```
+
+For fully custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`), typically delegating to `HTMXRenderTarget` for the cases you don't override. If your target also implements `Component() component`, then `RenderComponent(target)` (no args) renders it directly:
+
+```go
+type jsonTarget struct{ data any }
+
+func (t jsonTarget) Is(method any) bool { return false }
+func (t jsonTarget) Component() component {
+    return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+        return json.NewEncoder(w).Encode(t.data)
+    })
 }
 
-func (c customRenderTarget) Is(method any) bool { return false } // never matches normal components
-func (c customRenderTarget) Component() component { return c.component }
-
-mux := http.NewServeMux()
-sp, err := structpages.Mount(mux, pages{}, "/", "My App",
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
     structpages.WithTargetSelector(func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
-        if r.Header.Get("X-Custom-Target") == "json" {
-            return customRenderTarget{component: jsonComponent(loadData(r, pn))}, nil
+        if r.Header.Get("Accept") == "application/json" {
+            return jsonTarget{data: loadData(r, pn)}, nil
         }
-        // Fall back to default HTMX behavior
         return structpages.HTMXRenderTarget(r, pn)
     }),
 )
-if err != nil {
-    log.Fatal(err)
-}
 ```
 
-**Key insight:** No matter how you configure component selection (whether using the default `HTMXRenderTarget` or a custom selector), your Props method receives a `RenderTarget` that correctly identifies the selected component. Your Props code using `target.Is(component)` remains the same and works with any component selection strategy.
+The exact matching algorithm (including the authoritative pass against real generated ids) is documented in the [API reference](./api.md#htmxrendertarget).
 
-This separation of concerns means:
-- ✅ You can change component selection logic without modifying Props
-- ✅ Props code is decoupled from HTMX request details
-- ✅ The pattern works whether requests come from HTMX, regular navigation, or custom clients
+## See also
 
-See `examples/htmx/main.go`, `examples/todo/main.go`, and `examples/htmx-render-target/` for complete working examples.
-
+- `examples/htmx`, `examples/todo`, and `examples/htmx-render-target` in the [repository](https://github.com/jackielii/structpages/tree/main/examples) for complete working code.
+- [Error Handling](./error-handling.md) for HTMX-aware redirects (`HX-Location`).
