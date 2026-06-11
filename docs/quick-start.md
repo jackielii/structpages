@@ -30,13 +30,15 @@ Create `pages.templ`:
 ```templ
 package main
 
+import "github.com/jackielii/structpages"
+
 type home struct{}
 
 templ (home) Page() {
     <html>
         <body>
             <h1>Hello, structpages!</h1>
-            <p><a href="/about">About</a></p>
+            <p><a href={ structpages.URLFor(ctx, about{}) }>About</a></p>
         </body>
     </html>
 }
@@ -47,16 +49,21 @@ templ (about) Page() {
     <html>
         <body>
             <h1>About</h1>
-            <p><a href="/">Home</a></p>
+            <p><a href={ structpages.URLFor(ctx, home{}) }>Home</a></p>
         </body>
     </html>
 }
 
 type pages struct {
-    home  `route:"/ Home"`
+    home  `route:"/{$}   Home"`
     about `route:"/about About"`
 }
 ```
+
+Two things to note:
+
+- **`/{$}` means "exactly `/`".** A bare `route:"/"` would be a ServeMux catch-all prefix that swallows every unmatched path; `/{$}` matches only the root.
+- **Links use `URLFor`, not string literals.** Templ attributes accept `(string, error)` directly, so `href={ structpages.URLFor(ctx, about{}) }` works as-is. When a route moves, every link follows — and [`structpages-lint`](./lint.md) flags any hard-coded internal path you write by accident.
 
 ## 3. Wire up `main.go`
 
@@ -93,13 +100,14 @@ Open [http://localhost:8080](http://localhost:8080). You should see "Hello, stru
 
 ## What just happened
 
-- `pages` is a struct with two embedded fields, each tagged with a route. Embedding means promoted methods — but the dispatcher *skips* promoted methods, so the `Page()` defined on each inner type is the one that runs.
-- `Mount(mux, pages{}, "/", "Site")` walks the struct, registers each route on `mux`, and treats the outer `pages` struct as a layout with no `Page()` of its own.
-- Each request is dispatched to the matching leaf struct, which renders its `Page()` (a Templ component) into the response.
+- `pages` is a **page group** — a struct whose fields each carry a route tag, with no rendering of its own. Embedding means promoted methods, but the dispatcher *skips* promoted methods, so the `Page()` defined on each inner type is the one that runs.
+- `Mount(mux, pages{}, "/", "Site")` walks the struct and registers each route on `mux`.
+- Each request is dispatched to the matching **page**, which renders its **Page method** (a Templ component) into the response.
 
 ## Next steps
 
+- [Concepts](./concepts.md) for the vocabulary the rest of these docs use.
 - [Routing](./routing.md) for the full tag syntax (HTTP methods, path params, titles).
-- [Templ Patterns](./templ.md) for shared layouts and the `Props` pattern.
+- [Templ Patterns](./templ.md) for shared layouts and the Props pattern.
 - [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target`.
 - [Examples](./examples/index.md) for full working apps in `examples/` you can clone.

@@ -1,12 +1,18 @@
+---
+title: Templ Patterns
+slug: /templ
+sidebar_position: 6
+---
+
 # Templ Patterns
 
-### Basic Page Pattern
+## Page components and layout composition
+
+A **page component** is a templ method on a page struct. A **component** is a standalone templ block. Layouts are nothing special — just a component that takes `{ children... }`:
 
 ```templ
-// Define your page struct
 type homePage struct{}
 
-// Implement the Page method returning a templ component
 templ (h homePage) Page() {
     @layout() {
         <h1>Welcome Home</h1>
@@ -14,7 +20,7 @@ templ (h homePage) Page() {
     }
 }
 
-// Shared layout component
+// Shared layout — a plain component with children
 templ layout() {
     <!DOCTYPE html>
     <html>
@@ -28,42 +34,42 @@ templ layout() {
 }
 ```
 
-### Props Pattern
+## The Props pattern
 
-Pass data to your components using typed Props:
+The **Props method** loads data; the **props struct** it returns flows into the page components:
 
 ```go
 type productPage struct{}
 
-// Define typed props for better type safety
 type productPageProps struct {
-    Product Product
+    Product         Product
     RelatedProducts []Product
-    IsInStock bool
+    IsInStock       bool
 }
 
-// Props method returns typed props and can receive injected dependencies
-// You can also include http.ResponseWriter to set headers, cookies, etc.
+// Parameters are matched by type via DI. http.ResponseWriter is injectable
+// too — useful for setting headers or cookies before the render.
 func (p productPage) Props(r *http.Request, w http.ResponseWriter, store *Store) (productPageProps, error) {
-    productID := r.PathValue("id")
+    productID := r.PathValue("productId")
     product, err := store.LoadProduct(productID)
     if err != nil {
         return productPageProps{}, err
     }
-    
-    // You can manipulate the response if needed
+
     w.Header().Set("X-Product-ID", productID)
-    
-    related, _ := store.LoadRelatedProducts(productID)
-    
+
+    related, err := store.LoadRelatedProducts(productID)
+    if err != nil {
+        return productPageProps{}, err
+    }
+
     return productPageProps{
-        Product: product,
+        Product:         product,
         RelatedProducts: related,
-        IsInStock: product.Stock > 0,
+        IsInStock:       product.Stock > 0,
     }, nil
 }
 
-// Page method receives typed props
 templ (p productPage) Page(props productPageProps) {
     @layout() {
         <h1>{ props.Product.Name }</h1>
@@ -78,92 +84,95 @@ templ (p productPage) Page(props productPageProps) {
 }
 ```
 
-#### Props Method Resolution
+Never write the response body or call `http.Error` inside Props — it runs against a buffered writer and a returned error discards the buffer. Return the error and let the global handler render it (see [Error Handling](./error-handling.md)).
 
-Only the method literally named `Props` is auto-invoked by the framework. Methods whose names *end* in `Props` (e.g. `UserListProps`, `PageProps`, `ContentProps`) are stored in the page node but **not** auto-resolved — they are conventional helpers you call yourself from inside `Props`. The earlier per-component-Props auto-resolution (`PageProps()`, `ContentProps()`, etc.) was removed in favor of the simpler `Props` + `RenderComponent` pattern below.
+### Props method resolution
 
-**Parameter resolution is by type, not position.** All of these signatures work and the framework matches each parameter by its type:
+Only the method literally named `Props` is auto-invoked by the framework. Methods whose names *end* in `Props` (e.g. `UserListProps`, `ContentProps`) are **not** auto-resolved — they are conventional helpers you call yourself from inside `Props`.
+
+**Parameter resolution is by type, not position.** All of these signatures work:
 
 ```go
-func (d dashboardPage) Props(r *http.Request, store *Store) (DashboardData, error) { ... }
-func (d dashboardPage) Props(store *Store, r *http.Request) (DashboardData, error) { ... }   // any order
-func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, store *Store) (DashboardData, error) { ... }
-func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error) { ... }
+func (d dashboardPage) Props(r *http.Request, store *Store) (DashboardData, error)
+func (d dashboardPage) Props(store *Store, r *http.Request) (DashboardData, error)  // any order
+func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, store *Store) (DashboardData, error)
+func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error)
 ```
 
-The injectable types are: `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and any type registered via `WithArgs`. Position doesn't matter — the framework fills each parameter by looking up its type.
+The injectable types are: `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and any type registered via `WithArgs`.
 
-To run different data-loading paths for different components, use the `RenderTarget` parameter and `RenderComponent`:
+## Partials load only their data
+
+When a page has independently-updatable regions, inject `RenderTarget` and branch with `target.Is`. **Construct the component and hand it to `RenderComponent`** — a normal Go call the compiler checks:
 
 ```go
 type dashboardPage struct{}
 
-func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, target structpages.RenderTarget, store *Store) (DashboardData, error) {
-    // Full page or full content — load everything
-    if target.Is(d.Page) || target.Is(d.Content) {
-        http.SetCookie(w, &http.Cookie{Name: "dashboard_visited", Value: "true"})
-        return DashboardData{User: store.GetUser(r), Stats: store.GetStats()}, nil
+func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error) {
+    if target.Is(d.StatsWidget) {
+        stats, err := store.GetStats(r.Context())
+        if err != nil {
+            return DashboardData{}, err
+        }
+        return DashboardData{}, structpages.RenderComponent(d.StatsWidget(stats))
     }
-    // HTMX partial — render just the stats widget
-    if target.Is(d.Content) {
-        return DashboardData{}, structpages.RenderComponent(d.Content, ContentData{Stats: store.GetStats()})
+    // Full page — load everything
+    user, err := store.GetUser(r)
+    if err != nil {
+        return DashboardData{}, err
     }
-    return DashboardData{}, nil
+    stats, err := store.GetStats(r.Context())
+    if err != nil {
+        return DashboardData{}, err
+    }
+    return DashboardData{User: user, Stats: stats}, nil
 }
 ```
 
-### Cross-Page Component Rendering
+Partial page components take ONLY their specific data (`StatsWidget(stats Stats)`), not the full props struct. The full pattern, including how `HX-Target` selects the partial, is in [HTMX Integration](./htmx.md).
 
-Structpages provides the ability to render components from different pages using the `RenderComponent` function. This is useful when you want to conditionally redirect rendering to a component from another page, such as error pages or shared components.
+## Cross-page rendering
 
-#### RenderComponent
-
-The `RenderComponent` function can be used in Props methods to render a component from a different page:
+A handler method that needs to respond with *another* page's component constructs it the same way — page structs are stateless, so a zero-value receiver works:
 
 ```go
-type errorPage struct{}
-
-templ (e errorPage) ErrorComponent(message string) {
-    <div class="error">
-        <h2>Error</h2>
-        <p>{ message }</p>
-    </div>
-}
-
-type productPage struct{}
-
-func (p productPage) Props(r *http.Request, store *Store) (string, error) {
-    productID := r.PathValue("id")
-    product, err := store.LoadProduct(productID)
-    if err != nil {
-        // Instead of returning an error, render the ErrorComponent from errorPage
-        return "", structpages.RenderComponent(errorPage{}.ErrorComponent, "Product not found")
+func (a addTodo) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error {
+    if err := store.Add(r.Context(), r.FormValue("text")); err != nil {
+        return err
     }
-    return product.Name, nil
-}
-
-templ (p productPage) Page(productName string) {
-    <h1>{ productName }</h1>
-    <p>Product details...</p>
+    todos, err := store.List(r.Context())
+    if err != nil {
+        return err
+    }
+    return structpages.RenderComponent(index{}.TodoList(todos))
 }
 ```
 
-#### Parameters
+The reflective method-expression form — `RenderComponent(index.TodoList)` with no constructed component — exists for page components whose parameters the framework should DI-inject rather than you supplying them. Prefer direct construction whenever you're loading the data yourself anyway.
 
-- `targetOrMethod`: A method expression (e.g., `errorPage{}.ErrorComponent`) or RenderTarget
-- `args`: Optional arguments to pass to the component method (these replace the original Props return values)
+## Testing renders with a bare context
 
-#### Behavior
+Unit tests that render templ components directly — without an HTTP server — need a page tree in the context so `URLFor` / `ID` / `IDTarget` resolve. Use `structpages.Parse` (builds the tree, no mux) and `sp.PageContext`:
 
-When `RenderComponent` is returned as an error from a Props method:
+```go
+func TestProductPageRenders(t *testing.T) {
+    sp, err := structpages.Parse(pages{}, "/", "App",
+        structpages.WithArgs(fakeStore),
+    )
+    if err != nil {
+        t.Fatal(err)
+    }
+    ctx := sp.PageContext(context.Background())
 
-1. The framework resolves the method expression to the component
-2. Calls the component with the provided arguments
-3. Renders the component instead of the original page's component
+    buf := &bytes.Buffer{}
+    props := productPageProps{Product: sampleProduct}
+    if err := (productPage{}).Page(props).Render(ctx, buf); err != nil {
+        t.Fatal(err)
+    }
+    if !strings.Contains(buf.String(), sampleProduct.Name) {
+        t.Errorf("rendered page missing product name")
+    }
+}
+```
 
-This pattern is particularly useful for:
-- Error handling and displaying error pages
-- Conditional rendering based on authentication or permissions
-- Redirecting to maintenance or unavailable pages
-- Sharing common components across different pages
-
+`Parse` accepts the same options as `Mount`; mux-shaped options (middlewares) are accepted but inert since no handlers register.

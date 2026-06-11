@@ -1,6 +1,18 @@
+---
+title: Middleware
+slug: /middleware
+sidebar_position: 10
+---
+
 # Middleware Usage
 
-### Global Middleware
+`MiddlewareFunc` is standard Go middleware that also receives the route's `*PageNode`, so middleware can inspect page metadata:
+
+```go
+type MiddlewareFunc func(next http.Handler, pn *structpages.PageNode) http.Handler
+```
+
+## Global middleware
 
 Apply middleware to all routes:
 
@@ -17,24 +29,20 @@ if err != nil {
 }
 ```
 
-### Page Middlewares
+## Page middlewares
 
 Implement the `Middlewares()` method to add middleware to a specific page; it also applies to all descendant routes:
 
 ```go
-type protectedPage struct{
+type protectedPages struct {
     // children pages will be protected
 }
 
-func (p protectedPage) Middlewares() []structpages.MiddlewareFunc {
+func (p protectedPages) Middlewares() []structpages.MiddlewareFunc {
     return []structpages.MiddlewareFunc{
         requireAuth,
         checkPermissions,
     }
-}
-
-templ (p protectedPage) Page() {
-    ...
 }
 ```
 
@@ -46,7 +54,7 @@ func (p protectedPages) Middlewares(sm *SessionManager) []structpages.Middleware
         func(next http.Handler, pn *structpages.PageNode) http.Handler {
             return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
                 if !sm.Exists(r.Context(), "user") {
-                    http.Redirect(w, r, "/login", http.StatusSeeOther)
+                    redirectToLogin(w, r)
                     return
                 }
                 next.ServeHTTP(w, r)
@@ -54,34 +62,40 @@ func (p protectedPages) Middlewares(sm *SessionManager) []structpages.Middleware
         },
     }
 }
+
+// Middleware is outside the error-return path, so do the HTMX check here:
+// a 3xx during an HTMX request would be swapped into the partial's target.
+func redirectToLogin(w http.ResponseWriter, r *http.Request) {
+    loginURL, err := structpages.URLFor(r.Context(), loginPage{})
+    if err != nil {
+        // http.Error is acceptable here only because middleware sits outside
+        // structpages' error handling.
+        http.Error(w, "internal error", http.StatusInternalServerError)
+        return
+    }
+    if r.Header.Get("HX-Request") == "true" {
+        w.Header().Set("HX-Location", loginURL) // ajax navigation; status must stay 2xx
+        return
+    }
+    http.Redirect(w, r, loginURL, http.StatusSeeOther)
+}
 ```
 
-Example middleware implementation:
+Note the login URL comes from `URLFor`, not a string literal — when the login route moves, this middleware follows. Handler methods themselves should redirect via the [`Redirect` control-flow signal](./error-handling.md) instead; the inline check is only needed here because middleware runs outside the error-return path.
+
+Example logging middleware using the `PageNode`:
 
 ```go
-// Authentication middleware that checks for a valid session
-func requireAuth(next http.Handler, pn *structpages.PageNode) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        session := r.Context().Value("session")
-        if session == nil {
-            http.Redirect(w, r, "/login", http.StatusSeeOther)
-            return
-        }
-        next.ServeHTTP(w, r)
-    })
-}
-
-// Logging middleware that tracks page access
 func loggingMiddleware(next http.Handler, pn *structpages.PageNode) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
         next.ServeHTTP(w, r)
-        log.Printf("%s %s took %v", r.Method, r.URL.Path, time.Since(start))
+        log.Printf("%s %s (%s) took %v", r.Method, r.URL.Path, pn.Title, time.Since(start))
     })
 }
 ```
 
-### Middleware Execution Order
+## Middleware execution order
 
 The framework prepends two implicit middlewares to every route, then layers the user-supplied chain on top. The final order, from outermost (runs first on the request, last on the response) to innermost:
 
@@ -91,7 +105,6 @@ The framework prepends two implicit middlewares to every route, then layers the 
 4. **Page-specific middlewares from `Middlewares()`** — accumulate down the page tree (parent's middlewares wrap children's).
 5. **The page handler** — innermost.
 
-Middleware execution forms an "onion": the outermost middleware sees the request first and the response last. The `TestMiddlewareOrder` test in the codebase validates this behavior.
+Middleware execution forms an "onion": the outermost middleware sees the request first and the response last.
 
-Note: because of the auto-injected middlewares, you don't need to do anything to make `URLFor` and `ID`/`IDTarget` work from inside your handlers — the parse context and current-route params are already in `r.Context()`.
-
+Because of the auto-injected middlewares, you don't need to do anything to make `URLFor` and `ID`/`IDTarget` work from inside your handlers and middleware — the parse context and current-route params are already in `r.Context()`.
