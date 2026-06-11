@@ -171,66 +171,91 @@ type TeamManagementPages struct {
     // ...
 }
 
-// Props with RenderTarget for each pane.
-// Note: userListData / groupListData are plain helper methods, NOT auto-resolved by the framework.
+// Page props compose the panes; each partial takes its own pane struct.
+type TeamManagementProps struct {
+    UserPaneProps
+    GroupPaneProps
+}
+
+type UserPaneProps struct {
+    Users           []UserWithGroups
+    UserSearchQuery string
+}
+
+type GroupPaneProps struct {
+    Groups           []db.GroupWithCounts
+    GroupSearchQuery string
+}
+
+// Partials get partial data (their pane struct), never the page props —
+// the TeamManagementProps{} returned alongside RenderComponent is ignored.
+// The default falls back to FULL props, never empty props.
 func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (TeamManagementProps, error) {
     switch {
     case sel.Is(p.GroupList):
-        groups, err := p.groupListData(r, appCtx)
+        groupPane, err := p.GroupListProps(r, appCtx)
         if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groups))
+        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groupPane))
 
     case sel.Is(p.UserList):
-        users, err := p.userListData(r, appCtx)
+        userPane, err := p.UserListProps(r, appCtx)
         if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
+        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(userPane))
 
-    case sel.Is(p.Page), sel.Is(p.Content):
-        users, err := p.userListData(r, appCtx)
-        if err != nil { return TeamManagementProps{}, err }
-        groups, err := p.groupListData(r, appCtx)
-        if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{
-            UserPaneProps:  UserPaneProps{Users: users},
-            GroupPaneProps: GroupPaneProps{Groups: groups},
-        }, nil
+    default: // Page, Content, or anything unrecognised — full props
+        return p.fullProps(r, appCtx)
     }
-    return TeamManagementProps{}, nil
 }
 ```
 
 ### Helper Props Methods
 
-Each section has a dedicated helper returning only its data. These are *just methods* — the framework only auto-invokes the method literally named `Props`.
+Each pane has a dedicated helper returning its pane struct, feeding both the partial branches and `fullProps` — each query written once. These are *just methods* — the framework only auto-invokes the method literally named `Props`.
 
 ```go
-func (p TeamManagementView) userListData(r *http.Request, appCtx *AppContext) ([]UserWithGroups, error) {
+func (p TeamManagementView) UserListProps(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
     search := r.FormValue("user-search")
-    return appCtx.Store.SearchUsers(r.Context(), search)
+    users, err := appCtx.Store.SearchUsers(r.Context(), search)
+    if err != nil {
+        return UserPaneProps{}, fmt.Errorf("search users: %w", err)
+    }
+    return UserPaneProps{Users: users, UserSearchQuery: search}, nil
 }
 
-func (p TeamManagementView) groupListData(r *http.Request, appCtx *AppContext) ([]db.GroupWithCounts, error) {
+func (p TeamManagementView) GroupListProps(r *http.Request, appCtx *AppContext) (GroupPaneProps, error) {
     search := r.FormValue("group-search")
-    return appCtx.Store.SearchGroups(r.Context(), search)
+    groups, err := appCtx.Store.SearchGroups(r.Context(), search)
+    if err != nil {
+        return GroupPaneProps{}, fmt.Errorf("search groups: %w", err)
+    }
+    return GroupPaneProps{Groups: groups, GroupSearchQuery: search}, nil
+}
+
+func (p TeamManagementView) fullProps(r *http.Request, appCtx *AppContext) (TeamManagementProps, error) {
+    userPane, err := p.UserListProps(r, appCtx)
+    if err != nil { return TeamManagementProps{}, err }
+    groupPane, err := p.GroupListProps(r, appCtx)
+    if err != nil { return TeamManagementProps{}, err }
+    return TeamManagementProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
 }
 ```
 
 ### Partial Templates
 
-Each partial takes ONLY its specific data:
+Each partial takes ONLY its pane struct, and its wrapper id comes from `ID` — never hand-written (Rule 14). Full render and partial re-render share one signature:
 
 ```templ
-templ (p TeamManagementView) UserList(users []UserWithGroups) {
-    <div id="user-list">
-        for _, u := range users {
-            <div>{ u.Name }</div>
+templ (p TeamManagementView) UserList(pane UserPaneProps) {
+    <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
+        for _, u := range pane.Users {
+            <div>{ u.User.Name }</div>
         }
     </div>
 }
 
-templ (p TeamManagementView) GroupList(groups []db.GroupWithCounts) {
-    <div id="group-list">
-        for _, g := range groups {
+templ (p TeamManagementView) GroupList(pane GroupPaneProps) {
+    <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
+        for _, g := range pane.Groups {
             <div>{ g.Name }</div>
         }
     </div>

@@ -73,37 +73,78 @@ Including the ancestor path guarantees two different mounts of the same struct n
 
 The `RenderTarget` parameter tells your Props method **which page component will render**, so it can load only that region's data. Whatever selector configuration you use, `target.Is()` works the same — Props code is decoupled from the selection mechanism.
 
+The shape that holds up in real pages: **partials get partial data, not the page props.** The page props struct exists for the full-page render and is typically *composed of* per-pane sub-structs; each partial takes its own pane struct. When a partial branch matches, you build just that pane's data, hand the constructed component to `RenderComponent`, and the page-props value you return alongside is **ignored**:
+
 ```go
-func (p TeamManagementView) Props(r *http.Request, target structpages.RenderTarget, store *Store) (TeamManagementProps, error) {
+// Page props compose the panes; each partial takes its own pane struct.
+type TeamManagementProps struct {
+    UserPaneProps
+    GroupPaneProps
+}
+
+type UserPaneProps struct {
+    Users           []UserWithGroups
+    UserSearchQuery string
+}
+
+type GroupPaneProps struct {
+    Groups           []db.GroupWithCounts
+    GroupSearchQuery string
+}
+
+func (p TeamManagementView) Props(r *http.Request, sel structpages.RenderTarget, appCtx *AppContext) (TeamManagementProps, error) {
     switch {
-    case target.Is(p.GroupList):
-        groups, err := store.SearchGroups(r.Context(), r.FormValue("group-search"))
+    case sel.Is(p.GroupList):
+        groups, err := p.GroupListProps(r, appCtx)
         if err != nil {
             return TeamManagementProps{}, err
         }
+        // Partial data only — the TeamManagementProps{} return is ignored.
         return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groups))
 
-    case target.Is(p.UserList):
-        users, err := store.SearchUsers(r.Context(), r.FormValue("user-search"))
+    case sel.Is(p.UserList):
+        userPane, err := p.UserListProps(r, appCtx)
         if err != nil {
             return TeamManagementProps{}, err
         }
-        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(users))
+        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(userPane))
 
-    default: // full page — load everything
-        users, err := store.SearchUsers(r.Context(), "")
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        groups, err := store.SearchGroups(r.Context(), "")
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        return TeamManagementProps{
-            UserPaneProps:  UserPaneProps{Users: users},
-            GroupPaneProps: GroupPaneProps{Groups: groups},
-        }, nil
+    default:
+        // Full page, boosted Content swap, or anything unrecognised:
+        // fall back to the full props — never to empty props.
+        return p.fullProps(r, appCtx)
     }
+}
+
+// Per-pane helper props methods. NOT auto-invoked (only the method literally
+// named Props is) — they're plain methods feeding both the partial branches
+// above and fullProps below.
+func (p TeamManagementView) GroupListProps(r *http.Request, appCtx *AppContext) (GroupPaneProps, error) {
+    groups, err := appCtx.Store.SearchGroupsWithCounts(r.Context(), r.FormValue("group-search"))
+    if err != nil {
+        return GroupPaneProps{}, fmt.Errorf("search groups: %w", err)
+    }
+    return GroupPaneProps{Groups: groups, GroupSearchQuery: r.FormValue("group-search")}, nil
+}
+
+func (p TeamManagementView) UserListProps(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
+    users, err := appCtx.Store.SearchUsersWithGroups(r.Context(), r.FormValue("user-search"))
+    if err != nil {
+        return UserPaneProps{}, fmt.Errorf("search users: %w", err)
+    }
+    return UserPaneProps{Users: users, UserSearchQuery: r.FormValue("user-search")}, nil
+}
+
+func (p TeamManagementView) fullProps(r *http.Request, appCtx *AppContext) (TeamManagementProps, error) {
+    userPane, err := p.UserListProps(r, appCtx)
+    if err != nil {
+        return TeamManagementProps{}, err
+    }
+    groupPane, err := p.GroupListProps(r, appCtx)
+    if err != nil {
+        return TeamManagementProps{}, err
+    }
+    return TeamManagementProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
 }
 
 templ (p TeamManagementView) Page(props TeamManagementProps) {
@@ -113,7 +154,7 @@ templ (p TeamManagementView) Page(props TeamManagementProps) {
                    hx-target={ structpages.IDTarget(ctx, TeamManagementView.UserList) }
                    name="user-search" />
             <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
-                @p.UserList(props.UserPaneProps.Users)
+                @p.UserList(props.UserPaneProps)
             </div>
         </div>
 
@@ -122,14 +163,22 @@ templ (p TeamManagementView) Page(props TeamManagementProps) {
                    hx-target={ structpages.IDTarget(ctx, TeamManagementView.GroupList) }
                    name="group-search" />
             <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
-                @p.GroupList(props.GroupPaneProps.Groups)
+                @p.GroupList(props.GroupPaneProps)
             </div>
         </div>
     </div>
 }
+
+templ (p TeamManagementView) UserList(pane UserPaneProps) {
+    // renders pane.Users, preserves pane.UserSearchQuery in the input
+}
+
+templ (p TeamManagementView) GroupList(pane GroupPaneProps) {
+    // renders pane.Groups
+}
 ```
 
-Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running.
+Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running. The composition site passes the same pane struct (`props.UserPaneProps`) the partial branch builds — full render and partial re-render share one component signature.
 
 ### Why `RenderComponent(p.X(args))` and not `RenderComponent(target, args)`
 

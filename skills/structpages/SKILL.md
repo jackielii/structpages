@@ -366,32 +366,47 @@ The chain form mirrors `URLFor`'s shape: leading typed values are chain steps; t
 
 ### 5. RenderTarget Pattern
 
-For pages with multiple HTMX-updatable sections, inject `RenderTarget` into Props to load only the data each section needs. **Prefer constructing the component directly** — `p` is in scope, so call the method and hand the resulting component to `RenderComponent`:
+For pages with multiple HTMX-updatable sections, inject `RenderTarget` into Props to load only the data each section needs. The shape that holds up in real pages:
+
+- **Partials get partial data, never the page props struct.** Each partial branch builds just its region's data and hands the *constructed component* to `RenderComponent` — the page-props value returned alongside is ignored (Rule 4).
+- **The page props struct composes per-pane sub-structs** (`MyPageProps` embeds `UserPaneProps` + `GroupPaneProps`); partials take their pane struct, so full render and partial re-render share one component signature.
+- **The default case falls back to full props, never empty props** — browser navigation, boosted swaps, and unrecognised targets all need the whole page.
 
 ```go
+type MyPageProps struct {
+    UserPaneProps
+    GroupPaneProps
+}
+
 func (p MyPage) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (MyPageProps, error) {
     switch {
     case sel.Is(p.UserList):
-        users, err := p.userListData(r, appCtx)
+        userPane, err := p.UserListProps(r, appCtx) // builds UserPaneProps
         if err != nil { return MyPageProps{}, err }
-        return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
+        return MyPageProps{}, structpages.RenderComponent(p.UserList(userPane))
 
     case sel.Is(p.GroupList):
-        groups, err := p.groupListData(r, appCtx)
+        groupPane, err := p.GroupListProps(r, appCtx)
         if err != nil { return MyPageProps{}, err }
-        return MyPageProps{}, structpages.RenderComponent(p.GroupList(groups))
+        return MyPageProps{}, structpages.RenderComponent(p.GroupList(groupPane))
 
-    case sel.Is(p.Page), sel.Is(p.Content):
-        // Full page — load everything
-        return MyPageProps{Users: …, Groups: …}, nil
+    default: // Page, Content, or anything unrecognised — full props
+        return p.fullProps(r, appCtx)
     }
-    return MyPageProps{}, nil
+}
+
+func (p MyPage) fullProps(r *http.Request, appCtx *AppContext) (MyPageProps, error) {
+    userPane, err := p.UserListProps(r, appCtx)
+    if err != nil { return MyPageProps{}, err }
+    groupPane, err := p.GroupListProps(r, appCtx)
+    if err != nil { return MyPageProps{}, err }
+    return MyPageProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
 }
 ```
 
-Why this form: `p.UserList(users)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, users)` or `RenderComponent(sel, users)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when the method's params should be DI-injected by the framework (see §5b).
+Why the constructed form: `p.UserList(userPane)` is a normal Go call, so the compiler checks arg types and counts. The alternative — `RenderComponent(MyPage.UserList, userPane)` or `RenderComponent(sel, userPane)` — goes through reflection inside the framework, which defers those checks to runtime. Use the reflective forms only when the method's params should be DI-injected by the framework (see §5b).
 
-Note: only methods named `Props` are auto-invoked. `*Props`-suffixed helpers (e.g. `userListData` above; some codebases call them `UserListProps`) are *just regular methods* the user calls from inside `Props` — there's no priority resolution.
+Note: only methods named `Props` are auto-invoked. `*Props`-suffixed helpers (`UserListProps`, `GroupListProps` above) are *just regular methods* the user calls from inside `Props` — there's no priority resolution. The per-pane helpers feed both the partial branches and `fullProps`, so each query is written once.
 
 Components (standalone `templ` blocks) work the same way — just call the function:
 

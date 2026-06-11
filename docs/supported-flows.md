@@ -93,7 +93,12 @@ func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexPro
 }
 ```
 
-`p.UserList(users)` is a normal Go call — compile-time checked — handed to `RenderComponent` as the response. Partial page components take ONLY their specific data (`UserList([]User)`), never the full props struct.
+`p.UserList(users)` is a normal Go call — compile-time checked — handed to `RenderComponent` as the response. Two principles generalize from this:
+
+- **Partials get partial data, never the full props struct.** When `target.Is(p.UserList)` matches, you build just that region's data; the `IndexProps{}` returned alongside `RenderComponent` is ignored.
+- **The default case falls back to full props, not empty props** — browser navigation, boosted swaps, and unrecognised targets all need the whole page.
+
+On larger pages the props struct is typically *composed of* per-pane sub-structs, with helper props methods feeding both the partial branches and a shared `fullProps` — see the worked example in [HTMX Integration](./htmx.md#rendertarget-in-props).
 
 ## A handler method that returns a partial
 
