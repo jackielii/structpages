@@ -10,7 +10,7 @@ sidebar_position: 1
 
 ## Status
 
-**Alpha.** APIs may change between minor versions. The library is used in a medium-sized internal project but is not yet battle-tested in production. Pin versions if you adopt it now.
+**Beta.** The API has settled and the library is battle-tested in production, carrying medium-to-large applications. Remaining breaking changes before v1 will be rare and called out in release notes.
 
 ## Why structpages
 

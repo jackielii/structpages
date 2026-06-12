@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Structpages is a Go web framework library that provides struct-based routing. It integrates with Go's standard `http.ServeMux` and provides a declarative way to define routes using struct tags. The framework is designed to reduce boilerplate code when building web pages and components, with built-in support for the Templ templating engine.
 
-**Status**: Alpha (early development stage)
+**Status**: Beta (API settled; battle-tested in production by medium-to-large applications)
 
 ## Development Commands
 
