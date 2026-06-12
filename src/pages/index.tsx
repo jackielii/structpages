@@ -65,7 +65,7 @@ export default function Home(): JSX.Element {
           <p className={styles.heroSubtitle}>
             Built on <code>http.ServeMux</code>. First-class Templ and HTMX. Type-safe URLs.
           </p>
-          <p className={styles.alphaBadge}>Alpha — APIs may change</p>
+          <p className={styles.alphaBadge}>Beta — battle-tested in production</p>
           <div className={styles.heroButtons}>
             <Link className="button button--primary button--lg" to="/intro">
               Get Started
