@@ -61,6 +61,17 @@ type RenderTarget interface {
 	// Works with both page methods and standalone functions.
 	// Uses method/function expressions for compile-time safety.
 	//
+	// ID/Is symmetry: an element whose id is ID(ctx, X) is matched by Is(X).
+	// For a standalone function this is the PACKAGE-qualified id (e.g.
+	// "overlay-mount" for overlay.Mount), so Is(overlay.Mount) matches the
+	// overlay slot and not a same-named Mount from another package. This is how
+	// a shared element becomes a positive render target: render it with
+	// id={ ID(ctx, fn) }, then a request targeting it resolves to a target that
+	// Is(fn) recognises — e.g. a multi-method page can detect "I was opened into
+	// the shared slot" and render its dialog fragment instead of the full page.
+	// Is also accepts the bare function id and the page-prefixed form as a
+	// partial-id convenience; those do not disambiguate by package.
+	//
 	// For function components, Is() has a side effect: it stores the function
 	// value when a match is found, enabling lazy evaluation of the hxTarget.
 	Is(method any) bool
@@ -142,17 +153,27 @@ func (frt *functionRenderTarget) Is(method any) bool {
 		return false
 	}
 
-	// Lazy evaluation: convert function name to kebab-case
 	funcKebab := camelToKebab(info.methodName)
-
-	// Normalize hxTarget (strip # and page prefix)
 	normalized := strings.TrimPrefix(frt.hxTarget, "#")
-	pagePrefix := camelToKebab(frt.pageName) + "-"
-	normalized = strings.TrimPrefix(normalized, pagePrefix)
 
-	// Check if it matches
-	if normalized == funcKebab || strings.HasSuffix(normalized, "-"+funcKebab) {
-		// Store funcValue for later rendering
+	// Authoritative match: the id ID() generates for a standalone function is
+	// PACKAGE-prefixed (see functionID) — "<package>-<func>". Matching it
+	// exactly is what makes a standalone component a collision-free render
+	// target: two packages may each expose a "Mount" component, and their ids
+	// ("overlay-mount" vs "drawer-mount") differ, so Is(overlay.Mount) matches
+	// only the overlay slot, never the drawer's. Generate the element's id with
+	// structpages.ID(ctx, fn) and this is the match you get.
+	if info.packageName != "" && normalized == camelToKebab(info.packageName)+"-"+funcKebab {
+		frt.funcValue = reflect.ValueOf(method)
+		return true
+	}
+
+	// Partial-id ergonomics: also accept the bare function id, and the
+	// page-prefixed form (for a function addressed relative to the page it
+	// renders on). These do NOT disambiguate by package — prefer the
+	// package-qualified id above when cross-package uniqueness matters.
+	pageStripped := strings.TrimPrefix(normalized, camelToKebab(frt.pageName)+"-")
+	if normalized == funcKebab || pageStripped == funcKebab {
 		frt.funcValue = reflect.ValueOf(method)
 		return true
 	}

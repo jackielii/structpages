@@ -287,6 +287,25 @@ func TestFunctionRenderTarget_Is(t *testing.T) {
 	}
 }
 
+// TestFunctionRenderTarget_Is_PackageQualified pins the package-qualified match.
+// ID() emits "<package>-<func>" for a standalone function (functionID), and Is
+// matches that authoritative id exactly — so a same-named function from a
+// DIFFERENT package does not collide (the old bare "-<func>" suffix rule would
+// have matched any "*-standalone-widget").
+func TestFunctionRenderTarget_Is_PackageQualified(t *testing.T) {
+	// The authoritative id structpages.ID emits matches regardless of page.
+	frt := &functionRenderTarget{hxTarget: "structpages-standalone-widget", pageName: "SomeOtherPage"}
+	if !frt.Is(StandaloneWidget) {
+		t.Error("package-qualified id should match the standalone function")
+	}
+
+	// A same-named function from another package must NOT match.
+	frt2 := &functionRenderTarget{hxTarget: "elsewhere-standalone-widget", pageName: "SomeOtherPage"}
+	if frt2.Is(StandaloneWidget) {
+		t.Error("a different package's same-named function must not match (no cross-package collision)")
+	}
+}
+
 // Test methodRenderTarget.Is() with edge cases
 func TestMethodRenderTarget_Is_EdgeCases(t *testing.T) {
 	// Test with zero method (Type == nil)

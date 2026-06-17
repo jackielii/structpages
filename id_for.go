@@ -24,13 +24,25 @@ import (
 // Example:
 //
 //	<div id={ structpages.ID(ctx, p.UserList) }>
-//	// → <div id="team-management-view-user-list">
+//	// → <div id="team-management-view-user-list">  (page-path prefix)
 //
-//	<div id={ structpages.ID(ctx, UserStatsWidget) }>
-//	// → <div id="user-stats-widget"> (no page prefix for standalone functions)
+//	<div id={ structpages.ID(ctx, dashboard.StatsWidget) }>
+//	// → <div id="dashboard-stats-widget">  (PACKAGE prefix — see below)
 //
 //	<div id={ structpages.ID(ctx, "my-custom-id") }>
 //	// → <div id="my-custom-id">
+//
+// Prefer ID over hardcoding an id string — and that matters most for a
+// standalone (shared) function component. A method id is prefixed by its page's
+// path; a standalone function has no page position, so it is prefixed by its
+// PACKAGE name instead ("dashboard-stats-widget", not "stats-widget"). That
+// package prefix is the point: it makes the id globally unique, so two packages
+// can each expose a "Mount"/"Widget" component without their ids colliding. When
+// you give a shared element a render-target identity this way — e.g. a singleton
+// overlay slot's id = ID(ctx, overlay.Mount) — RenderTarget.Is(overlay.Mount)
+// matches it exactly (see RenderTarget.Is), and the pairing stays correct
+// without anyone depending on the id's internal format. Hardcoding the string
+// forfeits both the uniqueness guarantee and that ID/Is symmetry.
 //
 // Returns an error if parseContext is not found in the provided context.
 func ID(ctx context.Context, v any) (string, error) {
