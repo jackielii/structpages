@@ -60,9 +60,12 @@ Use the method forms outside request context (initialization, boot-time validati
 func URLFor(ctx context.Context, page any, args ...any) (string, error)
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
+func CurrentPage(ctx context.Context) *PageNode
 ```
 
 Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated).
+
+`CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the templ components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state by walking `node.Parent` to see whether a nav target is an ancestor of the current page. Pages served by their own `ServeHTTP` do not set it.
 
 ## Options
 

@@ -1,6 +1,7 @@
 package structpages
 
 import (
+	"context"
 	"fmt"
 	"iter"
 	"net/http"
@@ -8,6 +9,23 @@ import (
 	"reflect"
 	"strings"
 )
+
+// CurrentPage returns the PageNode of the route currently being served, or
+// nil when ctx did not originate from a structpages request — for example a
+// bare context, or one wrapped only by [StructPages.PageContext] in a test.
+//
+// structpages sets this on the request context before rendering a matched
+// Props/Component page, so a handler, a Props method, or any templ component
+// they render can ask "which page am I?" without threading the node through
+// every call. The node is the matched leaf; walk [PageNode.Parent] to reach
+// its mount ancestors (e.g. shared layout chrome computing active-nav state
+// by testing whether a nav target is an ancestor of the current page).
+//
+// Pages served by their own ServeHTTP do not set this — the value is for the
+// component/Props render path.
+func CurrentPage(ctx context.Context) *PageNode {
+	return currentPageCtx.Value(ctx)
+}
 
 // PageNode represents a page in the routing tree.
 // It contains metadata about the page including its route, title, and registered methods.

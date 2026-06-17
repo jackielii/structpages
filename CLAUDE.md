@@ -103,6 +103,15 @@ When adding new features:
 2. Ensure examples still work after changes
 3. Test with both regular HTTP and HTMX requests if applicable
 
+## Docs Site
+
+The published site (https://jackielii.github.io/structpages/) is built from **two sources**:
+
+- **Markdown content** comes from `docs/*.md` (plus `README.md`, `PERFORMANCE.md`, `examples/README.md`) on `main` — the Docs Site workflow copies it in at build time.
+- **The site shell** (Docusaurus config, homepage hero in `src/pages/index.tsx`, styles) lives on the separate `docs-site` branch, checked out as a worktree at `../structpages-docs-site`.
+
+The workflow only auto-triggers on pushes to `main`. After pushing to `docs-site`, deploy manually with `gh workflow run "Docs Site"`. When changing repo-wide claims (e.g. the Alpha→Beta status, June 2026), remember the homepage badge in `index.tsx` on `docs-site` — it's hardcoded there and not covered by grepping `main`.
+
 ## Claude Code Skill
 
 A library-consumer-facing skill ships with this repo at `skills/structpages/SKILL.md` (with `reference.md` and `examples.md`). It teaches users of the library — not contributors — patterns for `Props`/`RenderTarget`, HTMX partial rendering, `URLFor`/`ID`/`IDTarget`, middleware, and DI. A minimal `.claude-plugin/plugin.json` makes the repo installable as a Claude Code plugin.
