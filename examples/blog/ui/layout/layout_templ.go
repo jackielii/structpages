@@ -15,7 +15,6 @@ import (
 	templruntime "github.com/a-h/templ/runtime"
 	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
-	"github.com/jackielii/structpages/examples/blog/ui/components"
 )
 
 // PublicShell wraps reader-facing pages. Cross-feature links (e.g. the admin
@@ -49,7 +48,7 @@ func PublicShell(title string) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 21, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 20, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -60,9 +59,9 @@ func PublicShell(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 templ.SafeURL
-		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("home")))
+		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("home")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 28, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 27, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -73,9 +72,9 @@ func PublicShell(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 templ.SafeURL
-		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("home")))
+		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("home")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 30, Col: 84}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 29, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -86,9 +85,9 @@ func PublicShell(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 templ.SafeURL
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("search")))
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("search")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 31, Col: 86}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 30, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -99,9 +98,9 @@ func PublicShell(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 templ.SafeURL
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("loginPage")))
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("loginPage")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 32, Col: 109}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 31, Col: 113}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -152,7 +151,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 50, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 49, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -163,9 +162,9 @@ func AdminShell(title string, current store.User) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 templ.SafeURL
-		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("dashboard")))
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("dashboard")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 57, Col: 118}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 56, Col: 122}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -176,9 +175,9 @@ func AdminShell(title string, current store.User) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 templ.SafeURL
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("dashboard")))
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("dashboard")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 62, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 61, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -189,9 +188,9 @@ func AdminShell(title string, current store.User) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var11 templ.SafeURL
-		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("postList")))
+		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("postList")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 63, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 62, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -202,9 +201,9 @@ func AdminShell(title string, current store.User) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var12 templ.SafeURL
-		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("userList")))
+		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("userList")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 64, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 63, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -217,7 +216,7 @@ func AdminShell(title string, current store.User) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(current.Username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 66, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 65, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -228,9 +227,9 @@ func AdminShell(title string, current store.User) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var14 templ.SafeURL
-		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(components.URL(ctx, structpages.Ref("logout")))
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinURLErrs(structpages.URLFor(ctx, structpages.Ref("logout")))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 67, Col: 81}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `ui/layout/layout.templ`, Line: 66, Col: 85}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
