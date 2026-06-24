@@ -31,7 +31,7 @@ func (commentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		return structpages.RenderComponent(CommentsList(s.ListComments(post.ID)))
+		return structpages.RenderComponent(CommentsList(CommentsListProps{Comments: s.ListComments(post.ID)}))
 	}
 	http.Redirect(w, r, "/posts/"+slug, http.StatusSeeOther)
 	return nil

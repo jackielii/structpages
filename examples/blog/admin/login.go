@@ -28,5 +28,5 @@ func (LoginPage) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Servi
 			return nil
 		}
 	}
-	return loginShell(username, errMsg).Render(r.Context(), w)
+	return LoginShell(LoginShellProps{Username: username, ErrMsg: errMsg}).Render(r.Context(), w)
 }

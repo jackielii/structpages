@@ -70,8 +70,8 @@ func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	if strings.EqualFold(r.Header.Get("HX-Request"), "true") {
-		_ = components.ErrorBlock(status, msg).Render(r.Context(), w)
+		_ = components.ErrorBlock(components.ErrorBlockProps{Status: status, Msg: msg}).Render(r.Context(), w)
 		return
 	}
-	_ = components.ErrorPage(status, msg).Render(r.Context(), w)
+	_ = components.ErrorPage(components.ErrorPageProps{Status: status, Msg: msg}).Render(r.Context(), w)
 }

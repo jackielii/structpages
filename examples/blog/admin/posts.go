@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/a-h/templ"
 	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
@@ -88,7 +87,7 @@ func (postDeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *st
 	}
 	if r.Header.Get("HX-Request") == "true" {
 		posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 50})
-		return structpages.RenderComponent(PostsTable(posts))
+		return structpages.RenderComponent(PostsTable(PostsTableProps{Posts: posts}))
 	}
 	http.Redirect(w, r, "/admin/posts/", http.StatusSeeOther)
 	return nil
@@ -118,12 +117,14 @@ func parsePostForm(r *http.Request) (store.Post, string) {
 
 // renderPostForm re-renders the form on validation failure, preserving inputs.
 func renderPostForm(ctx context.Context, w http.ResponseWriter, user store.User, title string, p store.Post, cats []store.Category, errMsg string) error {
-	return adminShellWith(title, user, postForm(p, cats, errMsg)).Render(ctx, w)
+	body := PostForm(PostFormProps{P: p, Cats: cats, ErrMsg: errMsg})
+	return AdminShellWith(AdminShellWithProps{Title: title, User: user, Body: body}).Render(ctx, w)
 }
 
 // postFormAction returns the POST URL for the form: create when ID==0,
-// update otherwise. Lives outside the templ file so the templ stays declarative.
-func postFormAction(ctx context.Context, p store.Post) templ.SafeURL {
+// update otherwise. Lives outside the gsx file so the markup stays declarative.
+// gsx auto-sanitizes URL attributes, so a plain string is enough.
+func postFormAction(ctx context.Context, p store.Post) string {
 	if p.ID == 0 {
 		return must(components.URL(ctx, postCreateHandler{}))
 	}

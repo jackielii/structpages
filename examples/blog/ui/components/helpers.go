@@ -4,28 +4,27 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/a-h/templ"
 	"github.com/jackielii/structpages"
 )
 
-// URL wraps structpages.URLFor to return a templ.SafeURL so it can be passed
-// to href/action attributes without templ's URL-context sanitization warning.
-func URL(ctx context.Context, page any, args ...any) (templ.SafeURL, error) {
-	s, err := structpages.URLFor(ctx, page, args...)
-	return templ.SafeURL(s), err
+// URL wraps structpages.URLFor. gsx auto-sanitizes URL-context attributes
+// (href/action/src/hx-*), so a plain (string, error) is enough — and it
+// auto-unwraps in attribute position, dropping the explicit error handling.
+func URL(ctx context.Context, page any, args ...any) (string, error) {
+	return structpages.URLFor(ctx, page, args...)
 }
 
-// PaginationProps describes a paginated control. URL builds the link for a
+// PageNav describes a paginated control. URL builds the link for a
 // given page number; callers typically wrap structpages.URLFor with the
 // "?page={page}" template form.
-type PaginationProps struct {
+type PageNav struct {
 	Page     int
 	PageSize int
 	Total    int
 	URL      func(page int) (string, error)
 }
 
-func (p PaginationProps) Pages() int {
+func (p PageNav) Pages() int {
 	if p.PageSize <= 0 {
 		return 1
 	}
@@ -39,7 +38,7 @@ func (p PaginationProps) Pages() int {
 	return pages
 }
 
-func (p PaginationProps) Range() string {
+func (p PageNav) Range() string {
 	if p.Total == 0 {
 		return "No results"
 	}
@@ -51,5 +50,5 @@ func (p PaginationProps) Range() string {
 	return fmt.Sprintf("%d–%d of %d", start, end, p.Total)
 }
 
-func (p PaginationProps) HasPrev() bool { return p.Page > 1 }
-func (p PaginationProps) HasNext() bool { return p.Page < p.Pages() }
+func (p PageNav) HasPrev() bool { return p.Page > 1 }
+func (p PageNav) HasNext() bool { return p.Page < p.Pages() }
