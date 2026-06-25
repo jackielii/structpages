@@ -5,6 +5,7 @@ go 1.26.1
 require github.com/jackielii/structpages v0.0.0-00010101000000-000000000000
 
 require (
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/a-h/templ v0.3.1020 // indirect
 	github.com/tdewolff/parse/v2 v2.8.13 // indirect
 )
@@ -30,6 +31,9 @@ require (
 
 replace github.com/jackielii/structpages => ../..
 
-tool github.com/a-h/templ/cmd/templ
+tool (
+	github.com/a-h/templ/cmd/templ
+	github.com/gsxhq/gsx/cmd/gsx
+)
 
 replace github.com/gsxhq/gsx => /Users/jackieli/personal/gsxhq/gsx
