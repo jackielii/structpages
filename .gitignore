@@ -43,3 +43,7 @@ examples/htmx/htmx
 examples/todo/todo
 examples/blog/blog
 examples/htmx-render-target/htmx-render-target-example
+examples/lint-misuse/lint-misuse
+
+# templ → gsx migration backups (local-only)
+.templ-bak/
