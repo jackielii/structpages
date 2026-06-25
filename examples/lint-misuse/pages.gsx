@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strconv"
-
-	"github.com/jackielii/structpages"
 )
 
 // BadLinks mirrors the templ original — it deliberately uses hard-coded
@@ -28,11 +25,4 @@ component BadLinks(id int, name string) {
 	<a hx-get={ "/api/items" }>Bad hx-get</a>
 	<form action={ "/submit" }>Bad action</form>
 	<a href="https://example.com/external">External (allowed)</a>
-}
-
-// urlFor is the app-level convenience wrapper used by gsx templates
-// (avoids repeating the package qualifier; returns (string, error) so
-// gsx auto-unwraps the error at the call site in URL-context attrs).
-func urlFor(ctx context.Context, page any, args ...any) (string, error) {
-	return structpages.URLFor(ctx, page, args...)
 }

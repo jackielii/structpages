@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -43,7 +42,7 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 			PageSize: store.DefaultPageSize,
 			Total:    total,
 			URL: func(target int) (string, error) {
-				return structpages.URLFor(ctx,
+				return components.URL(ctx,
 					[]any{categoryPage{}, "?page={page}"},
 					"page", target,
 				)

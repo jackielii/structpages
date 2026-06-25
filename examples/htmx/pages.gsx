@@ -2,8 +2,6 @@ package main
 
 import (
   "fmt"
-
-	"github.com/jackielii/structpages"
 )
 
 type index struct {
@@ -21,7 +19,7 @@ component (p index) Page()   { <Layout><p.Main/></Layout> }
 component (p index) Main() {
 	<h1>Welcome to the Index Page</h1>
 	<p>Navigate to the product, team, or contact pages using the links below:</p>
-  <a hx-get={ urlFor(ctx, throw{}) } hx-target="#main">Throw (Err)</a>
+  <a hx-get={ throw{} |> url } hx-target="#main">Throw (Err)</a>
 }
 
 component (p product) Page() { <Layout><p.Main/></Layout> }
@@ -58,10 +56,10 @@ component Layout() {
 			<header class="navbar">
 				<nav>
 					<ul role="list" hx-push-url="true" hx-target="#main">
-						<li><a hx-get={ urlFor(ctx, index{}) }>Home</a></li>
-						<li><a hx-get={ urlFor(ctx, product{}) }>Product</a></li>
-						<li><a hx-get={ urlFor(ctx, team{}) }>Team</a></li>
-						<li><a hx-get={ urlFor(ctx, contact{}) }>Contact</a></li>
+						<li><a hx-get={ index{} |> url }>Home</a></li>
+						<li><a hx-get={ product{} |> url }>Product</a></li>
+						<li><a hx-get={ team{} |> url }>Team</a></li>
+						<li><a hx-get={ contact{} |> url }>Contact</a></li>
 					</ul>
 				</nav>
 			</header>
@@ -76,5 +74,3 @@ component ErrorComp(err error) {
 	<h1>Error</h1>
 	<p>{ err.Error() }</p>
 }
-
-var urlFor = structpages.URLFor

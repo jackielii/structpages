@@ -18,8 +18,8 @@ component (p index) Page() {
 		<div class="todo-app">
 			<h1>TODO App</h1>
 			<form
-				hx-post={ urlFor(ctx, add{}) }
-				hx-target={ idTarget(ctx, index.TodoList) }
+				hx-post={ add{} |> url }
+				hx-target={ index.TodoList |> target }
 				hx-swap="innerHTML"
 				hx-on:htmx:after-request="this.reset()"
 			>
@@ -33,7 +33,7 @@ component (p index) Page() {
 					<button type="submit">Add Todo</button>
 				</div>
 			</form>
-			<div id={ idFor(ctx, index.TodoList) }>
+			<div id={ index.TodoList |> id }>
 				<p.TodoList/>
 			</div>
 		</div>
@@ -90,16 +90,16 @@ component TodoList() {
 					<input
 						type="checkbox"
 						checked={todo.Completed}
-						hx-post={ urlFor(ctx, toggle{}, "id", todo.ID) }
-						hx-target={ idTarget(ctx, index.TodoList) }
+						hx-post={ toggle{} |> url("id", todo.ID) }
+						hx-target={ index.TodoList |> target }
 						hx-swap="innerHTML"
 					/>
 					<span class="todo-text">{ todo.Text }</span>
 				</div>
 				<button
 					class="delete-btn"
-					hx-delete={ urlFor(ctx, deleteTodo{}, "id", todo.ID) }
-					hx-target={ idTarget(ctx, index.TodoList) }
+					hx-delete={ deleteTodo{} |> url("id", todo.ID) }
+					hx-target={ index.TodoList |> target }
 					hx-swap="innerHTML"
 					hx-confirm="Are you sure you want to delete this todo?"
 				>
@@ -232,7 +232,3 @@ component ErrorComp(err error) {
 	<h1>Error</h1>
 	<p>{ err.Error() }</p>
 }
-
-var urlFor = structpages.URLFor
-var idFor = structpages.ID
-var idTarget = structpages.IDTarget

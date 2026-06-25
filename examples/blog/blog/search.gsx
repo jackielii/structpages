@@ -35,8 +35,8 @@ component (p searchPage) Page(props searchProps) {
 		<h1 class="mb-4 text-2xl font-semibold">Search</h1>
 		<form
 			class="mb-6"
-			hx-get={ structpages.URLFor(ctx, searchPage{}) }
-			hx-target={ structpages.IDTarget(ctx, p.Results) }
+			hx-get={ searchPage{} |> url }
+			hx-target={ p.Results |> target }
 			hx-swap="outerHTML"
 			hx-trigger="input changed delay:250ms from:input, submit"
 			hx-push-url="true"
@@ -54,7 +54,7 @@ component (p searchPage) Page(props searchProps) {
 }
 
 component (p searchPage) Results(props searchProps) {
-	<div id={ structpages.ID(ctx, searchPage.Results) } class="space-y-4">
+	<div id={ searchPage.Results |> id } class="space-y-4">
 		{ if props.Query == "" {
 			<p class="text-sm text-slate-500">Type a query to search.</p>
 		} else if len(props.Posts) == 0 {

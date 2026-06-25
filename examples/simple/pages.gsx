@@ -1,7 +1,5 @@
 package main
 
-import "github.com/jackielii/structpages"
-
 // Page structs + route tags are plain Go — pass through unchanged.
 type index struct {
 	product `route:"/product Product"`
@@ -51,10 +49,10 @@ component Layout() {
 			<header class="navbar">
 				<nav>
 					<ul role="list">
-						<li><a href={ urlFor(ctx, index{}) }>Home</a></li>
-						<li><a href={ urlFor(ctx, product{}) }>Product</a></li>
-						<li><a href={ urlFor(ctx, team{}) }>Team</a></li>
-						<li><a href={ urlFor(ctx, contact{}) }>Contact</a></li>
+						<li><a href={ index{} |> url }>Home</a></li>
+						<li><a href={ product{} |> url }>Product</a></li>
+						<li><a href={ team{} |> url }>Team</a></li>
+						<li><a href={ contact{} |> url }>Contact</a></li>
 					</ul>
 				</nav>
 			</header>
@@ -62,5 +60,3 @@ component Layout() {
 		</body>
 	</html>
 }
-
-var urlFor = structpages.URLFor

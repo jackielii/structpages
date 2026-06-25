@@ -4,7 +4,10 @@ go 1.26.1
 
 require github.com/jackielii/structpages v0.0.0-00010101000000-000000000000
 
-require github.com/a-h/templ v0.3.1020 // indirect
+require (
+	github.com/a-h/templ v0.3.1020 // indirect
+	github.com/tdewolff/parse/v2 v2.8.13 // indirect
+)
 
 require (
 	github.com/a-h/parse v0.0.0-20250122154542-74294addb73e // indirect

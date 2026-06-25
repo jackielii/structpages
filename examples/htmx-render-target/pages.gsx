@@ -1,10 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/jackielii/structpages"
 )
 
 // Shared standalone function components (can be used across multiple pages).
@@ -17,8 +14,8 @@ component UserStatsWidget(stats UserStats) {
 		<p>New Today: { fmt.Sprintf("%d", stats.NewToday) }</p>
 		<button
 			type="button"
-			hx-get={ urlFor(ctx, dashboard{}) }
-			hx-target={ idForTarget(ctx, UserStatsWidget) }
+			hx-get={ dashboard{} |> url }
+			hx-target={ UserStatsWidget |> target }
 		>Refresh Stats</button>
 	</div>
 }
@@ -34,8 +31,8 @@ component SalesChartWidget(data SalesData) {
 		<p>Total Sales: ${ fmt.Sprintf("%.2f", data.Total) }</p>
 		<button
 			type="button"
-			hx-get={ urlFor(ctx, dashboard{}) }
-			hx-target={ idForTarget(ctx, SalesChartWidget) }
+			hx-get={ dashboard{} |> url }
+			hx-target={ SalesChartWidget |> target }
 		>Refresh Sales</button>
 	</div>
 }
@@ -50,8 +47,8 @@ component NotificationsList(notifications []Notification) {
 		</ul>
 		<button
 			type="button"
-			hx-get={ urlFor(ctx, dashboard{}) }
-			hx-target={ idForTarget(ctx, NotificationsList) }
+			hx-get={ dashboard{} |> url }
+			hx-target={ NotificationsList |> target }
 		>Refresh Notifications</button>
 	</div>
 }
@@ -66,13 +63,13 @@ component (p dashboard) Page(props dashboardData) {
 		<p>This example demonstrates the RenderTarget API with standalone function components.</p>
 		<p>Click "Refresh" buttons to see HTMX partial updates — each widget loads only its own data!</p>
 		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;">
-			<div id={ idFor(ctx, UserStatsWidget) }>
+			<div id={ UserStatsWidget |> id }>
 				<UserStatsWidget { props.Stats... } />
 			</div>
-			<div id={ idFor(ctx, SalesChartWidget) }>
+			<div id={ SalesChartWidget |> id }>
 				<SalesChartWidget { props.Sales... } />
 			</div>
-			<div id={ idFor(ctx, NotificationsList) }>
+			<div id={ NotificationsList |> id }>
 				<NotificationsList notifications={props.Notifications} />
 			</div>
 		</div>
@@ -132,18 +129,4 @@ component ErrorPage(err error) {
 component ErrorComp(err error) {
 	<h1>Error</h1>
 	<p>{ err.Error() }</p>
-}
-
-// Helper functions
-
-func urlFor(ctx context.Context, page any, args ...any) (string, error) {
-	return structpages.URLFor(ctx, page, args...)
-}
-
-func idFor(ctx context.Context, v any) (string, error) {
-	return structpages.ID(ctx, v)
-}
-
-func idForTarget(ctx context.Context, v any) (string, error) {
-	return structpages.IDTarget(ctx, v)
 }

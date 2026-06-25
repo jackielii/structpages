@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gsxhq/gsx"
-	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -54,8 +53,8 @@ component (p postPage) Page(props postProps) {
 			<CommentsList comments={props.Comments}/>
 			<form
 				class="space-y-2 rounded border bg-white p-4"
-				hx-post={ structpages.URLFor(ctx, commentHandler{}, "slug", props.Post.Slug) }
-				hx-target={ structpages.IDTarget(ctx, CommentsList) }
+				hx-post={ commentHandler{} |> url("slug", props.Post.Slug) }
+				hx-target={ CommentsList |> target }
 				hx-swap="outerHTML"
 				hx-on:htmx:after-request="this.reset()"
 			>

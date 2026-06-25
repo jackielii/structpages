@@ -51,14 +51,14 @@ component (p dashboardPage) Page(props dashboardProps) {
 			<div class="flex gap-2 text-xs">
 				<button
 					class="rounded border px-2 py-1 hover:bg-white"
-					hx-get={ structpages.URLFor(ctx, dashboardPage{}) }
-					hx-target={ structpages.IDTarget(ctx, StatsGrid) }
+					hx-get={ dashboardPage{} |> url }
+					hx-target={ StatsGrid |> target }
 					hx-swap="outerHTML"
 				>↻ Stats</button>
 				<button
 					class="rounded border px-2 py-1 hover:bg-white"
-					hx-get={ structpages.URLFor(ctx, dashboardPage{}) }
-					hx-target={ structpages.IDTarget(ctx, RecentPostsCard) }
+					hx-get={ dashboardPage{} |> url }
+					hx-target={ RecentPostsCard |> target }
 					hx-swap="outerHTML"
 				>↻ Recent posts</button>
 			</div>

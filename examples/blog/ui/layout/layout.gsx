@@ -24,11 +24,11 @@ component PublicShell(title string) {
 		<body class="bg-slate-50 text-slate-900">
 			<header class="border-b bg-white">
 				<div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-					<a class="text-lg font-semibold" href={ structpages.URLFor(ctx, structpages.Ref("home")) }>structpages blog</a>
+					<a class="text-lg font-semibold" href={ structpages.Ref("home") |> url }>structpages blog</a>
 					<nav class="flex gap-4 text-sm">
-						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("home")) }>Home</a>
-						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("search")) }>Search</a>
-						<a class="text-slate-500 hover:text-slate-900" href={ structpages.URLFor(ctx, structpages.Ref("loginPage")) }>Admin</a>
+						<a class="hover:underline" href={ structpages.Ref("home") |> url }>Home</a>
+						<a class="hover:underline" href={ structpages.Ref("search") |> url }>Search</a>
+						<a class="text-slate-500 hover:text-slate-900" href={ structpages.Ref("loginPage") |> url }>Admin</a>
 					</nav>
 				</div>
 			</header>
@@ -53,17 +53,17 @@ component AdminShell(title string, current store.User) {
 		<body class="bg-slate-100 text-slate-900">
 			<header class="border-b bg-slate-900 text-slate-100">
 				<div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-					<a class="flex items-center gap-2 text-lg font-semibold" href={ structpages.URLFor(ctx, structpages.Ref("dashboard")) }>
+					<a class="flex items-center gap-2 text-lg font-semibold" href={ structpages.Ref("dashboard") |> url }>
 						<img src="/admin/static/admin-logo.svg" alt="" class="h-5 w-5"/>
 						blog admin
 					</a>
 					<nav class="flex items-center gap-4 text-sm">
-						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("dashboard")) }>Dashboard</a>
-						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("postList")) }>Posts</a>
-						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("userList")) }>Users</a>
+						<a class="hover:underline" href={ structpages.Ref("dashboard") |> url }>Dashboard</a>
+						<a class="hover:underline" href={ structpages.Ref("postList") |> url }>Posts</a>
+						<a class="hover:underline" href={ structpages.Ref("userList") |> url }>Users</a>
 						<span class="text-slate-400">|</span>
 						<span class="text-slate-300">{current.Username}</span>
-						<form method="POST" action={ structpages.URLFor(ctx, structpages.Ref("logout")) } class="m-0">
+						<form method="POST" action={ structpages.Ref("logout") |> url } class="m-0">
 							<button class="text-slate-300 hover:text-white" type="submit">Sign out</button>
 						</form>
 					</nav>

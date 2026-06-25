@@ -5,7 +5,6 @@
 package admin
 
 import (
-	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 )
@@ -20,7 +19,7 @@ component StatCell(label string, value int) {
 }
 
 component StatsGrid(stats store.Stats) {
-	<div id={ structpages.ID(ctx, StatsGrid) } class="grid grid-cols-2 gap-3 md:grid-cols-4">
+	<div id={ StatsGrid |> id } class="grid grid-cols-2 gap-3 md:grid-cols-4">
 		<StatCell label="Posts" value={stats.Posts}/>
 		<StatCell label="Drafts" value={stats.Drafts}/>
 		<StatCell label="Comments" value={stats.Comments}/>
@@ -29,7 +28,7 @@ component StatsGrid(stats store.Stats) {
 }
 
 component RecentPostsCard(posts []store.Post) {
-	<div id={ structpages.ID(ctx, RecentPostsCard) }>
+	<div id={ RecentPostsCard |> id }>
 		<components.Card title="Recent posts">
 			<ul class="divide-y text-sm">
 				{ if len(posts) == 0 {
@@ -53,7 +52,7 @@ component RecentPostsCard(posts []store.Post) {
 }
 
 component PostsTable(posts []store.Post) {
-	<div id={ structpages.ID(ctx, PostsTable) } class="overflow-hidden rounded-lg border bg-white shadow-sm">
+	<div id={ PostsTable |> id } class="overflow-hidden rounded-lg border bg-white shadow-sm">
 		<table class="w-full text-sm">
 			<thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
 				<tr>
@@ -81,8 +80,8 @@ component PostsTable(posts []store.Post) {
 							<form
 								method="POST"
 								action={ components.URL(ctx, postDeleteHandler{}, "id", p.ID) }
-								hx-post={ structpages.URLFor(ctx, postDeleteHandler{}, "id", p.ID) }
-								hx-target={ structpages.IDTarget(ctx, PostsTable) }
+								hx-post={ postDeleteHandler{} |> url("id", p.ID) }
+								hx-target={ PostsTable |> target }
 								hx-swap="outerHTML"
 								hx-confirm="Delete this post?"
 								class="inline"
