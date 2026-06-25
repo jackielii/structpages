@@ -1,7 +1,6 @@
-// Admin-local gsx functions. StatsGrid, RecentPostsCard and PostsTable are
-// standalone function components so the dashboard's Props+RenderTarget switch
-// can refresh each widget independently with target.Is(StatsGrid) /
-// target.Is(RecentPostsCard).
+// Admin-local templ functions. StatsGrid and RecentPostsCard are standalone
+// function components so the dashboard's Props+RenderTarget switch can refresh
+// each widget independently with target.Is(StatsGrid) / target.Is(RecentPostsCard).
 package admin
 
 import (
@@ -10,49 +9,47 @@ import (
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 )
 
-// StatCell — capitalized (gsx components must be Capitalized; the templ name
-// was lowercase `statCell`).
-component StatCell(label string, value int) {
+templ statCell(label string, value int) {
 	<div class="rounded-lg border bg-white p-4 text-center shadow-sm">
-		<div class="text-3xl font-semibold text-slate-900">{value}</div>
-		<div class="mt-1 text-xs uppercase tracking-wide text-slate-500">{label}</div>
+		<div class="text-3xl font-semibold text-slate-900">{ value }</div>
+		<div class="mt-1 text-xs uppercase tracking-wide text-slate-500">{ label }</div>
 	</div>
 }
 
-component StatsGrid(stats store.Stats) {
+templ StatsGrid(stats store.Stats) {
 	<div id={ structpages.ID(ctx, StatsGrid) } class="grid grid-cols-2 gap-3 md:grid-cols-4">
-		<StatCell label="Posts" value={stats.Posts}/>
-		<StatCell label="Drafts" value={stats.Drafts}/>
-		<StatCell label="Comments" value={stats.Comments}/>
-		<StatCell label="Categories" value={stats.Categories}/>
+		@statCell("Posts", stats.Posts)
+		@statCell("Drafts", stats.Drafts)
+		@statCell("Comments", stats.Comments)
+		@statCell("Categories", stats.Categories)
 	</div>
 }
 
-component RecentPostsCard(posts []store.Post) {
+templ RecentPostsCard(posts []store.Post) {
 	<div id={ structpages.ID(ctx, RecentPostsCard) }>
-		<components.Card title="Recent posts">
+		@components.Card("Recent posts") {
 			<ul class="divide-y text-sm">
-				{ if len(posts) == 0 {
+				if len(posts) == 0 {
 					<li class="py-2 text-slate-500">No posts yet.</li>
-				} }
-				{ for _, p := range posts {
+				}
+				for _, p := range posts {
 					<li class="flex items-center justify-between py-2">
 						<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>
-							{p.Title}
+							{ p.Title }
 						</a>
-						{ if p.Published {
+						if p.Published {
 							<span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">live</span>
 						} else {
 							<span class="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700">draft</span>
-						} }
+						}
 					</li>
-				} }
+				}
 			</ul>
-		</components.Card>
+		}
 	</div>
 }
 
-component PostsTable(posts []store.Post) {
+templ PostsTable(posts []store.Post) {
 	<div id={ structpages.ID(ctx, PostsTable) } class="overflow-hidden rounded-lg border bg-white shadow-sm">
 		<table class="w-full text-sm">
 			<thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -64,19 +61,19 @@ component PostsTable(posts []store.Post) {
 				</tr>
 			</thead>
 			<tbody>
-				{ for _, p := range posts {
+				for _, p := range posts {
 					<tr class="border-t">
 						<td class="px-3 py-2 font-medium">
-							<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>{p.Title}</a>
+							<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>{ p.Title }</a>
 						</td>
 						<td class="px-3 py-2">
-							{ if p.Published {
+							if p.Published {
 								<span class="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">published</span>
 							} else {
 								<span class="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700">draft</span>
-							} }
+							}
 						</td>
-						<td class="px-3 py-2 text-slate-500">{p.CreatedAt.Format("Jan 2, 2006")}</td>
+						<td class="px-3 py-2 text-slate-500">{ p.CreatedAt.Format("Jan 2, 2006") }</td>
 						<td class="px-3 py-2 text-right">
 							<form
 								method="POST"
@@ -91,10 +88,10 @@ component PostsTable(posts []store.Post) {
 							</form>
 						</td>
 					</tr>
-				} }
-				{ if len(posts) == 0 {
+				}
+				if len(posts) == 0 {
 					<tr><td colspan="4" class="px-3 py-6 text-center text-slate-500">No posts yet.</td></tr>
-				} }
+				}
 			</tbody>
 		</table>
 	</div>

@@ -2,10 +2,7 @@ package admin
 
 import "github.com/jackielii/structpages/examples/blog/ui/components"
 
-// LoginShell is invoked from login.go (LoginPage.ServeHTTP). gsx requires
-// component names to be Capitalized (lowercase = HTML element), so the templ
-// `loginShell` becomes `LoginShell`.
-component LoginShell(username, errMsg string) {
+templ loginShell(username, errMsg string) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -15,14 +12,14 @@ component LoginShell(username, errMsg string) {
 		</head>
 		<body class="bg-slate-100 text-slate-900">
 			<main class="mx-auto max-w-sm px-4 py-16">
-				<components.Card title="Sign in">
+				@components.Card("Sign in") {
 					<form method="POST" class="space-y-3">
-						<components.Alert kind={components.AlertError} msg={errMsg}/>
+						@components.Alert(components.AlertError, errMsg)
 						<label class="block text-sm">
 							<span class="mb-1 block font-medium text-slate-700">Username</span>
 							<input
 								name="username"
-								value={username}
+								value={ username }
 								required
 								autofocus
 								class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
@@ -45,7 +42,7 @@ component LoginShell(username, errMsg string) {
 						</button>
 						<p class="text-xs text-slate-500">Demo credentials: <code>admin</code> / <code>admin</code></p>
 					</form>
-				</components.Card>
+				}
 			</main>
 		</body>
 	</html>
