@@ -1,53 +1,50 @@
 package main
 
-import "context"
 import "github.com/jackielii/structpages"
 
+// Page structs + route tags are plain Go — pass through unchanged.
 type index struct {
 	product `route:"/product Product"`
 	team    `route:"/team Team"`
 	contact `route:"/contact Contact"`
 }
-
-templ (index) Page() {
-	@html() {
-		<h1>Welcome to the Index Page</h1>
-		<p>Navigate to the product, team, or contact pages using the links below:</p>
-	}
-}
-
 type product struct{}
-
-templ (product) Page() {
-	@html() {
-		<h1>Product Page</h1>
-		<p>This is the product page.</p>
-	}
-}
-
 type team struct{}
-
-templ (team) Page() {
-	@html() {
-		<h1>Team Page</h1>
-		<p>This is the team page.</p>
-	}
-}
-
 type contact struct{}
 
-templ (contact) Page() {
-	@html() {
-		<h1>Contact Page</h1>
-		<p>This is the contact page.</p>
-	}
+component (p index) Page() {
+	<Layout>
+		<h1>Welcome to the Index Page</h1>
+		<p>Navigate to the product, team, or contact pages using the links below:</p>
+	</Layout>
 }
 
-templ html() {
+component (p product) Page() {
+	<Layout>
+		<h1>Product Page</h1>
+		<p>This is the product page.</p>
+	</Layout>
+}
+
+component (p team) Page() {
+	<Layout>
+		<h1>Team Page</h1>
+		<p>This is the team page.</p>
+	</Layout>
+}
+
+component (p contact) Page() {
+	<Layout>
+		<h1>Contact Page</h1>
+		<p>This is the contact page.</p>
+	</Layout>
+}
+
+component Layout() {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
-			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3" />
 			<title>Simple Example</title>
 		</head>
 		<body>
@@ -61,13 +58,9 @@ templ html() {
 					</ul>
 				</nav>
 			</header>
-			<main>
-				{ children... }
-			</main>
+			<main>{children}</main>
 		</body>
 	</html>
 }
 
-func urlFor(ctx context.Context, page any, args ...any) (string, error) {
-	return structpages.URLFor(ctx, page, args...)
-}
+var urlFor = structpages.URLFor

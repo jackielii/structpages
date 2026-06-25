@@ -1,5 +1,5 @@
 // Package layout exports the shared HTML shells used by every page.
-// Feature packages call PublicShell or AdminShell with { children... }
+// Feature packages call PublicShell or AdminShell with {children}
 // instead of writing their own <html> document.
 package layout
 
@@ -11,13 +11,13 @@ import (
 // PublicShell wraps reader-facing pages. Cross-feature links (e.g. the admin
 // link) use structpages.Ref so this package never imports admin or blog —
 // keeping the dependency graph one-way (features → ui).
-templ PublicShell(title string) {
+component PublicShell(title string) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>{ title } — structpages blog</title>
+			<title>{title} — structpages blog</title>
 			<script src="https://cdn.tailwindcss.com"></script>
 			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 		</head>
@@ -33,20 +33,20 @@ templ PublicShell(title string) {
 				</div>
 			</header>
 			<main id="content" class="mx-auto max-w-3xl px-4 py-8">
-				{ children... }
+				{children}
 			</main>
 		</body>
 	</html>
 }
 
 // AdminShell wraps the authenticated admin app.
-templ AdminShell(title string, current store.User) {
+component AdminShell(title string, current store.User) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>Admin — { title }</title>
+			<title>Admin — {title}</title>
 			<script src="https://cdn.tailwindcss.com"></script>
 			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 		</head>
@@ -62,7 +62,7 @@ templ AdminShell(title string, current store.User) {
 						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("postList")) }>Posts</a>
 						<a class="hover:underline" href={ structpages.URLFor(ctx, structpages.Ref("userList")) }>Users</a>
 						<span class="text-slate-400">|</span>
-						<span class="text-slate-300">{ current.Username }</span>
+						<span class="text-slate-300">{current.Username}</span>
 						<form method="POST" action={ structpages.URLFor(ctx, structpages.Ref("logout")) } class="m-0">
 							<button class="text-slate-300 hover:text-white" type="submit">Sign out</button>
 						</form>
@@ -70,7 +70,7 @@ templ AdminShell(title string, current store.User) {
 				</div>
 			</header>
 			<main id="content" class="mx-auto max-w-5xl px-4 py-8">
-				{ children... }
+				{children}
 			</main>
 		</body>
 	</html>

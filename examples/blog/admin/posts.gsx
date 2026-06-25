@@ -5,18 +5,20 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
 )
 
-// adminShellWith is a tiny templ wrapper used by handlers that need to
-// render a custom body inside AdminShell from Go code.
-templ adminShellWith(title string, user store.User, body templ.Component) {
-	@layout.AdminShell(title, user) {
-		@body
-	}
+// AdminShellWith is a tiny gsx wrapper used by handlers that need to render a
+// custom body inside AdminShell from Go code. The templ version took a
+// `templ.Component`; gsx's equivalent renderable value type is `gsx.Node`.
+component AdminShellWith(title string, user store.User, body gsx.Node) {
+	<layout.AdminShell title={title} current={user}>
+		{body}
+	</layout.AdminShell>
 }
 
 // --- List ---
@@ -34,18 +36,14 @@ func (postListPage) Props(r *http.Request, s *store.Store) (postListProps, error
 	return postListProps{User: user, Posts: posts}, nil
 }
 
-templ (p postListPage) Page(props postListProps) {
-	@layout.AdminShell("Posts", props.User) {
-		@p.Content(props)
-	}
-}
-
-templ (postListPage) Content(props postListProps) {
-	<header class="mb-4 flex items-center justify-between">
-		<h1 class="text-2xl font-semibold">All posts</h1>
-		<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ components.URL(ctx, postNewPage{}) }>New post</a>
-	</header>
-	@PostsTable(props.Posts)
+component (p postListPage) Page(props postListProps) {
+	<layout.AdminShell title="Posts" current={props.User}>
+		<header class="mb-4 flex items-center justify-between">
+			<h1 class="text-2xl font-semibold">All posts</h1>
+			<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ components.URL(ctx, postNewPage{}) }>New post</a>
+		</header>
+		<PostsTable posts={props.Posts}/>
+	</layout.AdminShell>
 }
 
 // --- New ---
@@ -63,11 +61,11 @@ func (postNewPage) Props(r *http.Request, s *store.Store) (postFormViewProps, er
 	return postFormViewProps{User: user, Categories: s.ListCategories()}, nil
 }
 
-templ (postNewPage) Page(props postFormViewProps) {
-	@layout.AdminShell("New post", props.User) {
+component (p postNewPage) Page(props postFormViewProps) {
+	<layout.AdminShell title="New post" current={props.User}>
 		<h1 class="mb-4 text-2xl font-semibold">New post</h1>
-		@postForm(props.Post, props.Categories, "")
-	}
+		<PostForm p={props.Post} cats={props.Categories} errMsg=""/>
+	</layout.AdminShell>
 }
 
 // --- Edit ---
@@ -87,36 +85,36 @@ func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, e
 	return postFormViewProps{User: user, Categories: s.ListCategories(), Post: p}, nil
 }
 
-templ (postEditPage) Page(props postFormViewProps) {
-	@layout.AdminShell("Edit post", props.User) {
+component (p postEditPage) Page(props postFormViewProps) {
+	<layout.AdminShell title="Edit post" current={props.User}>
 		<h1 class="mb-4 text-2xl font-semibold">Edit post</h1>
-		@postForm(props.Post, props.Categories, "")
-	}
+		<PostForm p={props.Post} cats={props.Categories} errMsg=""/>
+	</layout.AdminShell>
 }
 
 // --- Shared form ---
 
-templ postForm(p store.Post, cats []store.Category, errMsg string) {
+component PostForm(p store.Post, cats []store.Category, errMsg string) {
 	<form method="POST" action={ postFormAction(ctx, p) } class="space-y-3">
-		@components.Alert(components.AlertError, errMsg)
-		@components.Input("title", "Title", p.Title, "")
-		@components.Input("slug", "Slug (auto if blank)", p.Slug, "")
+		<components.Alert kind={components.AlertError} msg={errMsg}/>
+		<components.Input name="title" label="Title" value={p.Title} errMsg=""/>
+		<components.Input name="slug" label="Slug (auto if blank)" value={p.Slug} errMsg=""/>
 		<label class="block text-sm">
 			<span class="mb-1 block font-medium text-slate-700">Category</span>
 			<select name="category_id" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
 				<option value="0">— pick one —</option>
-				for _, c := range cats {
-					<option value={ c.ID } selected?={ c.ID == p.CategoryID }>{ c.Name }</option>
-				}
+				{ for _, c := range cats {
+					<option value={c.ID} selected={ c.ID == p.CategoryID }>{c.Name}</option>
+				} }
 			</select>
 		</label>
-		@components.Textarea("body", "Body", p.Body, "")
+		<components.Textarea name="body" label="Body" value={p.Body} errMsg=""/>
 		<label class="flex items-center gap-2 text-sm">
-			<input type="checkbox" name="published" checked?={ p.Published }/>
+			<input type="checkbox" name="published" checked={p.Published}/>
 			Publish immediately
 		</label>
 		<div class="flex items-center gap-2">
-			@components.Button("Save", templ.Attributes{"type": "submit"})
+			<components.Button label="Save" { gsx.Attrs{"type": "submit"}... }/>
 			<a class="text-sm text-slate-500 hover:underline" href={ components.URL(ctx, postListPage{}) }>Cancel</a>
 		</div>
 	</form>
