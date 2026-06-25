@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gsxhq/gsx"
+	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -69,7 +70,7 @@ func (p homePage) Page(props homeProps) gsx.Node {
 //line home.gsx:41:7
 					_gsxgw.S("<a")
 					_gsxgw.S(" class=\"rounded-full border px-3 py-1 text-sm hover:bg-slate-50\"")
-					_gsxv0, _gsxerr := components.URL(ctx, categoryPage{}, "slug", c.Slug)
+					_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (categoryPage{}), "slug", c.Slug)
 					if _gsxerr != nil {
 						return _gsxerr
 					}

@@ -41,7 +41,7 @@ component (p postPage) Page(props postProps) {
 			<p class="text-sm text-slate-500">
 				by {props.Author.Username}
 				{ if props.Category.Slug != "" {
-					· <a class="hover:underline" href={ components.URL(ctx, categoryPage{}, "slug", props.Category.Slug) }>{props.Category.Name}</a>
+					· <a class="hover:underline" href={ categoryPage{} |> url("slug", props.Category.Slug) }>{props.Category.Name}</a>
 				} }
 			</p>
 			<div class="prose max-w-none text-slate-800">

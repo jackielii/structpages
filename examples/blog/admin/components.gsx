@@ -36,7 +36,7 @@ component RecentPostsCard(posts []store.Post) {
 				} }
 				{ for _, p := range posts {
 					<li class="flex items-center justify-between py-2">
-						<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>
+						<a class="hover:underline" href={ postEditPage{} |> url("id", p.ID) }>
 							{p.Title}
 						</a>
 						{ if p.Published {
@@ -66,7 +66,7 @@ component PostsTable(posts []store.Post) {
 				{ for _, p := range posts {
 					<tr class="border-t">
 						<td class="px-3 py-2 font-medium">
-							<a class="hover:underline" href={ components.URL(ctx, postEditPage{}, "id", p.ID) }>{p.Title}</a>
+							<a class="hover:underline" href={ postEditPage{} |> url("id", p.ID) }>{p.Title}</a>
 						</td>
 						<td class="px-3 py-2">
 							{ if p.Published {
@@ -79,7 +79,7 @@ component PostsTable(posts []store.Post) {
 						<td class="px-3 py-2 text-right">
 							<form
 								method="POST"
-								action={ components.URL(ctx, postDeleteHandler{}, "id", p.ID) }
+								action={ postDeleteHandler{} |> url("id", p.ID) }
 								hx-post={ postDeleteHandler{} |> url("id", p.ID) }
 								hx-target={ PostsTable |> target }
 								hx-swap="outerHTML"

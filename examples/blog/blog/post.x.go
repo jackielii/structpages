@@ -69,7 +69,7 @@ func (p postPage) Page(props postProps) gsx.Node {
 //line post.gsx:44:9
 				_gsxgw.S("<a")
 				_gsxgw.S(" class=\"hover:underline\"")
-				_gsxv0, _gsxerr := components.URL(ctx, categoryPage{}, "slug", props.Category.Slug)
+				_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (categoryPage{}), "slug", props.Category.Slug)
 				if _gsxerr != nil {
 					return _gsxerr
 				}
@@ -77,7 +77,7 @@ func (p postPage) Page(props postProps) gsx.Node {
 				_gsxgw.URL(string(_gsxv0))
 				_gsxgw.S("\"")
 				_gsxgw.S(">")
-//line post.gsx:44:110
+//line post.gsx:44:96
 				_gsxgw.Text(string(props.Category.Name))
 				_gsxgw.S("</a>")
 			}

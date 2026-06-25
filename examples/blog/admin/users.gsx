@@ -38,7 +38,7 @@ component (p userListPage) Page(props userListProps) {
 						</span>
 						<form
 							method="POST"
-							action={ components.URL(ctx, userDeleteHandler{}, "id", u.ID) }
+							action={ userDeleteHandler{} |> url("id", u.ID) }
 							class="m-0"
 						>
 							<button class="text-xs text-red-600 hover:underline" type="submit">Delete</button>
@@ -48,7 +48,7 @@ component (p userListPage) Page(props userListProps) {
 			</ul>
 		</components.Card>
 		<components.Card title="Create user">
-			<form method="POST" action={ components.URL(ctx, userCreateHandler{}) } class="space-y-3">
+			<form method="POST" action={ userCreateHandler{} |> url } class="space-y-3">
 				<components.Input name="username" label="Username" value="" errMsg=""/>
 				<label class="block text-sm">
 					<span class="mb-1 block font-medium text-slate-700">Password</span>

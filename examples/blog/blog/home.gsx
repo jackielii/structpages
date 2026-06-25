@@ -38,7 +38,7 @@ component (p homePage) Page(props homeProps) {
 			<ul class="flex flex-wrap gap-2">
 				{ for _, c := range props.Categories {
 					<li>
-						<a class="rounded-full border px-3 py-1 text-sm hover:bg-slate-50" href={ components.URL(ctx, categoryPage{}, "slug", c.Slug) }>
+						<a class="rounded-full border px-3 py-1 text-sm hover:bg-slate-50" href={ categoryPage{} |> url("slug", c.Slug) }>
 							{c.Name}
 						</a>
 					</li>

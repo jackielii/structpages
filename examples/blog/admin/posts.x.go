@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/gsxhq/gsx"
+	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -77,7 +78,7 @@ func (p postListPage) Page(props postListProps) gsx.Node {
 //line posts.gsx:43:4
 			_gsxgw.S("<a")
 			_gsxgw.S(" class=\"rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700\"")
-			_gsxv0, _gsxerr := components.URL(ctx, postNewPage{})
+			_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (postNewPage{}))
 			if _gsxerr != nil {
 				return _gsxerr
 			}
@@ -264,7 +265,7 @@ func PostForm(_gsxp PostFormProps) gsx.Node {
 //line posts.gsx:118:4
 		_gsxgw.S("<a")
 		_gsxgw.S(" class=\"text-sm text-slate-500 hover:underline\"")
-		_gsxv1, _gsxerr := components.URL(ctx, postListPage{})
+		_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (postListPage{}))
 		if _gsxerr != nil {
 			return _gsxerr
 		}

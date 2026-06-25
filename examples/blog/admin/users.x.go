@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gsxhq/gsx"
+	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -73,7 +74,7 @@ func (p userListPage) Page(props userListProps) gsx.Node {
 //line users.gsx:39:7
 					_gsxgw.S("<form")
 					_gsxgw.S(" method=\"POST\"")
-					_gsxv0, _gsxerr := components.URL(ctx, userDeleteHandler{}, "id", u.ID)
+					_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (userDeleteHandler{}), "id", u.ID)
 					if _gsxerr != nil {
 						return _gsxerr
 					}
@@ -101,7 +102,7 @@ func (p userListPage) Page(props userListProps) gsx.Node {
 //line users.gsx:51:4
 				_gsxgw.S("<form")
 				_gsxgw.S(" method=\"POST\"")
-				_gsxv1, _gsxerr := components.URL(ctx, userCreateHandler{})
+				_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (userCreateHandler{}))
 				if _gsxerr != nil {
 					return _gsxerr
 				}

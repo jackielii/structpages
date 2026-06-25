@@ -40,7 +40,7 @@ component (p postListPage) Page(props postListProps) {
 	<layout.AdminShell title="Posts" current={props.User}>
 		<header class="mb-4 flex items-center justify-between">
 			<h1 class="text-2xl font-semibold">All posts</h1>
-			<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ components.URL(ctx, postNewPage{}) }>New post</a>
+			<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ postNewPage{} |> url }>New post</a>
 		</header>
 		<PostsTable posts={props.Posts}/>
 	</layout.AdminShell>
@@ -115,7 +115,7 @@ component PostForm(p store.Post, cats []store.Category, errMsg string) {
 		</label>
 		<div class="flex items-center gap-2">
 			<components.Button label="Save" { gsx.Attrs{"type": "submit"}... }/>
-			<a class="text-sm text-slate-500 hover:underline" href={ components.URL(ctx, postListPage{}) }>Cancel</a>
+			<a class="text-sm text-slate-500 hover:underline" href={ postListPage{} |> url }>Cancel</a>
 		</div>
 	</form>
 }

@@ -142,7 +142,7 @@ func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
 //line components.gsx:39:7
 				_gsxgw.S("<a")
 				_gsxgw.S(" class=\"hover:underline\"")
-				_gsxv2, _gsxerr := components.URL(ctx, postEditPage{}, "id", p.ID)
+				_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (postEditPage{}), "id", p.ID)
 				if _gsxerr != nil {
 					return _gsxerr
 				}
@@ -257,7 +257,7 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 //line components.gsx:69:8
 			_gsxgw.S("<a")
 			_gsxgw.S(" class=\"hover:underline\"")
-			_gsxv4, _gsxerr := components.URL(ctx, postEditPage{}, "id", p.ID)
+			_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (postEditPage{}), "id", p.ID)
 			if _gsxerr != nil {
 				return _gsxerr
 			}
@@ -265,7 +265,7 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 			_gsxgw.URL(string(_gsxv4))
 			_gsxgw.S("\"")
 			_gsxgw.S(">")
-//line components.gsx:69:92
+//line components.gsx:69:78
 			_gsxgw.Text(string(p.Title))
 			_gsxgw.S("</a>")
 			_gsxgw.S("</td>")
@@ -304,7 +304,7 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 //line components.gsx:80:8
 			_gsxgw.S("<form")
 			_gsxgw.S(" method=\"POST\"")
-			_gsxv5, _gsxerr := components.URL(ctx, postDeleteHandler{}, "id", p.ID)
+			_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (postDeleteHandler{}), "id", p.ID)
 			if _gsxerr != nil {
 				return _gsxerr
 			}
