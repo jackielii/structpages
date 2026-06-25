@@ -13,11 +13,12 @@ import (
 )
 
 // AdminShellWith is a tiny gsx wrapper used by handlers that need to render a
-// custom body inside AdminShell from Go code. The templ version took a
-// `templ.Component`; gsx's equivalent renderable value type is `gsx.Node`.
-component AdminShellWith(title string, user store.User, body gsx.Node) {
+// custom body inside AdminShell from Go code. The body is passed as the
+// implicit Children prop — from Go: AdminShellWith(AdminShellWithProps{Title: …,
+// User: …, Children: body}).
+component AdminShellWith(title string, user store.User) {
 	<layout.AdminShell title={title} current={user}>
-		{body}
+		{children}
 	</layout.AdminShell>
 }
 
