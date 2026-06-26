@@ -150,6 +150,15 @@ component Html() {
 		</head>
 		<body>
 			<main>{ children }</main>
+			<script>
+				// Optional: Add some basic HTMX event listeners for debugging
+				document.body.addEventListener('htmx:beforeRequest', (evt) => {
+					console.log('HTMX Request:', evt.detail);
+				});
+				document.body.addEventListener('htmx:afterRequest', (evt) => {
+					console.log('HTMX Response:', evt.detail);
+				});
+			</script>
 		</body>
 	</html>
 }

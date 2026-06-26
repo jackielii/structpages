@@ -15,6 +15,7 @@ import (
 // Shared standalone function components (can be used across multiple pages).
 // These demonstrate the power of RenderTarget — no wrapper methods needed.
 
+//line pages.gsx:6:1
 func UserStatsWidget(stats UserStats) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -52,6 +53,7 @@ func UserStatsWidget(stats UserStats) gsx.Node {
 	})
 }
 
+//line pages.gsx:21:1
 func SalesChartWidget(data SalesData) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -99,6 +101,7 @@ type NotificationsListProps struct {
 	Attrs         gsx.Attrs
 }
 
+//line pages.gsx:44:1
 func NotificationsList(_gsxp NotificationsListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		notifications := _gsxp.Notifications
@@ -152,6 +155,7 @@ func NotificationsList(_gsxp NotificationsListProps) gsx.Node {
 
 type dashboard struct{}
 
+//line pages.gsx:68:1
 func (p dashboard) Page(props dashboardData) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -240,6 +244,7 @@ type HtmlProps struct {
 	Children gsx.Node
 }
 
+//line pages.gsx:126:1
 func Html(_gsxp HtmlProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		children := _gsxp.Children
@@ -263,7 +268,9 @@ func Html(_gsxp HtmlProps) gsx.Node {
 		_gsxgw.S("<main>")
 //line pages.gsx:152:10
 		_gsxgw.Node(ctx, children)
-		_gsxgw.S("</main></body></html>")
+		_gsxgw.S("</main>")
+//line pages.gsx:153:4
+		_gsxgw.S("<script>\n\t\t\t\t// Optional: Add some basic HTMX event listeners for debugging\n\t\t\t\tdocument.body.addEventListener('htmx:beforeRequest', (evt) => {\n\t\t\t\t\tconsole.log('HTMX Request:', evt.detail);\n\t\t\t\t});\n\t\t\t\tdocument.body.addEventListener('htmx:afterRequest', (evt) => {\n\t\t\t\t\tconsole.log('HTMX Response:', evt.detail);\n\t\t\t\t});\n\t\t\t</script></body></html>")
 		return _gsxgw.Err()
 	})
 }
@@ -272,14 +279,15 @@ type ErrorPageProps struct {
 	Err error
 }
 
+//line pages.gsx:166:1
 func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:158:2
+//line pages.gsx:167:2
 		_gsxgw.Node(ctx, Html(HtmlProps{Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:159:3
+//line pages.gsx:168:3
 			_gsxgw.Node(ctx, ErrorComp(ErrorCompProps{Err: err}))
 			return _gsxgw.Err()
 		})}))
@@ -291,15 +299,16 @@ type ErrorCompProps struct {
 	Err error
 }
 
+//line pages.gsx:172:1
 func ErrorComp(_gsxp ErrorCompProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:164:2
+//line pages.gsx:173:2
 		_gsxgw.S("<h1>Error</h1>")
-//line pages.gsx:165:2
+//line pages.gsx:174:2
 		_gsxgw.S("<p>")
-//line pages.gsx:165:5
+//line pages.gsx:174:5
 		_gsxgw.Text(string(err.Error()))
 		_gsxgw.S("</p>")
 		return _gsxgw.Err()
