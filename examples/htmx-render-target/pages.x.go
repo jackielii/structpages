@@ -4,45 +4,37 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/gsxhq/gsx"
+	_gsxstd "github.com/gsxhq/gsx/std"
 	_gsxf0 "github.com/jackielii/structpages"
 )
 
 // Shared standalone function components (can be used across multiple pages).
 // These demonstrate the power of RenderTarget — no wrapper methods needed.
 
+//line pages.gsx:6:1
 func UserStatsWidget(stats UserStats) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:11:2
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"widget\"")
-		_gsxgw.S(">")
-//line pages.gsx:12:3
-		_gsxgw.S("<h3")
-		_gsxgw.S(">")
-		_gsxgw.S("User Statistics")
-		_gsxgw.S("</h3>")
-//line pages.gsx:13:3
-		_gsxgw.S("<p")
-		_gsxgw.S(">")
-		_gsxgw.S("Active Users: ")
-//line pages.gsx:13:20
-		_gsxgw.Text(string(fmt.Sprintf("%d", stats.ActiveUsers)))
+//line pages.gsx:7:2
+		_gsxgw.S("<div class=\"widget\">")
+//line pages.gsx:8:3
+		_gsxgw.S("<h3>User Statistics</h3>")
+//line pages.gsx:9:3
+		_gsxgw.S("<p>Active Users: ")
+//line pages.gsx:9:20
+		_gsxgw.Text(strconv.FormatInt(int64(stats.ActiveUsers), 10))
 		_gsxgw.S("</p>")
-//line pages.gsx:14:3
-		_gsxgw.S("<p")
-		_gsxgw.S(">")
-		_gsxgw.S("New Today: ")
-//line pages.gsx:14:17
-		_gsxgw.Text(string(fmt.Sprintf("%d", stats.NewToday)))
+//line pages.gsx:10:3
+		_gsxgw.S("<p>New Today: ")
+//line pages.gsx:10:17
+		_gsxgw.Text(strconv.FormatInt(int64(stats.NewToday), 10))
 		_gsxgw.S("</p>")
-//line pages.gsx:15:3
-		_gsxgw.S("<button")
-		_gsxgw.S(" type=\"button\"")
+//line pages.gsx:11:3
+		_gsxgw.S("<button type=\"button\"")
 		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
 		if _gsxerr != nil {
 			return _gsxerr
@@ -56,54 +48,36 @@ func UserStatsWidget(stats UserStats) gsx.Node {
 		}
 		_gsxgw.S(" hx-target=\"")
 		_gsxgw.AttrValue(string(_gsxv1))
-		_gsxgw.S("\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Refresh Stats")
-		_gsxgw.S("</button>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("\">Refresh Stats</button></div>")
 		return _gsxgw.Err()
 	})
 }
 
+//line pages.gsx:19:1
 func SalesChartWidget(data SalesData) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:24:2
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"widget\"")
-		_gsxgw.S(">")
-//line pages.gsx:25:3
-		_gsxgw.S("<h3")
-		_gsxgw.S(">")
-		_gsxgw.S("Sales Chart")
-		_gsxgw.S("</h3>")
-//line pages.gsx:26:3
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"chart\"")
-		_gsxgw.S(">")
-//line pages.gsx:27:4
+//line pages.gsx:20:2
+		_gsxgw.S("<div class=\"widget\">")
+//line pages.gsx:21:3
+		_gsxgw.S("<h3>Sales Chart</h3>")
+//line pages.gsx:22:3
+		_gsxgw.S("<div class=\"chart\">")
+//line pages.gsx:23:4
 		for _, point := range data.Points {
-//line pages.gsx:28:5
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"bar\"")
-			_gsxgw.S(" data-h=\"")
-			_gsxgw.AttrValue(string(fmt.Sprint(point.Value)))
-			_gsxgw.S("\"")
-			_gsxgw.S(" style=\"width: 30px; background: blue; display: inline-block; margin: 2px;\"")
-			_gsxgw.S(">")
-			_gsxgw.S("</div>")
+//line pages.gsx:24:5
+			_gsxgw.S("<div class=\"bar\" data-h=\"")
+			_gsxgw.AttrValue(strconv.FormatInt(int64(point.Value), 10))
+			_gsxgw.S("\" style=\"width: 30px; background: blue; display: inline-block; margin: 2px;\"></div>")
 		}
 		_gsxgw.S("</div>")
-//line pages.gsx:31:3
-		_gsxgw.S("<p")
-		_gsxgw.S(">")
-		_gsxgw.S("Total Sales: $")
-//line pages.gsx:31:20
-		_gsxgw.Text(string(fmt.Sprintf("%.2f", data.Total)))
+//line pages.gsx:27:3
+		_gsxgw.S("<p>Total Sales: $")
+//line pages.gsx:27:20
+		_gsxgw.Text(string(_gsxstd.Format((data.Total), "%.2f")))
 		_gsxgw.S("</p>")
-//line pages.gsx:32:3
-		_gsxgw.S("<button")
-		_gsxgw.S(" type=\"button\"")
+//line pages.gsx:28:3
+		_gsxgw.S("<button type=\"button\"")
 		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
 		if _gsxerr != nil {
 			return _gsxerr
@@ -117,11 +91,7 @@ func SalesChartWidget(data SalesData) gsx.Node {
 		}
 		_gsxgw.S(" hx-target=\"")
 		_gsxgw.AttrValue(string(_gsxv3))
-		_gsxgw.S("\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Refresh Sales")
-		_gsxgw.S("</button>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("\">Refresh Sales</button></div>")
 		return _gsxgw.Err()
 	})
 }
@@ -131,48 +101,38 @@ type NotificationsListProps struct {
 	Attrs         gsx.Attrs
 }
 
+//line pages.gsx:36:1
 func NotificationsList(_gsxp NotificationsListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		notifications := _gsxp.Notifications
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:41:2
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"")
+//line pages.gsx:37:2
+		_gsxgw.S("<div class=\"")
 		_gsxgw.Class(gsx.Class("widget"), gsx.Class(_gsxp.Attrs.Class()))
 		_gsxgw.S("\"")
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
-//line pages.gsx:42:3
-		_gsxgw.S("<h3")
-		_gsxgw.S(">")
-		_gsxgw.S("Recent Notifications")
-		_gsxgw.S("</h3>")
-//line pages.gsx:43:3
-		_gsxgw.S("<ul")
-		_gsxgw.S(">")
-//line pages.gsx:44:4
+//line pages.gsx:38:3
+		_gsxgw.S("<h3>Recent Notifications</h3>")
+//line pages.gsx:39:3
+		_gsxgw.S("<ul>")
+//line pages.gsx:40:4
 		for _, n := range notifications {
-//line pages.gsx:45:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-//line pages.gsx:45:9
+//line pages.gsx:41:5
+			_gsxgw.S("<li>")
+//line pages.gsx:41:9
 			_gsxgw.Text(string(n.Message))
 			_gsxgw.S(" ")
-//line pages.gsx:45:23
-			_gsxgw.S("<small")
-			_gsxgw.S(">")
-			_gsxgw.S("(")
-//line pages.gsx:45:31
+//line pages.gsx:41:23
+			_gsxgw.S("<small>(")
+//line pages.gsx:41:31
 			_gsxgw.Text(string(n.Time.Format("15:04")))
-			_gsxgw.S(")")
-			_gsxgw.S("</small>")
-			_gsxgw.S("</li>")
+			_gsxgw.S(")</small></li>")
 		}
 		_gsxgw.S("</ul>")
-//line pages.gsx:48:3
-		_gsxgw.S("<button")
-		_gsxgw.S(" type=\"button\"")
+//line pages.gsx:44:3
+		_gsxgw.S("<button type=\"button\"")
 		_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
 		if _gsxerr != nil {
 			return _gsxerr
@@ -186,11 +146,7 @@ func NotificationsList(_gsxp NotificationsListProps) gsx.Node {
 		}
 		_gsxgw.S(" hx-target=\"")
 		_gsxgw.AttrValue(string(_gsxv5))
-		_gsxgw.S("\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Refresh Notifications")
-		_gsxgw.S("</button>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("\">Refresh Notifications</button></div>")
 		return _gsxgw.Err()
 	})
 }
@@ -199,32 +155,22 @@ func NotificationsList(_gsxp NotificationsListProps) gsx.Node {
 
 type dashboard struct{}
 
+//line pages.gsx:56:1
 func (p dashboard) Page(props dashboardData) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:61:2
+//line pages.gsx:57:2
 		_gsxgw.Node(ctx, Html(HtmlProps{Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:62:3
-			_gsxgw.S("<h1")
-			_gsxgw.S(">")
-			_gsxgw.S("Dashboard")
-			_gsxgw.S("</h1>")
-//line pages.gsx:63:3
-			_gsxgw.S("<p")
-			_gsxgw.S(">")
-			_gsxgw.S("This example demonstrates the RenderTarget API with standalone function components.")
-			_gsxgw.S("</p>")
-//line pages.gsx:64:3
-			_gsxgw.S("<p")
-			_gsxgw.S(">")
-			_gsxgw.S("Click \"Refresh\" buttons to see HTMX partial updates — each widget loads only its own data!")
-			_gsxgw.S("</p>")
-//line pages.gsx:65:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;\"")
-			_gsxgw.S(">")
-//line pages.gsx:66:4
+//line pages.gsx:58:3
+			_gsxgw.S("<h1>Dashboard</h1>")
+//line pages.gsx:59:3
+			_gsxgw.S("<p>This example demonstrates the RenderTarget API with standalone function components.</p>")
+//line pages.gsx:60:3
+			_gsxgw.S("<p>Click \"Refresh\" buttons to see HTMX partial updates — each widget loads only its own data!</p>")
+//line pages.gsx:61:3
+			_gsxgw.S("<div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;\">")
+//line pages.gsx:62:4
 			_gsxgw.S("<div")
 			_gsxv6, _gsxerr := _gsxf0.ID(ctx, (UserStatsWidget))
 			if _gsxerr != nil {
@@ -232,12 +178,11 @@ func (p dashboard) Page(props dashboardData) gsx.Node {
 			}
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv6))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
-//line pages.gsx:67:5
+			_gsxgw.S("\">")
+//line pages.gsx:63:5
 			_gsxgw.Node(ctx, UserStatsWidget(props.Stats))
 			_gsxgw.S("</div>")
-//line pages.gsx:69:4
+//line pages.gsx:65:4
 			_gsxgw.S("<div")
 			_gsxv7, _gsxerr := _gsxf0.ID(ctx, (SalesChartWidget))
 			if _gsxerr != nil {
@@ -245,12 +190,11 @@ func (p dashboard) Page(props dashboardData) gsx.Node {
 			}
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv7))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
-//line pages.gsx:70:5
+			_gsxgw.S("\">")
+//line pages.gsx:66:5
 			_gsxgw.Node(ctx, SalesChartWidget(props.Sales))
 			_gsxgw.S("</div>")
-//line pages.gsx:72:4
+//line pages.gsx:68:4
 			_gsxgw.S("<div")
 			_gsxv8, _gsxerr := _gsxf0.ID(ctx, (NotificationsList))
 			if _gsxerr != nil {
@@ -258,81 +202,36 @@ func (p dashboard) Page(props dashboardData) gsx.Node {
 			}
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv8))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
-//line pages.gsx:73:5
+			_gsxgw.S("\">")
+//line pages.gsx:69:5
 			_gsxgw.Node(ctx, NotificationsList(NotificationsListProps{Notifications: props.Notifications}))
-			_gsxgw.S("</div>")
-			_gsxgw.S("</div>")
-//line pages.gsx:76:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" style=\"margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;\"")
-			_gsxgw.S(">")
-//line pages.gsx:77:4
-			_gsxgw.S("<h4")
-			_gsxgw.S(">")
-			_gsxgw.S("How it works:")
-			_gsxgw.S("</h4>")
-//line pages.gsx:78:4
-			_gsxgw.S("<ul")
-			_gsxgw.S(">")
+			_gsxgw.S("</div></div>")
+//line pages.gsx:72:3
+			_gsxgw.S("<div style=\"margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;\">")
+//line pages.gsx:73:4
+			_gsxgw.S("<h4>How it works:</h4>")
+//line pages.gsx:74:4
+			_gsxgw.S("<ul>")
+//line pages.gsx:75:5
+			_gsxgw.S("<li>✅ ")
+//line pages.gsx:75:13
+			_gsxgw.S("<strong>Standalone functions</strong> — UserStatsWidget, SalesChartWidget, NotificationsList are shared components</li>")
+//line pages.gsx:76:5
+			_gsxgw.S("<li>✅ ")
+//line pages.gsx:76:13
+			_gsxgw.S("<strong>Conditional loading</strong> — Props checks target.Is() and loads only needed data</li>")
+//line pages.gsx:77:5
+			_gsxgw.S("<li>✅ ")
+//line pages.gsx:77:13
+			_gsxgw.S("<strong>RenderComponent (direct)</strong> — construct the gsx component with its props struct and pass directly</li>")
+//line pages.gsx:78:5
+			_gsxgw.S("<li>✅ ")
+//line pages.gsx:78:13
+			_gsxgw.S("<strong>No wrapper methods</strong> — No need to create dashboard.UserStats() method!</li>")
 //line pages.gsx:79:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-			_gsxgw.S("✅ ")
+			_gsxgw.S("<li>✅ ")
 //line pages.gsx:79:13
-			_gsxgw.S("<strong")
-			_gsxgw.S(">")
-			_gsxgw.S("Standalone functions")
-			_gsxgw.S("</strong>")
-			_gsxgw.S(" — UserStatsWidget, SalesChartWidget, NotificationsList are shared components")
-			_gsxgw.S("</li>")
-//line pages.gsx:80:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-			_gsxgw.S("✅ ")
-//line pages.gsx:80:13
-			_gsxgw.S("<strong")
-			_gsxgw.S(">")
-			_gsxgw.S("Conditional loading")
-			_gsxgw.S("</strong>")
-			_gsxgw.S(" — Props checks target.Is() and loads only needed data")
-			_gsxgw.S("</li>")
-//line pages.gsx:81:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-			_gsxgw.S("✅ ")
-//line pages.gsx:81:13
-			_gsxgw.S("<strong")
-			_gsxgw.S(">")
-			_gsxgw.S("RenderComponent (direct)")
-			_gsxgw.S("</strong>")
-			_gsxgw.S(" — construct the gsx component with its props struct and pass directly")
-			_gsxgw.S("</li>")
-//line pages.gsx:82:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-			_gsxgw.S("✅ ")
-//line pages.gsx:82:13
-			_gsxgw.S("<strong")
-			_gsxgw.S(">")
-			_gsxgw.S("No wrapper methods")
-			_gsxgw.S("</strong>")
-			_gsxgw.S(" — No need to create dashboard.UserStats() method!")
-			_gsxgw.S("</li>")
-//line pages.gsx:83:5
-			_gsxgw.S("<li")
-			_gsxgw.S(">")
-			_gsxgw.S("✅ ")
-//line pages.gsx:83:13
-			_gsxgw.S("<strong")
-			_gsxgw.S(">")
-			_gsxgw.S("HTMX integration")
-			_gsxgw.S("</strong>")
-			_gsxgw.S(" — HTMXRenderTarget automatically handles partial updates")
-			_gsxgw.S("</li>")
-			_gsxgw.S("</ul>")
-			_gsxgw.S("</div>")
+			_gsxgw.S("<strong>HTMX integration</strong> — HTMXRenderTarget automatically handles partial updates</li></ul></div>")
 			return _gsxgw.Err()
 		})}))
 		return _gsxgw.Err()
@@ -345,50 +244,31 @@ type HtmlProps struct {
 	Children gsx.Node
 }
 
+//line pages.gsx:86:1
 func Html(_gsxp HtmlProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		children := _gsxp.Children
 		_gsxgw := gsx.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
-//line pages.gsx:92:2
-		_gsxgw.S("<html")
-		_gsxgw.S(" lang=\"en\"")
-		_gsxgw.S(">")
-//line pages.gsx:93:3
-		_gsxgw.S("<head")
-		_gsxgw.S(">")
-//line pages.gsx:94:4
-		_gsxgw.S("<link")
-		_gsxgw.S(" rel=\"stylesheet\"")
-		_gsxgw.S(" href=\"https://unpkg.com/missing.css@1.1.3\"")
-		_gsxgw.S("/>")
-//line pages.gsx:95:4
-		_gsxgw.S("<script")
-		_gsxgw.S(" src=\"https://unpkg.com/htmx.org@2.0.4\"")
-		_gsxgw.S(">")
-		_gsxgw.S("</script>")
-//line pages.gsx:96:4
-		_gsxgw.S("<title")
-		_gsxgw.S(">")
-		_gsxgw.S("RenderTarget API Example")
-		_gsxgw.S("</title>")
-//line pages.gsx:97:4
-		_gsxgw.S("<style")
-		_gsxgw.S(">")
-		_gsxgw.S(".widget{padding: 1rem;border: 1px solid #ddd;border-radius: 8px;background: white}.widget h3{margin-top: 0}.chart{display: flex;align-items: flex-end;height: 150px;margin: 1rem 0}")
-		_gsxgw.S("</style>")
-		_gsxgw.S("</head>")
-//line pages.gsx:115:3
-		_gsxgw.S("<body")
-		_gsxgw.S(">")
-//line pages.gsx:116:4
-		_gsxgw.S("<main")
-		_gsxgw.S(">")
-//line pages.gsx:117:5
+//line pages.gsx:88:2
+		_gsxgw.S("<html lang=\"en\">")
+//line pages.gsx:89:3
+		_gsxgw.S("<head>")
+//line pages.gsx:90:4
+		_gsxgw.S("<link rel=\"stylesheet\" href=\"https://unpkg.com/missing.css@1.1.3\"/>")
+//line pages.gsx:91:4
+		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"></script>")
+//line pages.gsx:92:4
+		_gsxgw.S("<title>RenderTarget API Example</title>")
+//line pages.gsx:93:4
+		_gsxgw.S("<style>.widget{padding: 1rem;border: 1px solid #ddd;border-radius: 8px;background: white}.widget h3{margin-top: 0}.chart{display: flex;align-items: flex-end;height: 150px;margin: 1rem 0}</style></head>")
+//line pages.gsx:111:3
+		_gsxgw.S("<body>")
+//line pages.gsx:112:4
+		_gsxgw.S("<main>")
+//line pages.gsx:113:5
 		_gsxgw.Node(ctx, children)
-		_gsxgw.S("</main>")
-		_gsxgw.S("</body>")
-		_gsxgw.S("</html>")
+		_gsxgw.S("</main></body></html>")
 		return _gsxgw.Err()
 	})
 }
@@ -397,14 +277,15 @@ type ErrorPageProps struct {
 	Err error
 }
 
+//line pages.gsx:119:1
 func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:124:2
+//line pages.gsx:120:2
 		_gsxgw.Node(ctx, Html(HtmlProps{Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:125:3
+//line pages.gsx:121:3
 			_gsxgw.Node(ctx, ErrorComp(ErrorCompProps{Err: err}))
 			return _gsxgw.Err()
 		})}))
@@ -416,19 +297,16 @@ type ErrorCompProps struct {
 	Err error
 }
 
+//line pages.gsx:125:1
 func ErrorComp(_gsxp ErrorCompProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:130:2
-		_gsxgw.S("<h1")
-		_gsxgw.S(">")
-		_gsxgw.S("Error")
-		_gsxgw.S("</h1>")
-//line pages.gsx:131:2
-		_gsxgw.S("<p")
-		_gsxgw.S(">")
-//line pages.gsx:131:5
+//line pages.gsx:126:2
+		_gsxgw.S("<h1>Error</h1>")
+//line pages.gsx:127:2
+		_gsxgw.S("<p>")
+//line pages.gsx:127:5
 		_gsxgw.Text(string(err.Error()))
 		_gsxgw.S("</p>")
 		return _gsxgw.Err()

@@ -1,17 +1,13 @@
 package main
 
-import (
-	"fmt"
-)
-
 // Shared standalone function components (can be used across multiple pages).
 // These demonstrate the power of RenderTarget — no wrapper methods needed.
 
 component UserStatsWidget(stats UserStats) {
 	<div class="widget">
 		<h3>User Statistics</h3>
-		<p>Active Users: { fmt.Sprintf("%d", stats.ActiveUsers) }</p>
-		<p>New Today: { fmt.Sprintf("%d", stats.NewToday) }</p>
+		<p>Active Users: { stats.ActiveUsers }</p>
+		<p>New Today: { stats.NewToday }</p>
 		<button
 			type="button"
 			hx-get={ dashboard{} |> url }
@@ -25,10 +21,10 @@ component SalesChartWidget(data SalesData) {
 		<h3>Sales Chart</h3>
 		<div class="chart">
 			{ for _, point := range data.Points {
-				<div class="bar" data-h={ fmt.Sprint(point.Value) } style="width: 30px; background: blue; display: inline-block; margin: 2px;"></div>
+				<div class="bar" data-h={ point.Value } style="width: 30px; background: blue; display: inline-block; margin: 2px;"></div>
 			} }
 		</div>
-		<p>Total Sales: ${ fmt.Sprintf("%.2f", data.Total) }</p>
+		<p>Total Sales: ${ data.Total |> format("%.2f") }</p>
 		<button
 			type="button"
 			hx-get={ dashboard{} |> url }
