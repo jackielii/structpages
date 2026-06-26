@@ -22,14 +22,12 @@ func PostMeta(_gsxp PostMetaProps) gsx.Node {
 		p := _gsxp.P
 		_gsxgw := gsx.W(_gsxw)
 //line components.gsx:12:2
-		_gsxgw.S("<p")
-		_gsxgw.S(" class=\"")
+		_gsxgw.S("<p class=\"")
 		_gsxgw.Class(gsx.Class("text-xs text-slate-500"), gsx.Class(_gsxp.Attrs.Class()))
 		_gsxgw.S("\"")
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
-		_gsxgw.S("Posted ")
+		_gsxgw.S(">Posted ")
 //line components.gsx:13:10
 		_gsxgw.Text(string(p.CreatedAt.Format("Jan 2, 2006")))
 		_gsxgw.S("</p>")
@@ -47,37 +45,31 @@ func PostCard(_gsxp PostCardProps) gsx.Node {
 		p := _gsxp.P
 		_gsxgw := gsx.W(_gsxw)
 //line components.gsx:18:2
-		_gsxgw.S("<article")
-		_gsxgw.S(" class=\"")
+		_gsxgw.S("<article class=\"")
 		_gsxgw.Class(gsx.Class("rounded-lg border bg-white p-5 shadow-sm"), gsx.Class(_gsxp.Attrs.Class()))
 		_gsxgw.S("\"")
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
 //line components.gsx:19:3
-		_gsxgw.S("<a")
-		_gsxgw.S(" class=\"text-lg font-semibold text-slate-900 hover:underline\"")
+		_gsxgw.S("<a class=\"text-lg font-semibold text-slate-900 hover:underline\"")
 		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (postPage{}), "slug", p.Slug)
 		if _gsxerr != nil {
 			return _gsxerr
 		}
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv0))
-		_gsxgw.S("\"")
-		_gsxgw.S(">")
-//line components.gsx:20:4
+		_gsxgw.S("\">")
+//line components.gsx:23:4
 		_gsxgw.Text(string(p.Title))
 		_gsxgw.S("</a>")
-//line components.gsx:22:3
+//line components.gsx:25:3
 		_gsxgw.Node(ctx, PostMeta(PostMetaProps{P: p}))
-//line components.gsx:23:3
-		_gsxgw.S("<p")
-		_gsxgw.S(" class=\"mt-2 line-clamp-2 text-sm text-slate-700\"")
-		_gsxgw.S(">")
-//line components.gsx:23:55
+//line components.gsx:26:3
+		_gsxgw.S("<p class=\"mt-2 line-clamp-2 text-sm text-slate-700\">")
+//line components.gsx:26:55
 		_gsxgw.Text(string(p.Body))
-		_gsxgw.S("</p>")
-		_gsxgw.S("</article>")
+		_gsxgw.S("</p></article>")
 		return _gsxgw.Err()
 	})
 }
@@ -95,7 +87,7 @@ func CommentsList(_gsxp CommentsListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		comments := _gsxp.Comments
 		_gsxgw := gsx.W(_gsxw)
-//line components.gsx:31:2
+//line components.gsx:34:2
 		_gsxgw.S("<div")
 		if !_gsxp.Attrs.Has("id") {
 			_gsxv1, _gsxerr := _gsxf0.ID(ctx, (CommentsList))
@@ -112,49 +104,34 @@ func CommentsList(_gsxp CommentsListProps) gsx.Node {
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
-//line components.gsx:32:3
-		if len(comments) == 0 {
-//line components.gsx:33:4
-			_gsxgw.S("<p")
-			_gsxgw.S(" class=\"text-sm text-slate-500\"")
-			_gsxgw.S(">")
-			_gsxgw.S("No comments yet — be the first.")
-			_gsxgw.S("</p>")
-		}
 //line components.gsx:35:3
-		for _, c := range comments {
+		if len(comments) == 0 {
 //line components.gsx:36:4
-			_gsxgw.S("<article")
-			_gsxgw.S(" class=\"rounded border bg-slate-50 p-3\"")
-			_gsxgw.S(">")
-//line components.gsx:37:5
-			_gsxgw.S("<header")
-			_gsxgw.S(" class=\"text-xs font-medium text-slate-700\"")
-			_gsxgw.S(">")
-//line components.gsx:38:6
+			_gsxgw.S("<p class=\"text-sm text-slate-500\">No comments yet — be the first.</p>")
+		}
+//line components.gsx:40:3
+		for _, c := range comments {
+//line components.gsx:41:4
+			_gsxgw.S("<article class=\"rounded border bg-slate-50 p-3\">")
+//line components.gsx:42:5
+			_gsxgw.S("<header class=\"text-xs font-medium text-slate-700\">")
+//line components.gsx:43:6
 			_gsxgw.Text(string(c.Author))
 			_gsxgw.S(" · ")
-//line components.gsx:38:20
+//line components.gsx:43:22
 			_gsxgw.Text(string(c.CreatedAt.Format("15:04 Jan 2")))
 			_gsxgw.S("</header>")
-//line components.gsx:40:5
-			_gsxgw.S("<p")
-			_gsxgw.S(" class=\"mt-1 text-sm text-slate-800\"")
-			_gsxgw.S(">")
-//line components.gsx:40:44
+//line components.gsx:45:5
+			_gsxgw.S("<p class=\"mt-1 text-sm text-slate-800\">")
+//line components.gsx:45:44
 			_gsxgw.Text(string(c.Body))
-			_gsxgw.S("</p>")
-			_gsxgw.S("</article>")
+			_gsxgw.S("</p></article>")
 		}
-//line components.gsx:43:3
-		_gsxgw.S("<p")
-		_gsxgw.S(" class=\"text-xs text-slate-400\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Total: ")
-//line components.gsx:43:44
+//line components.gsx:48:3
+		_gsxgw.S("<p class=\"text-xs text-slate-400\">Total: ")
+//line components.gsx:48:44
 		_gsxgw.Text(strconv.FormatInt(int64(len(comments)), 10))
-		_gsxgw.S("</p>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("</p></div>")
 		return _gsxgw.Err()
 	})
 }

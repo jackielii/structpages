@@ -51,16 +51,20 @@ component (p dashboardPage) Page(props dashboardProps) {
 			<div class="flex gap-2 text-xs">
 				<button
 					class="rounded border px-2 py-1 hover:bg-white"
-					hx-get={ dashboardPage{} |> url }
-					hx-target={ StatsGrid |> target }
+					hx-get={dashboardPage{} |> url}
+					hx-target={StatsGrid |> target}
 					hx-swap="outerHTML"
-				>↻ Stats</button>
+				>
+					↻ Stats
+				</button>
 				<button
 					class="rounded border px-2 py-1 hover:bg-white"
-					hx-get={ dashboardPage{} |> url }
-					hx-target={ RecentPostsCard |> target }
+					hx-get={dashboardPage{} |> url}
+					hx-target={RecentPostsCard |> target}
 					hx-swap="outerHTML"
-				>↻ Recent posts</button>
+				>
+					↻ Recent posts
+				</button>
 			</div>
 		</header>
 		<section class="space-y-6">
@@ -68,9 +72,15 @@ component (p dashboardPage) Page(props dashboardProps) {
 			<RecentPostsCard posts={props.RecentPosts}/>
 			<components.Card title="Try it">
 				<ul class="list-disc space-y-1 pl-5 text-sm text-slate-700">
-					<li>Click ↻ Stats — only the StatsGrid widget refreshes (check Network tab).</li>
-					<li>Click ↻ Recent posts — only that card reloads, with its own DB query.</li>
-					<li>Hard refresh — the full document re-renders via Page().</li>
+					<li>
+						Click ↻ Stats — only the StatsGrid widget refreshes (check Network tab).
+					</li>
+					<li>
+						Click ↻ Recent posts — only that card reloads, with its own DB query.
+					</li>
+					<li>
+						Hard refresh — the full document re-renders via Page().
+					</li>
 				</ul>
 			</components.Card>
 		</section>

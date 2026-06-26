@@ -43,14 +43,9 @@ func (p searchPage) Page(props searchProps) gsx.Node {
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Search", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line search.gsx:35:3
-			_gsxgw.S("<h1")
-			_gsxgw.S(" class=\"mb-4 text-2xl font-semibold\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Search")
-			_gsxgw.S("</h1>")
+			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Search</h1>")
 //line search.gsx:36:3
-			_gsxgw.S("<form")
-			_gsxgw.S(" class=\"mb-6\"")
+			_gsxgw.S("<form class=\"mb-6\"")
 			_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (searchPage{}))
 			if _gsxerr != nil {
 				return _gsxerr
@@ -64,22 +59,13 @@ func (p searchPage) Page(props searchProps) gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv1))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"outerHTML\"")
-			_gsxgw.S(" hx-trigger=\"input changed delay:250ms from:input, submit\"")
-			_gsxgw.S(" hx-push-url=\"true\"")
-			_gsxgw.S(">")
+			_gsxgw.S("\" hx-swap=\"outerHTML\" hx-trigger=\"input changed delay:250ms from:input, submit\" hx-push-url=\"true\">")
 //line search.gsx:44:4
-			_gsxgw.S("<input")
-			_gsxgw.S(" name=\"q\"")
-			_gsxgw.S(" value=\"")
+			_gsxgw.S("<input name=\"q\" value=\"")
 			_gsxgw.AttrValue(string(props.Query))
-			_gsxgw.S("\"")
-			_gsxgw.S(" placeholder=\"Search posts...\"")
-			_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-3 py-2 text-sm\"")
+			_gsxgw.S("\" placeholder=\"Search posts...\" class=\"w-full rounded border border-slate-300 px-3 py-2 text-sm\"")
 			_gsxgw.BoolAttr("autofocus", true)
-			_gsxgw.S("/>")
-			_gsxgw.S("</form>")
+			_gsxgw.S("/></form>")
 //line search.gsx:52:3
 			_gsxgw.Node(ctx, p.Results(props))
 			return _gsxgw.Err()
@@ -99,40 +85,28 @@ func (p searchPage) Results(props searchProps) gsx.Node {
 		}
 		_gsxgw.S(" id=\"")
 		_gsxgw.AttrValue(string(_gsxv2))
-		_gsxgw.S("\"")
-		_gsxgw.S(" class=\"space-y-4\"")
-		_gsxgw.S(">")
+		_gsxgw.S("\" class=\"space-y-4\">")
 //line search.gsx:58:3
 		if props.Query == "" {
 //line search.gsx:59:4
-			_gsxgw.S("<p")
-			_gsxgw.S(" class=\"text-sm text-slate-500\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Type a query to search.")
-			_gsxgw.S("</p>")
+			_gsxgw.S("<p class=\"text-sm text-slate-500\">Type a query to search.</p>")
 		} else {
 //line search.gsx:60:10
 			if len(props.Posts) == 0 {
 //line search.gsx:61:4
-				_gsxgw.S("<p")
-				_gsxgw.S(" class=\"text-sm text-slate-500\"")
-				_gsxgw.S(">")
-				_gsxgw.S("No results for \"")
-//line search.gsx:61:54
+				_gsxgw.S("<p class=\"text-sm text-slate-500\">No results for \"")
+//line search.gsx:63:5
 				_gsxgw.Text(string(props.Query))
-				_gsxgw.S("\".")
-				_gsxgw.S("</p>")
+				_gsxgw.S("\".</p>")
 			} else {
-//line search.gsx:63:4
-				_gsxgw.S("<p")
-				_gsxgw.S(" class=\"text-xs text-slate-500\"")
-				_gsxgw.S(">")
-//line search.gsx:63:38
+//line search.gsx:67:4
+				_gsxgw.S("<p class=\"text-xs text-slate-500\">")
+//line search.gsx:68:5
 				_gsxgw.Text(string(resultsCount(len(props.Posts))))
 				_gsxgw.S("</p>")
-//line search.gsx:64:4
+//line search.gsx:70:4
 				for _, post := range props.Posts {
-//line search.gsx:65:5
+//line search.gsx:71:5
 					_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
 				}
 			}

@@ -18,7 +18,7 @@ import (
 // User: …, Children: body}).
 component AdminShellWith(title string, user store.User) {
 	<layout.AdminShell title={title} current={user}>
-		{children}
+		{ children }
 	</layout.AdminShell>
 }
 
@@ -41,7 +41,12 @@ component (p postListPage) Page(props postListProps) {
 	<layout.AdminShell title="Posts" current={props.User}>
 		<header class="mb-4 flex items-center justify-between">
 			<h1 class="text-2xl font-semibold">All posts</h1>
-			<a class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700" href={ postNewPage{} |> url }>New post</a>
+			<a
+				class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+				href={postNewPage{} |> url}
+			>
+				New post
+			</a>
 		</header>
 		<PostsTable posts={props.Posts}/>
 	</layout.AdminShell>
@@ -96,16 +101,26 @@ component (p postEditPage) Page(props postFormViewProps) {
 // --- Shared form ---
 
 component PostForm(p store.Post, cats []store.Category, errMsg string) {
-	<form method="POST" action={ postFormAction(ctx, p) } class="space-y-3">
+	<form method="POST" action={postFormAction(ctx, p)} class="space-y-3">
 		<components.Alert kind={components.AlertError} msg={errMsg}/>
 		<components.Input name="title" label="Title" value={p.Title} errMsg=""/>
-		<components.Input name="slug" label="Slug (auto if blank)" value={p.Slug} errMsg=""/>
+		<components.Input
+			name="slug"
+			label="Slug (auto if blank)"
+			value={p.Slug}
+			errMsg=""
+		/>
 		<label class="block text-sm">
 			<span class="mb-1 block font-medium text-slate-700">Category</span>
-			<select name="category_id" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+			<select
+				name="category_id"
+				class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+			>
 				<option value="0">— pick one —</option>
 				{ for _, c := range cats {
-					<option value={c.ID} selected={ c.ID == p.CategoryID }>{c.Name}</option>
+					<option value={c.ID} selected={c.ID == p.CategoryID}>
+						{ c.Name }
+					</option>
 				} }
 			</select>
 		</label>
@@ -116,7 +131,12 @@ component PostForm(p store.Post, cats []store.Category, errMsg string) {
 		</label>
 		<div class="flex items-center gap-2">
 			<components.Button label="Save" { gsx.Attrs{"type": "submit"}... }/>
-			<a class="text-sm text-slate-500 hover:underline" href={ postListPage{} |> url }>Cancel</a>
+			<a
+				class="text-sm text-slate-500 hover:underline"
+				href={postListPage{} |> url}
+			>
+				Cancel
+			</a>
 		</div>
 	</form>
 }

@@ -57,22 +57,13 @@ func (p dashboardPage) Page(props dashboardProps) gsx.Node {
 		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Dashboard", Current: props.User, Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line dashboard.gsx:49:3
-			_gsxgw.S("<header")
-			_gsxgw.S(" class=\"mb-6 flex items-end justify-between\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<header class=\"mb-6 flex items-end justify-between\">")
 //line dashboard.gsx:50:4
-			_gsxgw.S("<h1")
-			_gsxgw.S(" class=\"text-2xl font-semibold\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Dashboard")
-			_gsxgw.S("</h1>")
+			_gsxgw.S("<h1 class=\"text-2xl font-semibold\">Dashboard</h1>")
 //line dashboard.gsx:51:4
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"flex gap-2 text-xs\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<div class=\"flex gap-2 text-xs\">")
 //line dashboard.gsx:52:5
-			_gsxgw.S("<button")
-			_gsxgw.S(" class=\"rounded border px-2 py-1 hover:bg-white\"")
+			_gsxgw.S("<button class=\"rounded border px-2 py-1 hover:bg-white\"")
 			_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (dashboardPage{}))
 			if _gsxerr != nil {
 				return _gsxerr
@@ -86,14 +77,9 @@ func (p dashboardPage) Page(props dashboardProps) gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv1))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"outerHTML\"")
-			_gsxgw.S(">")
-			_gsxgw.S("↻ Stats")
-			_gsxgw.S("</button>")
-//line dashboard.gsx:58:5
-			_gsxgw.S("<button")
-			_gsxgw.S(" class=\"rounded border px-2 py-1 hover:bg-white\"")
+			_gsxgw.S("\" hx-swap=\"outerHTML\">↻ Stats</button>")
+//line dashboard.gsx:60:5
+			_gsxgw.S("<button class=\"rounded border px-2 py-1 hover:bg-white\"")
 			_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (dashboardPage{}))
 			if _gsxerr != nil {
 				return _gsxerr
@@ -107,44 +93,24 @@ func (p dashboardPage) Page(props dashboardProps) gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv3))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"outerHTML\"")
-			_gsxgw.S(">")
-			_gsxgw.S("↻ Recent posts")
-			_gsxgw.S("</button>")
-			_gsxgw.S("</div>")
-			_gsxgw.S("</header>")
-//line dashboard.gsx:66:3
-			_gsxgw.S("<section")
-			_gsxgw.S(" class=\"space-y-6\"")
-			_gsxgw.S(">")
-//line dashboard.gsx:67:4
+			_gsxgw.S("\" hx-swap=\"outerHTML\">↻ Recent posts</button></div></header>")
+//line dashboard.gsx:70:3
+			_gsxgw.S("<section class=\"space-y-6\">")
+//line dashboard.gsx:71:4
 			_gsxgw.Node(ctx, StatsGrid(StatsGridProps{Stats: props.Stats}))
-//line dashboard.gsx:68:4
+//line dashboard.gsx:72:4
 			_gsxgw.Node(ctx, RecentPostsCard(RecentPostsCardProps{Posts: props.RecentPosts}))
-//line dashboard.gsx:69:4
+//line dashboard.gsx:73:4
 			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Try it", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 				_gsxgw := gsx.W(_gsxw)
-//line dashboard.gsx:70:5
-				_gsxgw.S("<ul")
-				_gsxgw.S(" class=\"list-disc space-y-1 pl-5 text-sm text-slate-700\"")
-				_gsxgw.S(">")
-//line dashboard.gsx:71:6
-				_gsxgw.S("<li")
-				_gsxgw.S(">")
-				_gsxgw.S("Click ↻ Stats — only the StatsGrid widget refreshes (check Network tab).")
-				_gsxgw.S("</li>")
-//line dashboard.gsx:72:6
-				_gsxgw.S("<li")
-				_gsxgw.S(">")
-				_gsxgw.S("Click ↻ Recent posts — only that card reloads, with its own DB query.")
-				_gsxgw.S("</li>")
-//line dashboard.gsx:73:6
-				_gsxgw.S("<li")
-				_gsxgw.S(">")
-				_gsxgw.S("Hard refresh — the full document re-renders via Page().")
-				_gsxgw.S("</li>")
-				_gsxgw.S("</ul>")
+//line dashboard.gsx:74:5
+				_gsxgw.S("<ul class=\"list-disc space-y-1 pl-5 text-sm text-slate-700\">")
+//line dashboard.gsx:75:6
+				_gsxgw.S("<li>Click ↻ Stats — only the StatsGrid widget refreshes (check Network tab).</li>")
+//line dashboard.gsx:78:6
+				_gsxgw.S("<li>Click ↻ Recent posts — only that card reloads, with its own DB query.</li>")
+//line dashboard.gsx:81:6
+				_gsxgw.S("<li>Hard refresh — the full document re-renders via Page().</li></ul>")
 				return _gsxgw.Err()
 			})}))
 			_gsxgw.S("</section>")

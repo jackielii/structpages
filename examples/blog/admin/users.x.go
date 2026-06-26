@@ -34,115 +34,70 @@ func (p userListPage) Page(props userListProps) gsx.Node {
 		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Users", Current: props.User, Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line users.gsx:27:3
-			_gsxgw.S("<h1")
-			_gsxgw.S(" class=\"mb-4 text-2xl font-semibold\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Users")
-			_gsxgw.S("</h1>")
+			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Users</h1>")
 //line users.gsx:28:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"grid gap-4 md:grid-cols-2\"")
-			_gsxgw.S(">")
-//line users.gsx:29:3
+			_gsxgw.S("<div class=\"grid gap-4 md:grid-cols-2\">")
+//line users.gsx:29:4
 			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Existing users", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 				_gsxgw := gsx.W(_gsxw)
-//line users.gsx:30:4
-				_gsxgw.S("<ul")
-				_gsxgw.S(" class=\"divide-y text-sm\"")
-				_gsxgw.S(">")
-//line users.gsx:31:5
+//line users.gsx:30:5
+				_gsxgw.S("<ul class=\"divide-y text-sm\">")
+//line users.gsx:31:6
 				for _, u := range props.Users {
-//line users.gsx:32:6
-					_gsxgw.S("<li")
-					_gsxgw.S(" class=\"flex items-center justify-between py-2\"")
-					_gsxgw.S(">")
-//line users.gsx:33:7
-					_gsxgw.S("<span")
-					_gsxgw.S(">")
-//line users.gsx:34:8
+//line users.gsx:32:7
+					_gsxgw.S("<li class=\"flex items-center justify-between py-2\">")
+//line users.gsx:33:8
+					_gsxgw.S("<span>")
+//line users.gsx:34:9
 					_gsxgw.Text(string(u.Username))
-//line users.gsx:35:8
+//line users.gsx:35:9
 					if u.IsAdmin {
-//line users.gsx:36:9
-						_gsxgw.S("<span")
-						_gsxgw.S(" class=\"ml-2 rounded bg-slate-900 px-2 py-0.5 text-xs text-white\"")
-						_gsxgw.S(">")
-						_gsxgw.S("admin")
-						_gsxgw.S("</span>")
+//line users.gsx:36:10
+						_gsxgw.S("<span class=\"ml-2 rounded bg-slate-900 px-2 py-0.5 text-xs text-white\">admin</span>")
 					}
 					_gsxgw.S("</span>")
-//line users.gsx:39:7
-					_gsxgw.S("<form")
-					_gsxgw.S(" method=\"POST\"")
+//line users.gsx:43:8
+					_gsxgw.S("<form method=\"POST\"")
 					_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (userDeleteHandler{}), "id", u.ID)
 					if _gsxerr != nil {
 						return _gsxerr
 					}
 					_gsxgw.S(" action=\"")
 					_gsxgw.URL(string(_gsxv0))
-					_gsxgw.S("\"")
-					_gsxgw.S(" class=\"m-0\"")
-					_gsxgw.S(">")
-//line users.gsx:44:8
-					_gsxgw.S("<button")
-					_gsxgw.S(" class=\"text-xs text-red-600 hover:underline\"")
-					_gsxgw.S(" type=\"submit\"")
-					_gsxgw.S(">")
-					_gsxgw.S("Delete")
-					_gsxgw.S("</button>")
-					_gsxgw.S("</form>")
-					_gsxgw.S("</li>")
+					_gsxgw.S("\" class=\"m-0\">")
+//line users.gsx:48:9
+					_gsxgw.S("<button class=\"text-xs text-red-600 hover:underline\" type=\"submit\">Delete</button></form></li>")
 				}
 				_gsxgw.S("</ul>")
 				return _gsxgw.Err()
 			})}))
-//line users.gsx:50:3
+//line users.gsx:59:4
 			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Create user", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 				_gsxgw := gsx.W(_gsxw)
-//line users.gsx:51:4
-				_gsxgw.S("<form")
-				_gsxgw.S(" method=\"POST\"")
+//line users.gsx:60:5
+				_gsxgw.S("<form method=\"POST\"")
 				_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (userCreateHandler{}))
 				if _gsxerr != nil {
 					return _gsxerr
 				}
 				_gsxgw.S(" action=\"")
 				_gsxgw.URL(string(_gsxv1))
-				_gsxgw.S("\"")
-				_gsxgw.S(" class=\"space-y-3\"")
-				_gsxgw.S(">")
-//line users.gsx:52:5
+				_gsxgw.S("\" class=\"space-y-3\">")
+//line users.gsx:65:6
 				_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "username", Label: "Username", Value: "", ErrMsg: ""}))
-//line users.gsx:53:5
-				_gsxgw.S("<label")
-				_gsxgw.S(" class=\"block text-sm\"")
-				_gsxgw.S(">")
-//line users.gsx:54:6
-				_gsxgw.S("<span")
-				_gsxgw.S(" class=\"mb-1 block font-medium text-slate-700\"")
-				_gsxgw.S(">")
-				_gsxgw.S("Password")
-				_gsxgw.S("</span>")
-//line users.gsx:55:6
-				_gsxgw.S("<input")
-				_gsxgw.S(" type=\"password\"")
-				_gsxgw.S(" name=\"password\"")
+//line users.gsx:71:6
+				_gsxgw.S("<label class=\"block text-sm\">")
+//line users.gsx:72:7
+				_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">Password</span>")
+//line users.gsx:75:7
+				_gsxgw.S("<input type=\"password\" name=\"password\"")
 				_gsxgw.BoolAttr("required", true)
-				_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"")
-				_gsxgw.S("/>")
-				_gsxgw.S("</label>")
-//line users.gsx:62:5
-				_gsxgw.S("<label")
-				_gsxgw.S(" class=\"flex items-center gap-2 text-sm\"")
-				_gsxgw.S(">")
-//line users.gsx:63:6
-				_gsxgw.S("<input")
-				_gsxgw.S(" type=\"checkbox\"")
-				_gsxgw.S(" name=\"is_admin\"")
-				_gsxgw.S("/>")
-				_gsxgw.S("Grant admin")
-				_gsxgw.S("</label>")
-//line users.gsx:66:5
+				_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"/></label>")
+//line users.gsx:82:6
+				_gsxgw.S("<label class=\"flex items-center gap-2 text-sm\">")
+//line users.gsx:83:7
+				_gsxgw.S("<input type=\"checkbox\" name=\"is_admin\"/>Grant admin</label>")
+//line users.gsx:86:6
 				_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Create", Attrs: gsx.Attrs{}.Merge(gsx.Attrs{"type": "submit"})}))
 				_gsxgw.S("</form>")
 				return _gsxgw.Err()

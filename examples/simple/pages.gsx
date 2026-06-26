@@ -13,7 +13,9 @@ type contact struct{}
 component (p index) Page() {
 	<Layout>
 		<h1>Welcome to the Index Page</h1>
-		<p>Navigate to the product, team, or contact pages using the links below:</p>
+		<p>
+			Navigate to the product, team, or contact pages using the links below:
+		</p>
 	</Layout>
 }
 
@@ -42,21 +44,29 @@ component Layout() {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
-			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3" />
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
 			<title>Simple Example</title>
 		</head>
 		<body>
 			<header class="navbar">
 				<nav>
 					<ul role="list">
-						<li><a href={ index{} |> url }>Home</a></li>
-						<li><a href={ product{} |> url }>Product</a></li>
-						<li><a href={ team{} |> url }>Team</a></li>
-						<li><a href={ contact{} |> url }>Contact</a></li>
+						<li>
+							<a href={index{} |> url}>Home</a>
+						</li>
+						<li>
+							<a href={product{} |> url}>Product</a>
+						</li>
+						<li>
+							<a href={team{} |> url}>Team</a>
+						</li>
+						<li>
+							<a href={contact{} |> url}>Contact</a>
+						</li>
 					</ul>
 				</nav>
 			</header>
-			<main>{children}</main>
+			<main>{ children }</main>
 		</body>
 	</html>
 }

@@ -63,42 +63,28 @@ func (p categoryPage) Page(props categoryProps) gsx.Node {
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Category.Name, Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line category.gsx:56:3
-			_gsxgw.S("<h1")
-			_gsxgw.S(" class=\"mb-1 text-2xl font-semibold\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<h1 class=\"mb-1 text-2xl font-semibold\">")
 //line category.gsx:56:43
 			_gsxgw.Text(string(props.Category.Name))
 			_gsxgw.S("</h1>")
 //line category.gsx:57:3
-			_gsxgw.S("<p")
-			_gsxgw.S(" class=\"mb-6 text-sm text-slate-500\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Posts filed under this category.")
-			_gsxgw.S("</p>")
-//line category.gsx:58:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"space-y-4\"")
-			_gsxgw.S(">")
-//line category.gsx:59:4
+			_gsxgw.S("<p class=\"mb-6 text-sm text-slate-500\">Posts filed under this category.</p>")
+//line category.gsx:60:3
+			_gsxgw.S("<div class=\"space-y-4\">")
+//line category.gsx:61:4
 			if len(props.Posts) == 0 {
-//line category.gsx:60:5
-				_gsxgw.S("<p")
-				_gsxgw.S(" class=\"text-sm text-slate-500\"")
-				_gsxgw.S(">")
-				_gsxgw.S("Nothing here yet.")
-				_gsxgw.S("</p>")
+//line category.gsx:62:5
+				_gsxgw.S("<p class=\"text-sm text-slate-500\">Nothing here yet.</p>")
 			}
-//line category.gsx:62:4
+//line category.gsx:64:4
 			for _, post := range props.Posts {
-//line category.gsx:63:5
+//line category.gsx:65:5
 				_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
 			}
 			_gsxgw.S("</div>")
-//line category.gsx:66:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"mt-6\"")
-			_gsxgw.S(">")
-//line category.gsx:67:4
+//line category.gsx:68:3
+			_gsxgw.S("<div class=\"mt-6\">")
+//line category.gsx:68:21
 			_gsxgw.Node(ctx, components.Pagination(props.Pagination))
 			_gsxgw.S("</div>")
 			return _gsxgw.Err()

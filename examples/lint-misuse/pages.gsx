@@ -19,10 +19,10 @@ import (
 // make these findings go away. The lint still has value in gsx projects.
 component BadLinks(id int, name string) {
 	<a href="/login">Hard-coded internal</a>
-	<a href={ "/" + "admin" }>Expression literal</a>
-	<a href={ "/items/" + strconv.Itoa(id) }>Concat</a>
-	<a href={ fmt.Sprintf("/users/%s", name) }>Sprintf</a>
-	<a hx-get={ "/api/items" }>Bad hx-get</a>
-	<form action={ "/submit" }>Bad action</form>
+	<a href={"/" + "admin"}>Expression literal</a>
+	<a href={"/items/" + strconv.Itoa(id)}>Concat</a>
+	<a href={fmt.Sprintf("/users/%s", name)}>Sprintf</a>
+	<a hx-get={"/api/items"}>Bad hx-get</a>
+	<form action={"/submit"}>Bad action</form>
 	<a href="https://example.com/external">External (allowed)</a>
 }

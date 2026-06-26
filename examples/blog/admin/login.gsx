@@ -17,9 +17,14 @@ component LoginShell(username, errMsg string) {
 			<main class="mx-auto max-w-sm px-4 py-16">
 				<components.Card title="Sign in">
 					<form method="POST" class="space-y-3">
-						<components.Alert kind={components.AlertError} msg={errMsg}/>
+						<components.Alert
+							kind={components.AlertError}
+							msg={errMsg}
+						/>
 						<label class="block text-sm">
-							<span class="mb-1 block font-medium text-slate-700">Username</span>
+							<span class="mb-1 block font-medium text-slate-700">
+								Username
+							</span>
 							<input
 								name="username"
 								value={username}
@@ -29,7 +34,9 @@ component LoginShell(username, errMsg string) {
 							/>
 						</label>
 						<label class="block text-sm">
-							<span class="mb-1 block font-medium text-slate-700">Password</span>
+							<span class="mb-1 block font-medium text-slate-700">
+								Password
+							</span>
 							<input
 								type="password"
 								name="password"
@@ -43,7 +50,11 @@ component LoginShell(username, errMsg string) {
 						>
 							Sign in
 						</button>
-						<p class="text-xs text-slate-500">Demo credentials: <code>admin</code> / <code>admin</code></p>
+						<p class="text-xs text-slate-500">
+							Demo credentials: <code>admin</code> / <code>
+								admin
+							</code>
+						</p>
 					</form>
 				</components.Card>
 			</main>

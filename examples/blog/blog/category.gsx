@@ -53,8 +53,10 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 
 component (p categoryPage) Page(props categoryProps) {
 	<layout.PublicShell title={props.Category.Name}>
-		<h1 class="mb-1 text-2xl font-semibold">{props.Category.Name}</h1>
-		<p class="mb-6 text-sm text-slate-500">Posts filed under this category.</p>
+		<h1 class="mb-1 text-2xl font-semibold">{ props.Category.Name }</h1>
+		<p class="mb-6 text-sm text-slate-500">
+			Posts filed under this category.
+		</p>
 		<div class="space-y-4">
 			{ if len(props.Posts) == 0 {
 				<p class="text-sm text-slate-500">Nothing here yet.</p>
@@ -63,8 +65,6 @@ component (p categoryPage) Page(props categoryProps) {
 				<PostCard p={post}/>
 			} }
 		</div>
-		<div class="mt-6">
-			{ components.Pagination(props.Pagination) }
-		</div>
+		<div class="mt-6">{ components.Pagination(props.Pagination) }</div>
 	</layout.PublicShell>
 }

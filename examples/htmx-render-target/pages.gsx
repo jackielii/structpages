@@ -10,9 +10,11 @@ component UserStatsWidget(stats UserStats) {
 		<p>New Today: { stats.NewToday }</p>
 		<button
 			type="button"
-			hx-get={ dashboard{} |> url }
-			hx-target={ UserStatsWidget |> target }
-		>Refresh Stats</button>
+			hx-get={dashboard{} |> url}
+			hx-target={UserStatsWidget |> target}
+		>
+			Refresh Stats
+		</button>
 	</div>
 }
 
@@ -21,15 +23,21 @@ component SalesChartWidget(data SalesData) {
 		<h3>Sales Chart</h3>
 		<div class="chart">
 			{ for _, point := range data.Points {
-				<div class="bar" data-h={ point.Value } style="width: 30px; background: blue; display: inline-block; margin: 2px;"></div>
+				<div
+					class="bar"
+					data-h={point.Value}
+					style="width: 30px; background: blue; display: inline-block; margin: 2px;"
+				></div>
 			} }
 		</div>
 		<p>Total Sales: ${ data.Total |> format("%.2f") }</p>
 		<button
 			type="button"
-			hx-get={ dashboard{} |> url }
-			hx-target={ SalesChartWidget |> target }
-		>Refresh Sales</button>
+			hx-get={dashboard{} |> url}
+			hx-target={SalesChartWidget |> target}
+		>
+			Refresh Sales
+		</button>
 	</div>
 }
 
@@ -38,14 +46,18 @@ component NotificationsList(notifications []Notification) {
 		<h3>Recent Notifications</h3>
 		<ul>
 			{ for _, n := range notifications {
-				<li>{ n.Message } <small>({ n.Time.Format("15:04") })</small></li>
+				<li>
+					{ n.Message } <small>({ n.Time.Format("15:04") })</small>
+				</li>
 			} }
 		</ul>
 		<button
 			type="button"
-			hx-get={ dashboard{} |> url }
-			hx-target={ NotificationsList |> target }
-		>Refresh Notifications</button>
+			hx-get={dashboard{} |> url}
+			hx-target={NotificationsList |> target}
+		>
+			Refresh Notifications
+		</button>
 	</div>
 }
 
@@ -56,27 +68,55 @@ type dashboard struct{}
 component (p dashboard) Page(props dashboardData) {
 	<Html>
 		<h1>Dashboard</h1>
-		<p>This example demonstrates the RenderTarget API with standalone function components.</p>
-		<p>Click "Refresh" buttons to see HTMX partial updates — each widget loads only its own data!</p>
-		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;">
-			<div id={ UserStatsWidget |> id }>
-				<UserStatsWidget { props.Stats... } />
+		<p>
+			This example demonstrates the RenderTarget API with standalone function components.
+		</p>
+		<p>
+			Click "Refresh" buttons to see HTMX partial updates — each widget loads only its own data!
+		</p>
+		<div
+			style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;"
+		>
+			<div id={UserStatsWidget |> id}>
+				<UserStatsWidget { props.Stats... }/>
 			</div>
-			<div id={ SalesChartWidget |> id }>
-				<SalesChartWidget { props.Sales... } />
+			<div id={SalesChartWidget |> id}>
+				<SalesChartWidget { props.Sales... }/>
 			</div>
-			<div id={ NotificationsList |> id }>
-				<NotificationsList notifications={props.Notifications} />
+			<div id={NotificationsList |> id}>
+				<NotificationsList notifications={props.Notifications}/>
 			</div>
 		</div>
-		<div style="margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;">
+		<div
+			style="margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;"
+		>
 			<h4>How it works:</h4>
 			<ul>
-				<li>✅ <strong>Standalone functions</strong> — UserStatsWidget, SalesChartWidget, NotificationsList are shared components</li>
-				<li>✅ <strong>Conditional loading</strong> — Props checks target.Is() and loads only needed data</li>
-				<li>✅ <strong>RenderComponent (direct)</strong> — construct the gsx component with its props struct and pass directly</li>
-				<li>✅ <strong>No wrapper methods</strong> — No need to create dashboard.UserStats() method!</li>
-				<li>✅ <strong>HTMX integration</strong> — HTMXRenderTarget automatically handles partial updates</li>
+				<li>
+					✅ <strong>
+						Standalone functions
+					</strong> — UserStatsWidget, SalesChartWidget, NotificationsList are shared components
+				</li>
+				<li>
+					✅ <strong>
+						Conditional loading
+					</strong> — Props checks target.Is() and loads only needed data
+				</li>
+				<li>
+					✅ <strong>
+						RenderComponent (direct)
+					</strong> — construct the gsx component with its props struct and pass directly
+				</li>
+				<li>
+					✅ <strong>
+						No wrapper methods
+					</strong> — No need to create dashboard.UserStats() method!
+				</li>
+				<li>
+					✅ <strong>
+						HTMX integration
+					</strong> — HTMXRenderTarget automatically handles partial updates
+				</li>
 			</ul>
 		</div>
 	</Html>
@@ -87,7 +127,7 @@ component Html() {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
-			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3" />
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
 			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 			<title>RenderTarget API Example</title>
 			<style>
@@ -109,16 +149,14 @@ component Html() {
 			</style>
 		</head>
 		<body>
-			<main>
-				{children}
-			</main>
+			<main>{ children }</main>
 		</body>
 	</html>
 }
 
 component ErrorPage(err error) {
 	<Html>
-		<ErrorComp err={err} />
+		<ErrorComp err={err}/>
 	</Html>
 }
 

@@ -40,15 +40,9 @@ func (p homePage) Page(props homeProps) gsx.Node {
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Home", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line home.gsx:31:3
-			_gsxgw.S("<h1")
-			_gsxgw.S(" class=\"mb-4 text-2xl font-semibold\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Recent Posts")
-			_gsxgw.S("</h1>")
+			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Recent Posts</h1>")
 //line home.gsx:32:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"space-y-4\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<div class=\"space-y-4\">")
 //line home.gsx:33:4
 			for _, post := range props.Posts {
 //line home.gsx:34:5
@@ -59,29 +53,23 @@ func (p homePage) Page(props homeProps) gsx.Node {
 			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Browse by category", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 				_gsxgw := gsx.W(_gsxw)
 //line home.gsx:38:4
-				_gsxgw.S("<ul")
-				_gsxgw.S(" class=\"flex flex-wrap gap-2\"")
-				_gsxgw.S(">")
+				_gsxgw.S("<ul class=\"flex flex-wrap gap-2\">")
 //line home.gsx:39:5
 				for _, c := range props.Categories {
 //line home.gsx:40:6
-					_gsxgw.S("<li")
-					_gsxgw.S(">")
+					_gsxgw.S("<li>")
 //line home.gsx:41:7
-					_gsxgw.S("<a")
-					_gsxgw.S(" class=\"rounded-full border px-3 py-1 text-sm hover:bg-slate-50\"")
+					_gsxgw.S("<a class=\"rounded-full border px-3 py-1 text-sm hover:bg-slate-50\"")
 					_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (categoryPage{}), "slug", c.Slug)
 					if _gsxerr != nil {
 						return _gsxerr
 					}
 					_gsxgw.S(" href=\"")
 					_gsxgw.URL(string(_gsxv0))
-					_gsxgw.S("\"")
-					_gsxgw.S(">")
-//line home.gsx:42:8
+					_gsxgw.S("\">")
+//line home.gsx:45:8
 					_gsxgw.Text(string(c.Name))
-					_gsxgw.S("</a>")
-					_gsxgw.S("</li>")
+					_gsxgw.S("</a></li>")
 				}
 				_gsxgw.S("</ul>")
 				return _gsxgw.Err()

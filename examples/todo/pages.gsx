@@ -18,8 +18,8 @@ component (p index) Page() {
 		<div class="todo-app">
 			<h1>TODO App</h1>
 			<form
-				hx-post={ add{} |> url }
-				hx-target={ index.TodoList |> target }
+				hx-post={add{} |> url}
+				hx-target={index.TodoList |> target}
 				hx-swap="innerHTML"
 				hx-on:htmx:after-request="this.reset()"
 			>
@@ -33,7 +33,7 @@ component (p index) Page() {
 					<button type="submit">Add Todo</button>
 				</div>
 			</form>
-			<div id={ index.TodoList |> id }>
+			<div id={index.TodoList |> id}>
 				<p.TodoList/>
 			</div>
 		</div>
@@ -90,16 +90,16 @@ component TodoList() {
 					<input
 						type="checkbox"
 						checked={todo.Completed}
-						hx-post={ toggle{} |> url("id", todo.ID) }
-						hx-target={ index.TodoList |> target }
+						hx-post={toggle{} |> url("id", todo.ID)}
+						hx-target={index.TodoList |> target}
 						hx-swap="innerHTML"
 					/>
 					<span class="todo-text">{ todo.Text }</span>
 				</div>
 				<button
 					class="delete-btn"
-					hx-delete={ deleteTodo{} |> url("id", todo.ID) }
-					hx-target={ index.TodoList |> target }
+					hx-delete={deleteTodo{} |> url("id", todo.ID)}
+					hx-target={index.TodoList |> target}
 					hx-swap="innerHTML"
 					hx-confirm="Are you sure you want to delete this todo?"
 				>
@@ -117,7 +117,7 @@ component Layout() {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
-			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3" />
+			<link rel="stylesheet" href="https://unpkg.com/missing.css@1.1.3"/>
 			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 			<title>TODO App</title>
 			<style>
@@ -215,16 +215,14 @@ component Layout() {
 			</style>
 		</head>
 		<body>
-			<main id="content">
-				{children}
-			</main>
+			<main id="content">{ children }</main>
 		</body>
 	</html>
 }
 
 component ErrorPage(err error) {
 	<Layout>
-		<ErrorComp err={err} />
+		<ErrorComp err={err}/>
 	</Layout>
 }
 

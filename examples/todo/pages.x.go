@@ -26,14 +26,9 @@ func (p index) Page() gsx.Node {
 		_gsxgw.Node(ctx, Layout(LayoutProps{Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
 //line pages.gsx:18:3
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"todo-app\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<div class=\"todo-app\">")
 //line pages.gsx:19:4
-			_gsxgw.S("<h1")
-			_gsxgw.S(">")
-			_gsxgw.S("TODO App")
-			_gsxgw.S("</h1>")
+			_gsxgw.S("<h1>TODO App</h1>")
 //line pages.gsx:20:4
 			_gsxgw.S("<form")
 			_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (add{}))
@@ -49,29 +44,15 @@ func (p index) Page() gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv1))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"innerHTML\"")
-			_gsxgw.S(" hx-on:htmx:after-request=\"this.reset()\"")
-			_gsxgw.S(">")
+			_gsxgw.S("\" hx-swap=\"innerHTML\" hx-on:htmx:after-request=\"this.reset()\">")
 //line pages.gsx:26:5
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"form-group\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<div class=\"form-group\">")
 //line pages.gsx:27:6
-			_gsxgw.S("<input")
-			_gsxgw.S(" type=\"text\"")
-			_gsxgw.S(" name=\"text\"")
-			_gsxgw.S(" placeholder=\"Add a new todo...\"")
+			_gsxgw.S("<input type=\"text\" name=\"text\" placeholder=\"Add a new todo...\"")
 			_gsxgw.BoolAttr("required", true)
 			_gsxgw.S("/>")
 //line pages.gsx:33:6
-			_gsxgw.S("<button")
-			_gsxgw.S(" type=\"submit\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Add Todo")
-			_gsxgw.S("</button>")
-			_gsxgw.S("</div>")
-			_gsxgw.S("</form>")
+			_gsxgw.S("<button type=\"submit\">Add Todo</button></div></form>")
 //line pages.gsx:36:4
 			_gsxgw.S("<div")
 			_gsxv2, _gsxerr := _gsxf0.ID(ctx, (index.TodoList))
@@ -80,12 +61,10 @@ func (p index) Page() gsx.Node {
 			}
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv2))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
+			_gsxgw.S("\">")
 //line pages.gsx:37:5
 			_gsxgw.Node(ctx, p.TodoList())
-			_gsxgw.S("</div>")
-			_gsxgw.S("</div>")
+			_gsxgw.S("</div></div>")
 			return _gsxgw.Err()
 		})}))
 		return _gsxgw.Err()
@@ -143,24 +122,17 @@ func TodoList() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
 //line pages.gsx:86:2
-		_gsxgw.S("<ul")
-		_gsxgw.S(" class=\"todo-list\"")
-		_gsxgw.S(">")
+		_gsxgw.S("<ul class=\"todo-list\">")
 //line pages.gsx:87:3
 		for _, todo := range getTodos() {
 //line pages.gsx:88:4
-			_gsxgw.S("<li")
-			_gsxgw.S(" class=\"")
+			_gsxgw.S("<li class=\"")
 			_gsxgw.Class(gsx.Class("todo-item"), gsx.ClassIf("completed", todo.Completed))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
+			_gsxgw.S("\">")
 //line pages.gsx:89:5
-			_gsxgw.S("<div")
-			_gsxgw.S(" class=\"todo-content\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<div class=\"todo-content\">")
 //line pages.gsx:90:6
-			_gsxgw.S("<input")
-			_gsxgw.S(" type=\"checkbox\"")
+			_gsxgw.S("<input type=\"checkbox\"")
 			_gsxgw.BoolAttr("checked", bool(todo.Completed))
 			_gsxv3, _gsxerr := _gsxf0.URLFor(ctx, (toggle{}), "id", todo.ID)
 			if _gsxerr != nil {
@@ -175,20 +147,14 @@ func TodoList() gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv4))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"innerHTML\"")
-			_gsxgw.S("/>")
+			_gsxgw.S("\" hx-swap=\"innerHTML\"/>")
 //line pages.gsx:97:6
-			_gsxgw.S("<span")
-			_gsxgw.S(" class=\"todo-text\"")
-			_gsxgw.S(">")
+			_gsxgw.S("<span class=\"todo-text\">")
 //line pages.gsx:97:30
 			_gsxgw.Text(string(todo.Text))
-			_gsxgw.S("</span>")
-			_gsxgw.S("</div>")
+			_gsxgw.S("</span></div>")
 //line pages.gsx:99:5
-			_gsxgw.S("<button")
-			_gsxgw.S(" class=\"delete-btn\"")
+			_gsxgw.S("<button class=\"delete-btn\"")
 			_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (deleteTodo{}), "id", todo.ID)
 			if _gsxerr != nil {
 				return _gsxerr
@@ -202,23 +168,13 @@ func TodoList() gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv6))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"innerHTML\"")
-			_gsxgw.S(" hx-confirm=\"Are you sure you want to delete this todo?\"")
-			_gsxgw.S(">")
-			_gsxgw.S("×")
-			_gsxgw.S("</button>")
-			_gsxgw.S("</li>")
+			_gsxgw.S("\" hx-swap=\"innerHTML\" hx-confirm=\"Are you sure you want to delete this todo?\">×</button></li>")
 		}
 		_gsxgw.S("</ul>")
 //line pages.gsx:111:2
 		if len(getTodos()) == 0 {
 //line pages.gsx:112:3
-			_gsxgw.S("<p")
-			_gsxgw.S(" class=\"empty-state\"")
-			_gsxgw.S(">")
-			_gsxgw.S("No todos yet. Add one above!")
-			_gsxgw.S("</p>")
+			_gsxgw.S("<p class=\"empty-state\">No todos yet. Add one above!</p>")
 		}
 		return _gsxgw.Err()
 	})
@@ -234,45 +190,24 @@ func Layout(_gsxp LayoutProps) gsx.Node {
 		_gsxgw := gsx.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
 //line pages.gsx:118:2
-		_gsxgw.S("<html")
-		_gsxgw.S(" lang=\"en\"")
-		_gsxgw.S(">")
+		_gsxgw.S("<html lang=\"en\">")
 //line pages.gsx:119:3
-		_gsxgw.S("<head")
-		_gsxgw.S(">")
+		_gsxgw.S("<head>")
 //line pages.gsx:120:4
-		_gsxgw.S("<link")
-		_gsxgw.S(" rel=\"stylesheet\"")
-		_gsxgw.S(" href=\"https://unpkg.com/missing.css@1.1.3\"")
-		_gsxgw.S("/>")
+		_gsxgw.S("<link rel=\"stylesheet\" href=\"https://unpkg.com/missing.css@1.1.3\"/>")
 //line pages.gsx:121:4
-		_gsxgw.S("<script")
-		_gsxgw.S(" src=\"https://unpkg.com/htmx.org@2.0.4\"")
-		_gsxgw.S(">")
-		_gsxgw.S("</script>")
+		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"></script>")
 //line pages.gsx:122:4
-		_gsxgw.S("<title")
-		_gsxgw.S(">")
-		_gsxgw.S("TODO App")
-		_gsxgw.S("</title>")
+		_gsxgw.S("<title>TODO App</title>")
 //line pages.gsx:123:4
-		_gsxgw.S("<style")
-		_gsxgw.S(">")
-		_gsxgw.S(".todo-app{max-width: 600px;margin: 2rem auto;padding: 2rem}.form-group{display: flex;gap: 0.5rem;margin-bottom: 2rem}.form-group input{flex: 1;padding: 0.75rem;border: 1px solid #ddd;border-radius: 4px}.form-group button{padding: 0.75rem 1.5rem;background: #007bff;color: white;border: none;border-radius: 4px;cursor: pointer}.form-group button:hover{background: #0056b3}.todo-list{list-style: none;padding: 0}.todo-item{display: flex;align-items: center;justify-content: space-between;padding: 1rem;border: 1px solid #eee;border-radius: 4px;margin-bottom: 0.5rem;background: white}.todo-item.completed{opacity: 0.6}.todo-item.completed .todo-text{text-decoration: line-through}.todo-content{display: flex;align-items: center;gap: 0.75rem;flex: 1}.todo-text{flex: 1}.delete-btn{background: #dc3545;color: white;border: none;border-radius: 50%;width: 2rem;height: 2rem;cursor: pointer;font-size: 1.2rem;display: flex;align-items: center;justify-content: center}.delete-btn:hover{background: #c82333}.empty-state{text-align: center;color: #666;font-style: italic;padding: 2rem}")
-		_gsxgw.S("</style>")
-		_gsxgw.S("</head>")
+		_gsxgw.S("<style>.todo-app{max-width: 600px;margin: 2rem auto;padding: 2rem}.form-group{display: flex;gap: 0.5rem;margin-bottom: 2rem}.form-group input{flex: 1;padding: 0.75rem;border: 1px solid #ddd;border-radius: 4px}.form-group button{padding: 0.75rem 1.5rem;background: #007bff;color: white;border: none;border-radius: 4px;cursor: pointer}.form-group button:hover{background: #0056b3}.todo-list{list-style: none;padding: 0}.todo-item{display: flex;align-items: center;justify-content: space-between;padding: 1rem;border: 1px solid #eee;border-radius: 4px;margin-bottom: 0.5rem;background: white}.todo-item.completed{opacity: 0.6}.todo-item.completed .todo-text{text-decoration: line-through}.todo-content{display: flex;align-items: center;gap: 0.75rem;flex: 1}.todo-text{flex: 1}.delete-btn{background: #dc3545;color: white;border: none;border-radius: 50%;width: 2rem;height: 2rem;cursor: pointer;font-size: 1.2rem;display: flex;align-items: center;justify-content: center}.delete-btn:hover{background: #c82333}.empty-state{text-align: center;color: #666;font-style: italic;padding: 2rem}</style></head>")
 //line pages.gsx:217:3
-		_gsxgw.S("<body")
-		_gsxgw.S(">")
+		_gsxgw.S("<body>")
 //line pages.gsx:218:4
-		_gsxgw.S("<main")
-		_gsxgw.S(" id=\"content\"")
-		_gsxgw.S(">")
-//line pages.gsx:219:5
+		_gsxgw.S("<main id=\"content\">")
+//line pages.gsx:218:23
 		_gsxgw.Node(ctx, children)
-		_gsxgw.S("</main>")
-		_gsxgw.S("</body>")
-		_gsxgw.S("</html>")
+		_gsxgw.S("</main></body></html>")
 		return _gsxgw.Err()
 	})
 }
@@ -285,10 +220,10 @@ func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:226:2
+//line pages.gsx:224:2
 		_gsxgw.Node(ctx, Layout(LayoutProps{Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:227:3
+//line pages.gsx:225:3
 			_gsxgw.Node(ctx, ErrorComp(ErrorCompProps{Err: err}))
 			return _gsxgw.Err()
 		})}))
@@ -304,15 +239,11 @@ func ErrorComp(_gsxp ErrorCompProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
 		_gsxgw := gsx.W(_gsxw)
-//line pages.gsx:232:2
-		_gsxgw.S("<h1")
-		_gsxgw.S(">")
-		_gsxgw.S("Error")
-		_gsxgw.S("</h1>")
-//line pages.gsx:233:2
-		_gsxgw.S("<p")
-		_gsxgw.S(">")
-//line pages.gsx:233:5
+//line pages.gsx:230:2
+		_gsxgw.S("<h1>Error</h1>")
+//line pages.gsx:231:2
+		_gsxgw.S("<p>")
+//line pages.gsx:231:5
 		_gsxgw.Text(string(err.Error()))
 		_gsxgw.S("</p>")
 		return _gsxgw.Err()

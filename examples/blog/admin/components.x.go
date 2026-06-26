@@ -28,28 +28,22 @@ func StatCell(_gsxp StatCellProps) gsx.Node {
 		value := _gsxp.Value
 		_gsxgw := gsx.W(_gsxw)
 //line components.gsx:15:2
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"")
+		_gsxgw.S("<div class=\"")
 		_gsxgw.Class(gsx.Class("rounded-lg border bg-white p-4 text-center shadow-sm"), gsx.Class(_gsxp.Attrs.Class()))
 		_gsxgw.S("\"")
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
 //line components.gsx:16:3
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"text-3xl font-semibold text-slate-900\"")
-		_gsxgw.S(">")
+		_gsxgw.S("<div class=\"text-3xl font-semibold text-slate-900\">")
 //line components.gsx:16:54
 		_gsxgw.Text(strconv.FormatInt(int64(value), 10))
 		_gsxgw.S("</div>")
 //line components.gsx:17:3
-		_gsxgw.S("<div")
-		_gsxgw.S(" class=\"mt-1 text-xs uppercase tracking-wide text-slate-500\"")
-		_gsxgw.S(">")
-//line components.gsx:17:68
+		_gsxgw.S("<div class=\"mt-1 text-xs uppercase tracking-wide text-slate-500\">")
+//line components.gsx:18:4
 		_gsxgw.Text(string(label))
-		_gsxgw.S("</div>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("</div></div>")
 		return _gsxgw.Err()
 	})
 }
@@ -63,7 +57,7 @@ func StatsGrid(_gsxp StatsGridProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		stats := _gsxp.Stats
 		_gsxgw := gsx.W(_gsxw)
-//line components.gsx:22:2
+//line components.gsx:24:2
 		_gsxgw.S("<div")
 		if !_gsxp.Attrs.Has("id") {
 			_gsxv0, _gsxerr := _gsxf0.ID(ctx, (StatsGrid))
@@ -80,13 +74,13 @@ func StatsGrid(_gsxp StatsGridProps) gsx.Node {
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
-//line components.gsx:23:3
-		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Posts", Value: stats.Posts}))
-//line components.gsx:24:3
-		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Drafts", Value: stats.Drafts}))
 //line components.gsx:25:3
-		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Comments", Value: stats.Comments}))
+		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Posts", Value: stats.Posts}))
 //line components.gsx:26:3
+		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Drafts", Value: stats.Drafts}))
+//line components.gsx:27:3
+		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Comments", Value: stats.Comments}))
+//line components.gsx:28:3
 		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Categories", Value: stats.Categories}))
 		_gsxgw.S("</div>")
 		return _gsxgw.Err()
@@ -102,7 +96,7 @@ func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		posts := _gsxp.Posts
 		_gsxgw := gsx.W(_gsxw)
-//line components.gsx:31:2
+//line components.gsx:33:2
 		_gsxgw.S("<div")
 		if !_gsxp.Attrs.Has("id") {
 			_gsxv1, _gsxerr := _gsxf0.ID(ctx, (RecentPostsCard))
@@ -117,57 +111,39 @@ func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
-//line components.gsx:32:3
+//line components.gsx:34:3
 		_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Recent posts", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 			_gsxgw := gsx.W(_gsxw)
-//line components.gsx:33:4
-			_gsxgw.S("<ul")
-			_gsxgw.S(" class=\"divide-y text-sm\"")
-			_gsxgw.S(">")
-//line components.gsx:34:5
+//line components.gsx:35:4
+			_gsxgw.S("<ul class=\"divide-y text-sm\">")
+//line components.gsx:36:5
 			if len(posts) == 0 {
-//line components.gsx:35:6
-				_gsxgw.S("<li")
-				_gsxgw.S(" class=\"py-2 text-slate-500\"")
-				_gsxgw.S(">")
-				_gsxgw.S("No posts yet.")
-				_gsxgw.S("</li>")
+//line components.gsx:37:6
+				_gsxgw.S("<li class=\"py-2 text-slate-500\">No posts yet.</li>")
 			}
-//line components.gsx:37:5
+//line components.gsx:39:5
 			for _, p := range posts {
-//line components.gsx:38:6
-				_gsxgw.S("<li")
-				_gsxgw.S(" class=\"flex items-center justify-between py-2\"")
-				_gsxgw.S(">")
-//line components.gsx:39:7
-				_gsxgw.S("<a")
-				_gsxgw.S(" class=\"hover:underline\"")
+//line components.gsx:40:6
+				_gsxgw.S("<li class=\"flex items-center justify-between py-2\">")
+//line components.gsx:41:7
+				_gsxgw.S("<a class=\"hover:underline\"")
 				_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (postEditPage{}), "id", p.ID)
 				if _gsxerr != nil {
 					return _gsxerr
 				}
 				_gsxgw.S(" href=\"")
 				_gsxgw.URL(string(_gsxv2))
-				_gsxgw.S("\"")
-				_gsxgw.S(">")
-//line components.gsx:40:8
+				_gsxgw.S("\">")
+//line components.gsx:45:8
 				_gsxgw.Text(string(p.Title))
 				_gsxgw.S("</a>")
-//line components.gsx:42:7
+//line components.gsx:47:7
 				if p.Published {
-//line components.gsx:43:8
-					_gsxgw.S("<span")
-					_gsxgw.S(" class=\"rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800\"")
-					_gsxgw.S(">")
-					_gsxgw.S("live")
-					_gsxgw.S("</span>")
+//line components.gsx:48:8
+					_gsxgw.S("<span class=\"rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800\">live</span>")
 				} else {
-//line components.gsx:45:8
-					_gsxgw.S("<span")
-					_gsxgw.S(" class=\"rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700\"")
-					_gsxgw.S(">")
-					_gsxgw.S("draft")
-					_gsxgw.S("</span>")
+//line components.gsx:54:8
+					_gsxgw.S("<span class=\"rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700\">draft</span>")
 				}
 				_gsxgw.S("</li>")
 			}
@@ -188,7 +164,7 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		posts := _gsxp.Posts
 		_gsxgw := gsx.W(_gsxw)
-//line components.gsx:55:2
+//line components.gsx:68:2
 		_gsxgw.S("<div")
 		if !_gsxp.Attrs.Has("id") {
 			_gsxv3, _gsxerr := _gsxf0.ID(ctx, (PostsTable))
@@ -205,105 +181,60 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
 		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
 		_gsxgw.S(">")
-//line components.gsx:56:3
-		_gsxgw.S("<table")
-		_gsxgw.S(" class=\"w-full text-sm\"")
-		_gsxgw.S(">")
-//line components.gsx:57:4
-		_gsxgw.S("<thead")
-		_gsxgw.S(" class=\"bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500\"")
-		_gsxgw.S(">")
-//line components.gsx:58:5
-		_gsxgw.S("<tr")
-		_gsxgw.S(">")
-//line components.gsx:59:6
-		_gsxgw.S("<th")
-		_gsxgw.S(" class=\"px-3 py-2\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Title")
-		_gsxgw.S("</th>")
-//line components.gsx:60:6
-		_gsxgw.S("<th")
-		_gsxgw.S(" class=\"px-3 py-2\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Status")
-		_gsxgw.S("</th>")
-//line components.gsx:61:6
-		_gsxgw.S("<th")
-		_gsxgw.S(" class=\"px-3 py-2\"")
-		_gsxgw.S(">")
-		_gsxgw.S("Created")
-		_gsxgw.S("</th>")
-//line components.gsx:62:6
-		_gsxgw.S("<th")
-		_gsxgw.S(" class=\"px-3 py-2\"")
-		_gsxgw.S(">")
-		_gsxgw.S("</th>")
-		_gsxgw.S("</tr>")
-		_gsxgw.S("</thead>")
-//line components.gsx:65:4
-		_gsxgw.S("<tbody")
-		_gsxgw.S(">")
-//line components.gsx:66:5
+//line components.gsx:72:3
+		_gsxgw.S("<table class=\"w-full text-sm\">")
+//line components.gsx:73:4
+		_gsxgw.S("<thead class=\"bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500\">")
+//line components.gsx:76:5
+		_gsxgw.S("<tr>")
+//line components.gsx:77:6
+		_gsxgw.S("<th class=\"px-3 py-2\">Title</th>")
+//line components.gsx:78:6
+		_gsxgw.S("<th class=\"px-3 py-2\">Status</th>")
+//line components.gsx:79:6
+		_gsxgw.S("<th class=\"px-3 py-2\">Created</th>")
+//line components.gsx:80:6
+		_gsxgw.S("<th class=\"px-3 py-2\"></th></tr></thead>")
+//line components.gsx:83:4
+		_gsxgw.S("<tbody>")
+//line components.gsx:84:5
 		for _, p := range posts {
-//line components.gsx:67:6
-			_gsxgw.S("<tr")
-			_gsxgw.S(" class=\"border-t\"")
-			_gsxgw.S(">")
-//line components.gsx:68:7
-			_gsxgw.S("<td")
-			_gsxgw.S(" class=\"px-3 py-2 font-medium\"")
-			_gsxgw.S(">")
-//line components.gsx:69:8
-			_gsxgw.S("<a")
-			_gsxgw.S(" class=\"hover:underline\"")
+//line components.gsx:85:6
+			_gsxgw.S("<tr class=\"border-t\">")
+//line components.gsx:86:7
+			_gsxgw.S("<td class=\"px-3 py-2 font-medium\">")
+//line components.gsx:87:8
+			_gsxgw.S("<a class=\"hover:underline\"")
 			_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (postEditPage{}), "id", p.ID)
 			if _gsxerr != nil {
 				return _gsxerr
 			}
 			_gsxgw.S(" href=\"")
 			_gsxgw.URL(string(_gsxv4))
-			_gsxgw.S("\"")
-			_gsxgw.S(">")
-//line components.gsx:69:78
+			_gsxgw.S("\">")
+//line components.gsx:91:9
 			_gsxgw.Text(string(p.Title))
-			_gsxgw.S("</a>")
-			_gsxgw.S("</td>")
-//line components.gsx:71:7
-			_gsxgw.S("<td")
-			_gsxgw.S(" class=\"px-3 py-2\"")
-			_gsxgw.S(">")
-//line components.gsx:72:8
+			_gsxgw.S("</a></td>")
+//line components.gsx:94:7
+			_gsxgw.S("<td class=\"px-3 py-2\">")
+//line components.gsx:95:8
 			if p.Published {
-//line components.gsx:73:9
-				_gsxgw.S("<span")
-				_gsxgw.S(" class=\"rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800\"")
-				_gsxgw.S(">")
-				_gsxgw.S("published")
-				_gsxgw.S("</span>")
+//line components.gsx:96:9
+				_gsxgw.S("<span class=\"rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800\">published</span>")
 			} else {
-//line components.gsx:75:9
-				_gsxgw.S("<span")
-				_gsxgw.S(" class=\"rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700\"")
-				_gsxgw.S(">")
-				_gsxgw.S("draft")
-				_gsxgw.S("</span>")
+//line components.gsx:102:9
+				_gsxgw.S("<span class=\"rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700\">draft</span>")
 			}
 			_gsxgw.S("</td>")
-//line components.gsx:78:7
-			_gsxgw.S("<td")
-			_gsxgw.S(" class=\"px-3 py-2 text-slate-500\"")
-			_gsxgw.S(">")
-//line components.gsx:78:44
+//line components.gsx:109:7
+			_gsxgw.S("<td class=\"px-3 py-2 text-slate-500\">")
+//line components.gsx:110:8
 			_gsxgw.Text(string(p.CreatedAt.Format("Jan 2, 2006")))
 			_gsxgw.S("</td>")
-//line components.gsx:79:7
-			_gsxgw.S("<td")
-			_gsxgw.S(" class=\"px-3 py-2 text-right\"")
-			_gsxgw.S(">")
-//line components.gsx:80:8
-			_gsxgw.S("<form")
-			_gsxgw.S(" method=\"POST\"")
+//line components.gsx:112:7
+			_gsxgw.S("<td class=\"px-3 py-2 text-right\">")
+//line components.gsx:113:8
+			_gsxgw.S("<form method=\"POST\"")
 			_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (postDeleteHandler{}), "id", p.ID)
 			if _gsxerr != nil {
 				return _gsxerr
@@ -324,39 +255,18 @@ func PostsTable(_gsxp PostsTableProps) gsx.Node {
 			}
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv7))
-			_gsxgw.S("\"")
-			_gsxgw.S(" hx-swap=\"outerHTML\"")
-			_gsxgw.S(" hx-confirm=\"Delete this post?\"")
-			_gsxgw.S(" class=\"inline\"")
-			_gsxgw.S(">")
-//line components.gsx:89:9
-			_gsxgw.S("<button")
-			_gsxgw.S(" class=\"text-xs text-red-600 hover:underline\"")
-			_gsxgw.S(" type=\"submit\"")
-			_gsxgw.S(">")
-			_gsxgw.S("Delete")
-			_gsxgw.S("</button>")
-			_gsxgw.S("</form>")
-			_gsxgw.S("</td>")
-			_gsxgw.S("</tr>")
+			_gsxgw.S("\" hx-swap=\"outerHTML\" hx-confirm=\"Delete this post?\" class=\"inline\">")
+//line components.gsx:122:9
+			_gsxgw.S("<button class=\"text-xs text-red-600 hover:underline\" type=\"submit\">Delete</button></form></td></tr>")
 		}
-//line components.gsx:94:5
+//line components.gsx:132:5
 		if len(posts) == 0 {
-//line components.gsx:95:6
-			_gsxgw.S("<tr")
-			_gsxgw.S(">")
-//line components.gsx:95:10
-			_gsxgw.S("<td")
-			_gsxgw.S(" colspan=\"4\"")
-			_gsxgw.S(" class=\"px-3 py-6 text-center text-slate-500\"")
-			_gsxgw.S(">")
-			_gsxgw.S("No posts yet.")
-			_gsxgw.S("</td>")
-			_gsxgw.S("</tr>")
+//line components.gsx:133:6
+			_gsxgw.S("<tr>")
+//line components.gsx:134:7
+			_gsxgw.S("<td colspan=\"4\" class=\"px-3 py-6 text-center text-slate-500\">No posts yet.</td></tr>")
 		}
-		_gsxgw.S("</tbody>")
-		_gsxgw.S("</table>")
-		_gsxgw.S("</div>")
+		_gsxgw.S("</tbody></table></div>")
 		return _gsxgw.Err()
 	})
 }
