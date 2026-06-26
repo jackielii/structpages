@@ -6,8 +6,8 @@
 #
 # The stock `gsx` binary discovers this file by walking up from the example dir
 # to the git repo root, so no per-example cmd/gen generator is needed. Generate
-# with:  go tool gsx generate .
-[aliases]
+# with:  gsx generate .
+[filters]
 url    = "github.com/jackielii/structpages.URLFor"
 id     = "github.com/jackielii/structpages.ID"
 target = "github.com/jackielii/structpages.IDTarget"
