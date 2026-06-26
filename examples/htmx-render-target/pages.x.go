@@ -256,7 +256,7 @@ func Html(_gsxp HtmlProps) gsx.Node {
 //line pages.gsx:132:4
 		_gsxgw.S("<title>RenderTarget API Example</title>")
 //line pages.gsx:133:4
-		_gsxgw.S("<style>.widget{padding: 1rem;border: 1px solid #ddd;border-radius: 8px;background: white}.widget h3{margin-top: 0}.chart{display: flex;align-items: flex-end;height: 150px;margin: 1rem 0}</style></head>")
+		_gsxgw.S("<style>\n\t\t\t\t.widget {\n\t\t\t\t\tpadding: 1rem;\n\t\t\t\t\tborder: 1px solid #ddd;\n\t\t\t\t\tborder-radius: 8px;\n\t\t\t\t\tbackground: white;\n\t\t\t\t}\n\t\t\t\t.widget h3 {\n\t\t\t\t\tmargin-top: 0;\n\t\t\t\t}\n\t\t\t\t.chart {\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\talign-items: flex-end;\n\t\t\t\t\theight: 150px;\n\t\t\t\t\tmargin: 1rem 0;\n\t\t\t\t}\n\t\t\t</style></head>")
 //line pages.gsx:151:3
 		_gsxgw.S("<body>")
 //line pages.gsx:152:4
