@@ -21,6 +21,7 @@ type PublicShellProps struct {
 	Children gsx.Node
 }
 
+//line layout.gsx:14:1
 func PublicShell(_gsxp PublicShellProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		title := _gsxp.Title
@@ -105,6 +106,7 @@ type AdminShellProps struct {
 	Children gsx.Node
 }
 
+//line layout.gsx:68:1
 func AdminShell(_gsxp AdminShellProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		title := _gsxp.Title

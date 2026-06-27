@@ -22,6 +22,7 @@ type team struct{}
 type contact struct{}
 type throw struct{}
 
+//line pages.gsx:18:1
 func (p index) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -36,6 +37,7 @@ func (p index) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:24:1
 func (p index) Main() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -56,6 +58,7 @@ func (p index) Main() gsx.Node {
 	})
 }
 
+//line pages.gsx:32:1
 func (p product) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -70,6 +73,7 @@ func (p product) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:38:1
 func (p product) Main() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -81,6 +85,7 @@ func (p product) Main() gsx.Node {
 	})
 }
 
+//line pages.gsx:43:1
 func (p team) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -95,6 +100,7 @@ func (p team) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:49:1
 func (p team) Main() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -106,6 +112,7 @@ func (p team) Main() gsx.Node {
 	})
 }
 
+//line pages.gsx:54:1
 func (p contact) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -120,6 +127,7 @@ func (p contact) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:60:1
 func (p contact) Main() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -133,6 +141,7 @@ func (p contact) Main() gsx.Node {
 
 func errFunc() (string, error) { return "", fmt.Errorf("this is an error") }
 
+//line pages.gsx:66:1
 func (p throw) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -153,6 +162,7 @@ type LayoutProps struct {
 	Children gsx.Node
 }
 
+//line pages.gsx:70:1
 func Layout(_gsxp LayoutProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		children := _gsxp.Children
@@ -233,6 +243,7 @@ type ErrorPageProps struct {
 	Err error
 }
 
+//line pages.gsx:102:1
 func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
@@ -252,6 +263,7 @@ type ErrorCompProps struct {
 	Err error
 }
 
+//line pages.gsx:108:1
 func ErrorComp(_gsxp ErrorCompProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err

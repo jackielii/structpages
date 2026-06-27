@@ -20,6 +20,7 @@ type product struct{}
 type team struct{}
 type contact struct{}
 
+//line pages.gsx:13:1
 func (p index) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -36,6 +37,7 @@ func (p index) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:22:1
 func (p product) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -52,6 +54,7 @@ func (p product) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:29:1
 func (p team) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -68,6 +71,7 @@ func (p team) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:36:1
 func (p contact) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -88,6 +92,7 @@ type LayoutProps struct {
 	Children gsx.Node
 }
 
+//line pages.gsx:43:1
 func Layout(_gsxp LayoutProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		children := _gsxp.Children

@@ -22,6 +22,7 @@ type StatCellProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:14:1
 func StatCell(_gsxp StatCellProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		label := _gsxp.Label
@@ -53,6 +54,7 @@ type StatsGridProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:23:1
 func StatsGrid(_gsxp StatsGridProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		stats := _gsxp.Stats
@@ -92,6 +94,7 @@ type RecentPostsCardProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:32:1
 func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		posts := _gsxp.Posts
@@ -160,6 +163,7 @@ type PostsTableProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:67:1
 func PostsTable(_gsxp PostsTableProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		posts := _gsxp.Posts

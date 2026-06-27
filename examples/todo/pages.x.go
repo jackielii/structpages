@@ -19,6 +19,7 @@ type index struct {
 	deleteTodo `route:"DELETE /delete/{id} DeleteTodo"`
 }
 
+//line pages.gsx:16:1
 func (p index) Page() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -71,6 +72,7 @@ func (p index) Page() gsx.Node {
 	})
 }
 
+//line pages.gsx:43:1
 func (p index) TodoList() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -118,6 +120,7 @@ func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	return structpages.RenderComponent(index.TodoList)
 }
 
+//line pages.gsx:85:1
 func TodoList() gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -184,6 +187,7 @@ type LayoutProps struct {
 	Children gsx.Node
 }
 
+//line pages.gsx:116:1
 func Layout(_gsxp LayoutProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		children := _gsxp.Children
@@ -216,6 +220,7 @@ type ErrorPageProps struct {
 	Err error
 }
 
+//line pages.gsx:223:1
 func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err
@@ -235,6 +240,7 @@ type ErrorCompProps struct {
 	Err error
 }
 
+//line pages.gsx:229:1
 func ErrorComp(_gsxp ErrorCompProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		err := _gsxp.Err

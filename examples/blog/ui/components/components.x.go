@@ -34,6 +34,7 @@ type AlertProps struct {
 	Msg  string
 }
 
+//line components.gsx:29:1
 func Alert(_gsxp AlertProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		kind := _gsxp.Kind
@@ -59,6 +60,7 @@ type CardProps struct {
 	Attrs    gsx.Attrs
 }
 
+//line components.gsx:37:1
 func Card(_gsxp CardProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		title := _gsxp.Title
@@ -94,6 +96,7 @@ type ButtonProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:50:1
 func Button(_gsxp ButtonProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		label := _gsxp.Label
@@ -120,6 +123,7 @@ type InputProps struct {
 	Attrs  gsx.Attrs
 }
 
+//line components.gsx:58:1
 func Input(_gsxp InputProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		name := _gsxp.Name
@@ -168,6 +172,7 @@ type TextareaProps struct {
 	Attrs  gsx.Attrs
 }
 
+//line components.gsx:74:1
 func Textarea(_gsxp TextareaProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		name := _gsxp.Name
@@ -212,6 +217,7 @@ func Textarea(_gsxp TextareaProps) gsx.Node {
 // Pagination is rendered as a standalone function component so HTMX requests
 // with HX-Target: #pagination resolve here regardless of which page hosts it.
 
+//line components.gsx:92:1
 func Pagination(p PageNav) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -275,6 +281,7 @@ type ErrorPageProps struct {
 	Msg    string
 }
 
+//line components.gsx:129:1
 func ErrorPage(_gsxp ErrorPageProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		status := _gsxp.Status
@@ -311,6 +318,7 @@ type ErrorBlockProps struct {
 	Attrs  gsx.Attrs
 }
 
+//line components.gsx:145:1
 func ErrorBlock(_gsxp ErrorBlockProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		status := _gsxp.Status

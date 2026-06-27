@@ -36,6 +36,7 @@ func (p searchPage) Props(r *http.Request, s *store.Store, target structpages.Re
 	return sp, nil
 }
 
+//line search.gsx:33:1
 func (p searchPage) Page(props searchProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -74,6 +75,7 @@ func (p searchPage) Page(props searchProps) gsx.Node {
 	})
 }
 
+//line search.gsx:56:1
 func (p searchPage) Results(props searchProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)

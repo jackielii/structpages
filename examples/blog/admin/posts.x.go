@@ -28,6 +28,7 @@ type AdminShellWithProps struct {
 	Children gsx.Node
 }
 
+//line posts.gsx:19:1
 func AdminShellWith(_gsxp AdminShellWithProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		title := _gsxp.Title
@@ -60,6 +61,7 @@ func (postListPage) Props(r *http.Request, s *store.Store) (postListProps, error
 	return postListProps{User: user, Posts: posts}, nil
 }
 
+//line posts.gsx:40:1
 func (p postListPage) Page(props postListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -102,6 +104,7 @@ func (postNewPage) Props(r *http.Request, s *store.Store) (postFormViewProps, er
 	return postFormViewProps{User: user, Categories: s.ListCategories()}, nil
 }
 
+//line posts.gsx:70:1
 func (p postNewPage) Page(props postFormViewProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -135,6 +138,7 @@ func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, e
 	return postFormViewProps{User: user, Categories: s.ListCategories(), Post: p}, nil
 }
 
+//line posts.gsx:94:1
 func (p postEditPage) Page(props postFormViewProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
@@ -160,6 +164,7 @@ type PostFormProps struct {
 	Attrs  gsx.Attrs
 }
 
+//line posts.gsx:103:1
 func PostForm(_gsxp PostFormProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		p := _gsxp.P

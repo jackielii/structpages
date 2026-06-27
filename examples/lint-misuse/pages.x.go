@@ -29,6 +29,7 @@ type BadLinksProps struct {
 	Name string
 }
 
+//line pages.gsx:20:1
 func BadLinks(_gsxp BadLinksProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		id := _gsxp.Id

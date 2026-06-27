@@ -39,6 +39,7 @@ func (postPage) Props(r *http.Request, s *store.Store) (postProps, error) {
 	}, nil
 }
 
+//line post.gsx:37:1
 func (p postPage) Page(props postProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)

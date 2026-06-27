@@ -33,6 +33,7 @@ func (homePage) Props(_ *http.Request, s *store.Store) (homeProps, error) {
 // undispatchable by structpages alongside Page(props) (both would need the same
 // single Props-return type). See GAP notes.
 
+//line home.gsx:29:1
 func (p homePage) Page(props homeProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)

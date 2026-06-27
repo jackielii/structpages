@@ -27,6 +27,7 @@ func (userListPage) Props(r *http.Request, s *store.Store) (userListProps, error
 	return userListProps{User: user, Users: s.ListUsers()}, nil
 }
 
+//line users.gsx:25:1
 func (p userListPage) Page(props userListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)

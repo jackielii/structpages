@@ -19,6 +19,7 @@ type LoginShellProps struct {
 	ErrMsg   string
 }
 
+//line login.gsx:8:1
 func LoginShell(_gsxp LoginShellProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		username := _gsxp.Username

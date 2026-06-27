@@ -56,6 +56,7 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 	}, nil
 }
 
+//line category.gsx:54:1
 func (p categoryPage) Page(props categoryProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)

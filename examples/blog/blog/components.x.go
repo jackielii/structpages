@@ -17,6 +17,7 @@ type PostMetaProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:11:1
 func PostMeta(_gsxp PostMetaProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		p := _gsxp.P
@@ -40,6 +41,7 @@ type PostCardProps struct {
 	Attrs gsx.Attrs
 }
 
+//line components.gsx:17:1
 func PostCard(_gsxp PostCardProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		p := _gsxp.P
@@ -83,6 +85,7 @@ type CommentsListProps struct {
 	Attrs    gsx.Attrs
 }
 
+//line components.gsx:33:1
 func CommentsList(_gsxp CommentsListProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		comments := _gsxp.Comments

@@ -50,6 +50,7 @@ func (p dashboardPage) Props(r *http.Request, s *store.Store, target structpages
 	}, nil
 }
 
+//line dashboard.gsx:47:1
 func (p dashboardPage) Page(props dashboardProps) gsx.Node {
 	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
 		_gsxgw := gsx.W(_gsxw)
