@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/jackielii/structpages"
 	"net/http"
 	"strconv"
+
+	"github.com/jackielii/structpages"
 )
 
 type index struct {
@@ -12,13 +13,13 @@ type index struct {
 	deleteTodo `route:"DELETE /delete/{id} DeleteTodo"`
 }
 
-templ (p index) Page() {
-	@html() {
+component (p index) Page() {
+	<Layout>
 		<div class="todo-app">
 			<h1>TODO App</h1>
 			<form
-				hx-post={ structpages.URLFor(ctx, add{}) }
-				hx-target={ structpages.IDTarget(ctx, index.TodoList) }
+				hx-post={add{} |> url}
+				hx-target={index.TodoList |> target}
 				hx-swap="innerHTML"
 				hx-on:htmx:after-request="this.reset()"
 			>
@@ -32,15 +33,15 @@ templ (p index) Page() {
 					<button type="submit">Add Todo</button>
 				</div>
 			</form>
-			<div id={ structpages.ID(ctx, index.TodoList) }>
-				@p.TodoList()
+			<div id={index.TodoList |> id}>
+				<p.TodoList/>
 			</div>
 		</div>
-	}
+	</Layout>
 }
 
-templ (p index) TodoList() {
-	@todoList()
+component (p index) TodoList() {
+	<TodoList/>
 }
 
 type add struct{}
@@ -81,38 +82,38 @@ func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	return structpages.RenderComponent(index.TodoList)
 }
 
-templ todoList() {
+component TodoList() {
 	<ul class="todo-list">
-		for _, todo := range getTodos() {
-			<li class={ "todo-item", templ.KV("completed", todo.Completed) }>
+		{ for _, todo := range getTodos() {
+			<li class={ "todo-item", "completed": todo.Completed }>
 				<div class="todo-content">
 					<input
 						type="checkbox"
-						checked?={ todo.Completed }
-						hx-post={ structpages.URLFor(ctx, toggle{}, "id", todo.ID) }
-						hx-target={ structpages.IDTarget(ctx, index.TodoList) }
+						checked={todo.Completed}
+						hx-post={toggle{} |> url("id", todo.ID)}
+						hx-target={index.TodoList |> target}
 						hx-swap="innerHTML"
 					/>
 					<span class="todo-text">{ todo.Text }</span>
 				</div>
 				<button
 					class="delete-btn"
-					hx-delete={ structpages.URLFor(ctx, deleteTodo{}, "id", todo.ID) }
-					hx-target={ structpages.IDTarget(ctx, index.TodoList) }
+					hx-delete={deleteTodo{} |> url("id", todo.ID)}
+					hx-target={index.TodoList |> target}
 					hx-swap="innerHTML"
 					hx-confirm="Are you sure you want to delete this todo?"
 				>
 					×
 				</button>
 			</li>
-		}
+		} }
 	</ul>
-	if len(getTodos()) == 0 {
+	{ if len(getTodos()) == 0 {
 		<p class="empty-state">No todos yet. Add one above!</p>
-	}
+	} }
 }
 
-templ html() {
+component Layout() {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -125,20 +126,20 @@ templ html() {
 					margin: 2rem auto;
 					padding: 2rem;
 				}
-				
+
 				.form-group {
 					display: flex;
 					gap: 0.5rem;
 					margin-bottom: 2rem;
 				}
-				
+
 				.form-group input {
 					flex: 1;
 					padding: 0.75rem;
 					border: 1px solid #ddd;
 					border-radius: 4px;
 				}
-				
+
 				.form-group button {
 					padding: 0.75rem 1.5rem;
 					background: #007bff;
@@ -147,16 +148,16 @@ templ html() {
 					border-radius: 4px;
 					cursor: pointer;
 				}
-				
+
 				.form-group button:hover {
 					background: #0056b3;
 				}
-				
+
 				.todo-list {
 					list-style: none;
 					padding: 0;
 				}
-				
+
 				.todo-item {
 					display: flex;
 					align-items: center;
@@ -167,26 +168,26 @@ templ html() {
 					margin-bottom: 0.5rem;
 					background: white;
 				}
-				
+
 				.todo-item.completed {
 					opacity: 0.6;
 				}
-				
+
 				.todo-item.completed .todo-text {
 					text-decoration: line-through;
 				}
-				
+
 				.todo-content {
 					display: flex;
 					align-items: center;
 					gap: 0.75rem;
 					flex: 1;
 				}
-				
+
 				.todo-text {
 					flex: 1;
 				}
-				
+
 				.delete-btn {
 					background: #dc3545;
 					color: white;
@@ -200,11 +201,11 @@ templ html() {
 					align-items: center;
 					justify-content: center;
 				}
-				
+
 				.delete-btn:hover {
 					background: #c82333;
 				}
-				
+
 				.empty-state {
 					text-align: center;
 					color: #666;
@@ -214,20 +215,18 @@ templ html() {
 			</style>
 		</head>
 		<body>
-			<main id="content">
-				{ children... }
-			</main>
+			<main id="content">{ children }</main>
 		</body>
 	</html>
 }
 
-templ errorPage(err error) {
-	@html() {
-		@errorComp(err)
-	}
+component ErrorPage(err error) {
+	<Layout>
+		<ErrorComp err={err}/>
+	</Layout>
 }
 
-templ errorComp(err error) {
+component ErrorComp(err error) {
 	<h1>Error</h1>
 	<p>{ err.Error() }</p>
 }

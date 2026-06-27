@@ -14,19 +14,13 @@
 Each example has its own `go.mod`. From the example directory:
 
 ```shell
-# Generate templ files first (required)
-templ generate -include-version=false
+# Generate the .x.go files from .gsx sources first (required)
+gsx generate .
 
 # Run the server (defaults to :8080)
 go run .
 ```
 
-Or use templ's watch mode for live-reloading during development:
-
-```shell
-templ generate --watch --proxy="http://localhost:8080" --cmd="go run ."
-```
-
 You'll need:
 - Go 1.24+
-- `templ` CLI: `go install github.com/a-h/templ/cmd/templ@latest` (not required for `html-template/`, which uses only the standard library)
+- `gsx` CLI: `go install github.com/gsxhq/gsx/cmd/gsx@latest` (not required for `html-template/`, which uses only the standard library)

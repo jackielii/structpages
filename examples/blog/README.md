@@ -11,7 +11,7 @@ to Go + templ.
 ## Run
 
 ```sh
-templ generate -include-version=false
+gsx generate ./admin ./blog ./ui/components ./ui/layout
 go run .
 # open http://localhost:8080  — admin login: admin / admin
 ```

@@ -118,7 +118,7 @@ func parsePostForm(r *http.Request) (store.Post, string) {
 // renderPostForm re-renders the form on validation failure, preserving inputs.
 func renderPostForm(ctx context.Context, w http.ResponseWriter, user store.User, title string, p store.Post, cats []store.Category, errMsg string) error {
 	body := PostForm(PostFormProps{P: p, Cats: cats, ErrMsg: errMsg})
-	return AdminShellWith(AdminShellWithProps{Title: title, User: user, Body: body}).Render(ctx, w)
+	return AdminShellWith(AdminShellWithProps{Title: title, User: user, Children: body}).Render(ctx, w)
 }
 
 // postFormAction returns the POST URL for the form: create when ID==0,
