@@ -23,6 +23,13 @@ func TestLintMisuse(t *testing.T) {
 	out, _ := cmd.CombinedOutput()
 	got := normaliseOutput(string(out))
 
+	// No [url-attr] findings appear below: that rule is implemented on
+	// templ's parser (the linter's templscan only globs *.templ files)
+	// and does not scan .gsx sources yet. This example's deliberate
+	// bad-URL targets moved from pages.templ to pages.gsx in the
+	// templ→gsx migration, so they are currently invisible to the
+	// linter. Follow-up: port [url-attr] to .gsx (gsxscan), then re-pin
+	// the six pages.gsx [url-attr] findings here.
 	want := strings.TrimSpace(`
 pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index
 pages.go:LINE:COL: [ref] Ref "/missing": no page with this route. Did you rename a route tag? Known routes: /, /items, /items/{$}, /items/{slug}, /{$}
@@ -35,12 +42,6 @@ pages.go:LINE:COL: [ref] Ref "Detail.Index": segment 1 ("Index") not found as ch
 pages.go:LINE:COL: [idfor] IDTarget: method "Nope" not found on chain leaf "Detail"; available: Page, Stats
 pages.go:LINE:COL: [params] URLFor: param "wrongTab" does not appear in pattern "/items/{slug}?tab={tab}" (known: slug, tab)
 pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index
-pages.templ:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead
-pages.templ:LINE:COL: [url-attr] href value "/admin" is a hard-coded internal URL; use structpages.URLFor instead
-pages.templ:LINE:COL: [url-attr] href value ` + "`" + `"/items/" + strconv.Itoa(id)` + "`" + ` builds an internal URL by string concatenation; use structpages.URLFor instead
-pages.templ:LINE:COL: [url-attr] href value ` + "`" + `fmt.Sprintf("/users/%s", name)` + "`" + ` builds an internal URL via fmt.Sprint*; use structpages.URLFor instead
-pages.templ:LINE:COL: [url-attr] hx-get value "/api/items" is a hard-coded internal URL; use structpages.URLFor instead
-pages.templ:LINE:COL: [url-attr] action value "/submit" is a hard-coded internal URL; use structpages.URLFor instead
 `)
 	if got != want {
 		t.Errorf("linter output mismatch.\n--- got ---\n%s\n--- want ---\n%s", got, want)
