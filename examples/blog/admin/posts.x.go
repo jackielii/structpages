@@ -258,8 +258,13 @@ func PostForm(_gsxp PostFormProps) _gsxrt.Node {
 		_gsxgw := _gsxrt.W(_gsxw)
 		var _gsxnum [32]byte
 //line posts.gsx:184:2
-		_gsxgw.S("<form method=\"POST\" action=\"")
-		_gsxgw.URL(string(postFormAction(ctx, p)))
+		_gsxgw.S("<form method=\"POST\"")
+		_gsxv1, _gsxerr := postFormAction(ctx, p)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" action=\"")
+		_gsxgw.URL(string(_gsxv1))
 		_gsxgw.S("\" class=\"space-y-3\">")
 //line posts.gsx:185:3
 		_gsxgw.Node(ctx, components.Alert(components.AlertProps{Kind: components.AlertError, Msg: errMsg}))
@@ -302,12 +307,12 @@ func PostForm(_gsxp PostFormProps) _gsxrt.Node {
 		_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Save", Attrs: _gsxrt.Attrs{{Key: "type", Value: "submit"}}}))
 //line posts.gsx:214:4
 		_gsxgw.S("<a class=\"text-sm text-slate-500 hover:underline\"")
-		_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (postListPage{}))
+		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (postListPage{}))
 		if _gsxerr != nil {
 			return _gsxerr
 		}
 		_gsxgw.S(" href=\"")
-		_gsxgw.URL(string(_gsxv1))
+		_gsxgw.URL(string(_gsxv2))
 		_gsxgw.S("\">Cancel</a></div></form>")
 		return _gsxgw.Err()
 	})
@@ -342,18 +347,12 @@ func renderPostForm(ctx context.Context, w http.ResponseWriter, user store.User,
 }
 
 // postFormAction returns the POST URL for the form: create when ID==0,
-// update otherwise. Lives in Go code so the markup stays declarative.
-// gsx auto-sanitizes URL attributes, so a plain string is enough.
-func postFormAction(ctx context.Context, p store.Post) string {
+// update otherwise. Lives in Go code so the markup stays declarative; the
+// attribute hole auto-unwraps the (string, error) pair and any error
+// propagates through the render instead of being swallowed.
+func postFormAction(ctx context.Context, p store.Post) (string, error) {
 	if p.ID == 0 {
-		return must(components.URL(ctx, postCreateHandler{}))
+		return components.URL(ctx, postCreateHandler{})
 	}
-	return must(components.URL(ctx, postUpdateHandler{}, "id", p.ID))
-}
-
-func must[T any](v T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return v
+	return components.URL(ctx, postUpdateHandler{}, "id", p.ID)
 }

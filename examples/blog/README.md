@@ -1,12 +1,12 @@
 # blog — comprehensive example with module-based component organization
 
-A working blog (public reader + admin CMS) built with structpages, templ, and
+A working blog (public reader + admin CMS) built with structpages, gsx, and
 HTMX. The goal is to demonstrate the framework's "newest patterns" alongside a
 package layout that scales: each feature is its own Go package; shared UI
 primitives live in `ui/components`; the layout shell lives in `ui/layout`.
 
 This is the structure you'd reach for in a real React/Next-style app, applied
-to Go + templ.
+to Go + gsx.
 
 ## Run
 
@@ -28,8 +28,9 @@ posts, comments, and sessions.
 ├── auth/                      cookie-session Service + RequireAdmin middleware
 ├── ui/
 │   ├── layout/                PublicShell, AdminShell (children-slot layout)
-│   └── components.gsx         Button, Input, Textarea, Alert, Card, Pagination,
-│                              ErrorPage/ErrorBlock — standalone gsx functions
+│   └── components/
+│       └── components.gsx     Button, Input, Textarea, Alert, Card, Pagination,
+│                               ErrorPage/ErrorBlock — standalone gsx functions
 ├── blog/                      public reader feature
 │   ├── routes.go
 │   ├── home.gsx

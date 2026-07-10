@@ -250,18 +250,12 @@ func renderPostForm(ctx context.Context, w http.ResponseWriter, user store.User,
 }
 
 // postFormAction returns the POST URL for the form: create when ID==0,
-// update otherwise. Lives in Go code so the markup stays declarative.
-// gsx auto-sanitizes URL attributes, so a plain string is enough.
-func postFormAction(ctx context.Context, p store.Post) string {
+// update otherwise. Lives in Go code so the markup stays declarative; the
+// attribute hole auto-unwraps the (string, error) pair and any error
+// propagates through the render instead of being swallowed.
+func postFormAction(ctx context.Context, p store.Post) (string, error) {
 	if p.ID == 0 {
-		return must(components.URL(ctx, postCreateHandler{}))
+		return components.URL(ctx, postCreateHandler{})
 	}
-	return must(components.URL(ctx, postUpdateHandler{}, "id", p.ID))
-}
-
-func must[T any](v T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return v
+	return components.URL(ctx, postUpdateHandler{}, "id", p.ID)
 }
