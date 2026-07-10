@@ -6,13 +6,12 @@ import (
 	"net/http"
 
 	_gsxctx "context"
-	_gsxio "io"
-
 	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
+	_gsxio "io"
 )
 
 type searchPage struct{}

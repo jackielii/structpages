@@ -7,9 +7,8 @@ import (
 	"strconv"
 
 	_gsxctx "context"
-	_gsxio "io"
-
 	_gsxrt "github.com/gsxhq/gsx"
+	_gsxio "io"
 )
 
 // BadLinks mirrors the templ original — it deliberately uses hard-coded

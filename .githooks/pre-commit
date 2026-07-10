@@ -3,7 +3,7 @@
 
 # Run goimports on all Go files
 echo "Running goimports..."
-find . -name "*.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs goimports -w
+find . -name "*.go" -not -name "*.x.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs goimports -w
 if [ $? -ne 0 ]; then
     echo "goimports failed"
     exit 1
@@ -11,7 +11,7 @@ fi
 
 # Run gofmt on all Go files
 echo "Running gofmt..."
-find . -name "*.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -w -s
+find . -name "*.go" -not -name "*.x.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -w -s
 if [ $? -ne 0 ]; then
     echo "gofmt failed"
     exit 1

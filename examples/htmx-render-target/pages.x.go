@@ -4,11 +4,10 @@ package main
 
 import (
 	_gsxctx "context"
-	_gsxio "io"
-
 	_gsxrt "github.com/gsxhq/gsx"
 	_gsxstd "github.com/gsxhq/gsx/std"
 	_gsxf0 "github.com/jackielii/structpages"
+	_gsxio "io"
 )
 
 // Shared standalone function components (can be used across multiple pages).

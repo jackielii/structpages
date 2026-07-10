@@ -4,9 +4,8 @@ package components
 
 import (
 	_gsxctx "context"
-	_gsxio "io"
-
 	_gsxrt "github.com/gsxhq/gsx"
+	_gsxio "io"
 )
 
 type AlertKind string

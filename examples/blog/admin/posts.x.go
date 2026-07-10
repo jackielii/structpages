@@ -8,14 +8,13 @@ import (
 	"strconv"
 
 	_gsxctx "context"
-	_gsxio "io"
-
 	_gsxrt "github.com/gsxhq/gsx"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
+	_gsxio "io"
 )
 
 // AdminShellWith is a tiny gsx wrapper used by handlers that need to render a
