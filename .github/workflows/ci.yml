@@ -84,8 +84,25 @@ jobs:
           args: --timeout=5m
 
   test-examples:
-    name: Test Examples
+    name: Example ${{ matrix.example }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - simple
+          - htmx
+          - htmx-render-target
+          - todo
+          - lint-misuse
+          - blog
+          - url-validation
+          - html-template
+        include:
+          - example: url-validation
+            no-gsx: true
+          - example: html-template
+            no-gsx: true
 
     steps:
       - uses: actions/checkout@v4
@@ -93,26 +110,25 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
 
-      - name: Test simple example
-        working-directory: ./examples/simple
+      - name: Generate and check freshness
+        if: ${{ !matrix.no-gsx }}
+        working-directory: ./examples/${{ matrix.example }}
         run: |
-          go mod download
-          go tool templ generate -include-version=false
-          go build
+          go run github.com/gsxhq/gsx/cmd/gsx generate -no-cache .
+          if [ -n "$(git status --porcelain .)" ]; then
+            echo "::error::committed .x.go files are stale — run gsx generate and commit"
+            git status --porcelain .
+            git diff .
+            exit 1
+          fi
 
-      - name: Test htmx example
-        working-directory: ./examples/htmx
-        run: |
-          go mod download
-          go tool templ generate -include-version=false
-          go build
+      - name: Build
+        working-directory: ./examples/${{ matrix.example }}
+        run: go build ./...
 
-      - name: Test todo example
-        working-directory: ./examples/todo
-        run: |
-          go mod download
-          go tool templ generate -include-version=false
-          go build
+      - name: Test
+        working-directory: ./examples/${{ matrix.example }}
+        run: go test ./...
 
