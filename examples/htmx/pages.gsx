@@ -17,47 +17,47 @@ type throw struct{}
 
 component (p index) Page() {
 	<Layout>
-		<p.Main/>
+		<p.Content/>
 	</Layout>
 }
 
-component (p index) Main() {
+component (p index) Content() {
 	<h1>Welcome to the Index Page</h1>
 	<p>
 		Navigate to the product, team, or contact pages using the links below:
 	</p>
-	<a hx-get={throw{} |> url} hx-target="#main">Throw (Err)</a>
+	<a hx-get={throw{} |> url} hx-target="#content">Throw (Err)</a>
 }
 
 component (p product) Page() {
 	<Layout>
-		<p.Main/>
+		<p.Content/>
 	</Layout>
 }
 
-component (p product) Main() {
+component (p product) Content() {
 	<h1>Product Page</h1>
 	<p>This is the product page.</p>
 }
 
 component (p team) Page() {
 	<Layout>
-		<p.Main/>
+		<p.Content/>
 	</Layout>
 }
 
-component (p team) Main() {
+component (p team) Content() {
 	<h1>Team Page</h1>
 	<p>This is the team page.</p>
 }
 
 component (p contact) Page() {
 	<Layout>
-		<p.Main/>
+		<p.Content/>
 	</Layout>
 }
 
-component (p contact) Main() {
+component (p contact) Content() {
 	<h1>Contact Page</h1>
 	<p>This is the contact page.</p>
 }
@@ -78,7 +78,7 @@ component Layout() {
 		<body>
 			<header class="navbar">
 				<nav>
-					<ul role="list" hx-push-url="true" hx-target="#main">
+					<ul role="list" hx-push-url="true" hx-target="#content">
 						<li>
 							<a hx-get={index{} |> url}>Home</a>
 						</li>
@@ -94,7 +94,7 @@ component Layout() {
 					</ul>
 				</nav>
 			</header>
-			<main id="main">{ children }</main>
+			<main id="content">{ children }</main>
 		</body>
 	</html>
 }
