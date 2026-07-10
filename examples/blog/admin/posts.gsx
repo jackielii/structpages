@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -130,7 +129,7 @@ component PostForm(p store.Post, cats []store.Category, errMsg string) {
 			Publish immediately
 		</label>
 		<div class="flex items-center gap-2">
-			<components.Button label="Save" { gsx.Attrs{"type": "submit"}... }/>
+			<components.Button label="Save" type="submit"/>
 			<a
 				class="text-sm text-slate-500 hover:underline"
 				href={postListPage{} |> url}

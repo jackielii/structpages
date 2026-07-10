@@ -3,10 +3,10 @@
 package layout
 
 import (
-	"context"
-	"io"
+	_gsxctx "context"
+	_gsxio "io"
 
-	"github.com/gsxhq/gsx"
+	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
@@ -18,15 +18,15 @@ import (
 
 type PublicShellProps struct {
 	Title    string
-	Children gsx.Node
+	Children _gsxrt.Node
 }
 
 //line layout.gsx:14:1
-func PublicShell(_gsxp PublicShellProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		title := _gsxp.Title
 		children := _gsxp.Children
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
 //line layout.gsx:16:2
 		_gsxgw.S("<html lang=\"en\">")
@@ -42,9 +42,13 @@ func PublicShell(_gsxp PublicShellProps) gsx.Node {
 		_gsxgw.Text(string(title))
 		_gsxgw.S(" — structpages blog</title>")
 //line layout.gsx:24:4
-		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"></script>")
+		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
+		_gsxgw.Nonce(ctx)
+		_gsxgw.S("></script>")
 //line layout.gsx:25:4
-		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"></script></head>")
+		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
+		_gsxgw.Nonce(ctx)
+		_gsxgw.S("></script></head>")
 //line layout.gsx:27:3
 		_gsxgw.S("<body class=\"bg-slate-50 text-slate-900\">")
 //line layout.gsx:28:4
@@ -103,16 +107,16 @@ func PublicShell(_gsxp PublicShellProps) gsx.Node {
 type AdminShellProps struct {
 	Title    string
 	Current  store.User
-	Children gsx.Node
+	Children _gsxrt.Node
 }
 
 //line layout.gsx:68:1
-func AdminShell(_gsxp AdminShellProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		title := _gsxp.Title
 		current := _gsxp.Current
 		children := _gsxp.Children
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
 //line layout.gsx:70:2
 		_gsxgw.S("<html lang=\"en\">")
@@ -128,9 +132,13 @@ func AdminShell(_gsxp AdminShellProps) gsx.Node {
 		_gsxgw.Text(string(title))
 		_gsxgw.S("</title>")
 //line layout.gsx:78:4
-		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"></script>")
+		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
+		_gsxgw.Nonce(ctx)
+		_gsxgw.S("></script>")
 //line layout.gsx:79:4
-		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"></script></head>")
+		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
+		_gsxgw.Nonce(ctx)
+		_gsxgw.S("></script></head>")
 //line layout.gsx:81:3
 		_gsxgw.S("<body class=\"bg-slate-100 text-slate-900\">")
 //line layout.gsx:82:4

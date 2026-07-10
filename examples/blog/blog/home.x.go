@@ -3,11 +3,12 @@
 package blog
 
 import (
-	"context"
-	"io"
 	"net/http"
 
-	"github.com/gsxhq/gsx"
+	_gsxctx "context"
+	_gsxio "io"
+
+	_gsxrt "github.com/gsxhq/gsx"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -34,12 +35,12 @@ func (homePage) Props(_ *http.Request, s *store.Store) (homeProps, error) {
 // single Props-return type). See GAP notes.
 
 //line home.gsx:29:1
-func (p homePage) Page(props homeProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-		_gsxgw := gsx.W(_gsxw)
+func (p homePage) Page(props homeProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:30:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Home", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Home", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:31:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Recent Posts</h1>")
 //line home.gsx:32:3
@@ -51,8 +52,8 @@ func (p homePage) Page(props homeProps) gsx.Node {
 			}
 			_gsxgw.S("</div>")
 //line home.gsx:37:3
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Browse by category", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-				_gsxgw := gsx.W(_gsxw)
+			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Browse by category", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+				_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:38:4
 				_gsxgw.S("<ul class=\"flex flex-wrap gap-2\">")
 //line home.gsx:39:5

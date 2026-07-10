@@ -3,7 +3,6 @@ package admin
 import (
 	"net/http"
 
-	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -83,10 +82,7 @@ component (p userListPage) Page(props userListProps) {
 						<input type="checkbox" name="is_admin"/>
 						Grant admin
 					</label>
-					<components.Button
-						label="Create"
-						{ gsx.Attrs{"type": "submit"}... }
-					/>
+					<components.Button label="Create" type="submit"/>
 				</form>
 			</components.Card>
 		</div>

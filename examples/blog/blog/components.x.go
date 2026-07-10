@@ -3,32 +3,25 @@
 package blog
 
 import (
-	"context"
-	"io"
-	"strconv"
+	_gsxctx "context"
+	_gsxio "io"
 
-	"github.com/gsxhq/gsx"
+	_gsxrt "github.com/gsxhq/gsx"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 )
 
 type PostMetaProps struct {
-	P     store.Post
-	Attrs gsx.Attrs
+	P store.Post
 }
 
 //line components.gsx:11:1
-func PostMeta(_gsxp PostMetaProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func PostMeta(_gsxp PostMetaProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		p := _gsxp.P
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:12:2
-		_gsxgw.S("<p class=\"")
-		_gsxgw.Class(gsx.Class("text-xs text-slate-500"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">Posted ")
+		_gsxgw.S("<p class=\"text-xs text-slate-500\">Posted ")
 //line components.gsx:13:10
 		_gsxgw.Text(string(p.CreatedAt.Format("Jan 2, 2006")))
 		_gsxgw.S("</p>")
@@ -37,22 +30,16 @@ func PostMeta(_gsxp PostMetaProps) gsx.Node {
 }
 
 type PostCardProps struct {
-	P     store.Post
-	Attrs gsx.Attrs
+	P store.Post
 }
 
 //line components.gsx:17:1
-func PostCard(_gsxp PostCardProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func PostCard(_gsxp PostCardProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		p := _gsxp.P
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:18:2
-		_gsxgw.S("<article class=\"")
-		_gsxgw.Class(gsx.Class("rounded-lg border bg-white p-5 shadow-sm"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S("<article class=\"rounded-lg border bg-white p-5 shadow-sm\">")
 //line components.gsx:19:3
 		_gsxgw.S("<a class=\"text-lg font-semibold text-slate-900 hover:underline\"")
 		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (postPage{}), "slug", p.Slug)
@@ -82,31 +69,23 @@ func PostCard(_gsxp PostCardProps) gsx.Node {
 
 type CommentsListProps struct {
 	Comments []store.Comment
-	Attrs    gsx.Attrs
 }
 
 //line components.gsx:33:1
-func CommentsList(_gsxp CommentsListProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func CommentsList(_gsxp CommentsListProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		comments := _gsxp.Comments
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
+		var _gsxnum [32]byte
 //line components.gsx:34:2
 		_gsxgw.S("<div")
-		if !_gsxp.Attrs.Has("id") {
-			_gsxv1, _gsxerr := _gsxf0.ID(ctx, (CommentsList))
-			if _gsxerr != nil {
-				return _gsxerr
-			}
-			_gsxgw.S(" id=\"")
-			_gsxgw.AttrValue(string(_gsxv1))
-			_gsxgw.S("\"")
+		_gsxv1, _gsxerr := _gsxf0.ID(ctx, (CommentsList))
+		if _gsxerr != nil {
+			return _gsxerr
 		}
-		_gsxgw.S(" class=\"")
-		_gsxgw.Class(gsx.Class("space-y-3"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv1))
+		_gsxgw.S("\" class=\"space-y-3\">")
 //line components.gsx:35:3
 		if len(comments) == 0 {
 //line components.gsx:36:4
@@ -133,7 +112,7 @@ func CommentsList(_gsxp CommentsListProps) gsx.Node {
 //line components.gsx:48:3
 		_gsxgw.S("<p class=\"text-xs text-slate-400\">Total: ")
 //line components.gsx:48:44
-		_gsxgw.Text(strconv.FormatInt(int64(len(comments)), 10))
+		_gsxgw.IntInto(_gsxnum[:], int64(len(comments)))
 		_gsxgw.S("</p></div>")
 		return _gsxgw.Err()
 	})

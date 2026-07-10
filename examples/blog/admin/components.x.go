@@ -3,11 +3,10 @@
 package admin
 
 import (
-	"context"
-	"io"
-	"strconv"
+	_gsxctx "context"
+	_gsxio "io"
 
-	"github.com/gsxhq/gsx"
+	_gsxrt "github.com/gsxhq/gsx"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -19,26 +18,21 @@ import (
 type StatCellProps struct {
 	Label string
 	Value int
-	Attrs gsx.Attrs
 }
 
 //line components.gsx:14:1
-func StatCell(_gsxp StatCellProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func StatCell(_gsxp StatCellProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		label := _gsxp.Label
 		value := _gsxp.Value
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
+		var _gsxnum [32]byte
 //line components.gsx:15:2
-		_gsxgw.S("<div class=\"")
-		_gsxgw.Class(gsx.Class("rounded-lg border bg-white p-4 text-center shadow-sm"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S("<div class=\"rounded-lg border bg-white p-4 text-center shadow-sm\">")
 //line components.gsx:16:3
 		_gsxgw.S("<div class=\"text-3xl font-semibold text-slate-900\">")
 //line components.gsx:16:54
-		_gsxgw.Text(strconv.FormatInt(int64(value), 10))
+		_gsxgw.IntInto(_gsxnum[:], int64(value))
 		_gsxgw.S("</div>")
 //line components.gsx:17:3
 		_gsxgw.S("<div class=\"mt-1 text-xs uppercase tracking-wide text-slate-500\">")
@@ -51,31 +45,22 @@ func StatCell(_gsxp StatCellProps) gsx.Node {
 
 type StatsGridProps struct {
 	Stats store.Stats
-	Attrs gsx.Attrs
 }
 
 //line components.gsx:23:1
-func StatsGrid(_gsxp StatsGridProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func StatsGrid(_gsxp StatsGridProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		stats := _gsxp.Stats
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:24:2
 		_gsxgw.S("<div")
-		if !_gsxp.Attrs.Has("id") {
-			_gsxv0, _gsxerr := _gsxf0.ID(ctx, (StatsGrid))
-			if _gsxerr != nil {
-				return _gsxerr
-			}
-			_gsxgw.S(" id=\"")
-			_gsxgw.AttrValue(string(_gsxv0))
-			_gsxgw.S("\"")
+		_gsxv0, _gsxerr := _gsxf0.ID(ctx, (StatsGrid))
+		if _gsxerr != nil {
+			return _gsxerr
 		}
-		_gsxgw.S(" class=\"")
-		_gsxgw.Class(gsx.Class("grid grid-cols-2 gap-3 md:grid-cols-4"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv0))
+		_gsxgw.S("\" class=\"grid grid-cols-2 gap-3 md:grid-cols-4\">")
 //line components.gsx:25:3
 		_gsxgw.Node(ctx, StatCell(StatCellProps{Label: "Posts", Value: stats.Posts}))
 //line components.gsx:26:3
@@ -91,32 +76,25 @@ func StatsGrid(_gsxp StatsGridProps) gsx.Node {
 
 type RecentPostsCardProps struct {
 	Posts []store.Post
-	Attrs gsx.Attrs
 }
 
 //line components.gsx:32:1
-func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func RecentPostsCard(_gsxp RecentPostsCardProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		posts := _gsxp.Posts
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:33:2
 		_gsxgw.S("<div")
-		if !_gsxp.Attrs.Has("id") {
-			_gsxv1, _gsxerr := _gsxf0.ID(ctx, (RecentPostsCard))
-			if _gsxerr != nil {
-				return _gsxerr
-			}
-			_gsxgw.S(" id=\"")
-			_gsxgw.AttrValue(string(_gsxv1))
-			_gsxgw.S("\"")
+		_gsxv1, _gsxerr := _gsxf0.ID(ctx, (RecentPostsCard))
+		if _gsxerr != nil {
+			return _gsxerr
 		}
-		_gsxgw.ClassMerged(_gsxp.Attrs.Class())
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv1))
+		_gsxgw.S("\">")
 //line components.gsx:34:3
-		_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Recent posts", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Recent posts", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:35:4
 			_gsxgw.S("<ul class=\"divide-y text-sm\">")
 //line components.gsx:36:5
@@ -160,31 +138,22 @@ func RecentPostsCard(_gsxp RecentPostsCardProps) gsx.Node {
 
 type PostsTableProps struct {
 	Posts []store.Post
-	Attrs gsx.Attrs
 }
 
 //line components.gsx:67:1
-func PostsTable(_gsxp PostsTableProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func PostsTable(_gsxp PostsTableProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		posts := _gsxp.Posts
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line components.gsx:68:2
 		_gsxgw.S("<div")
-		if !_gsxp.Attrs.Has("id") {
-			_gsxv3, _gsxerr := _gsxf0.ID(ctx, (PostsTable))
-			if _gsxerr != nil {
-				return _gsxerr
-			}
-			_gsxgw.S(" id=\"")
-			_gsxgw.AttrValue(string(_gsxv3))
-			_gsxgw.S("\"")
+		_gsxv3, _gsxerr := _gsxf0.ID(ctx, (PostsTable))
+		if _gsxerr != nil {
+			return _gsxerr
 		}
-		_gsxgw.S(" class=\"")
-		_gsxgw.Class(gsx.Class("overflow-hidden rounded-lg border bg-white shadow-sm"), gsx.Class(_gsxp.Attrs.Class()))
-		_gsxgw.S("\"")
-		_gsxgw.StyleMerged("", _gsxp.Attrs.Style())
-		_gsxgw.Spread(ctx, _gsxp.Attrs.Without("class", "style"))
-		_gsxgw.S(">")
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv3))
+		_gsxgw.S("\" class=\"overflow-hidden rounded-lg border bg-white shadow-sm\">")
 //line components.gsx:72:3
 		_gsxgw.S("<table class=\"w-full text-sm\">")
 //line components.gsx:73:4

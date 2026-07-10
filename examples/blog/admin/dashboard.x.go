@@ -3,11 +3,12 @@
 package admin
 
 import (
-	"context"
-	"io"
 	"net/http"
 
-	"github.com/gsxhq/gsx"
+	_gsxctx "context"
+	_gsxio "io"
+
+	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
@@ -51,12 +52,12 @@ func (p dashboardPage) Props(r *http.Request, s *store.Store, target structpages
 }
 
 //line dashboard.gsx:47:1
-func (p dashboardPage) Page(props dashboardProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-		_gsxgw := gsx.W(_gsxw)
+func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:48:2
-		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Dashboard", Current: props.User, Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Dashboard", Current: props.User, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:49:3
 			_gsxgw.S("<header class=\"mb-6 flex items-end justify-between\">")
 //line dashboard.gsx:50:4
@@ -102,8 +103,8 @@ func (p dashboardPage) Page(props dashboardProps) gsx.Node {
 //line dashboard.gsx:72:4
 			_gsxgw.Node(ctx, RecentPostsCard(RecentPostsCardProps{Posts: props.RecentPosts}))
 //line dashboard.gsx:73:4
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Try it", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-				_gsxgw := gsx.W(_gsxw)
+			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Try it", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+				_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:74:5
 				_gsxgw.S("<ul class=\"list-disc space-y-1 pl-5 text-sm text-slate-700\">")
 //line dashboard.gsx:75:6

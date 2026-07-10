@@ -3,7 +3,6 @@ package blog
 import (
 	"net/http"
 
-	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -43,9 +42,7 @@ component (p postPage) Page(props postProps) {
 				{ if props.Category.Slug != "" {
 					· <a
 						class="hover:underline"
-						href={
-							categoryPage{} |> url("slug", props.Category.Slug)
-						}
+						href={categoryPage{} |> url("slug", props.Category.Slug)}
 					>
 						{ props.Category.Name }
 					</a>
@@ -78,10 +75,7 @@ component (p postPage) Page(props postProps) {
 					value=""
 					errMsg=""
 				/>
-				<components.Button
-					label="Post comment"
-					{ gsx.Attrs{"type": "submit"}... }
-				/>
+				<components.Button label="Post comment" type="submit"/>
 			</form>
 		</section>
 	</layout.PublicShell>

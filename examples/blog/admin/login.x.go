@@ -3,10 +3,10 @@
 package admin
 
 import (
-	"context"
-	"io"
+	_gsxctx "context"
+	_gsxio "io"
 
-	"github.com/gsxhq/gsx"
+	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 )
 
@@ -20,11 +20,11 @@ type LoginShellProps struct {
 }
 
 //line login.gsx:8:1
-func LoginShell(_gsxp LoginShellProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func LoginShell(_gsxp LoginShellProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		username := _gsxp.Username
 		errMsg := _gsxp.ErrMsg
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
 //line login.gsx:10:2
 		_gsxgw.S("<html lang=\"en\">")
@@ -35,14 +35,16 @@ func LoginShell(_gsxp LoginShellProps) gsx.Node {
 //line login.gsx:13:4
 		_gsxgw.S("<title>Sign in — blog admin</title>")
 //line login.gsx:14:4
-		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"></script></head>")
+		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
+		_gsxgw.Nonce(ctx)
+		_gsxgw.S("></script></head>")
 //line login.gsx:16:3
 		_gsxgw.S("<body class=\"bg-slate-100 text-slate-900\">")
 //line login.gsx:17:4
 		_gsxgw.S("<main class=\"mx-auto max-w-sm px-4 py-16\">")
 //line login.gsx:18:5
-		_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Sign in", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Sign in", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line login.gsx:19:6
 			_gsxgw.S("<form method=\"POST\" class=\"space-y-3\">")
 //line login.gsx:20:7

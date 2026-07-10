@@ -45,11 +45,13 @@ component Card(title string) {
 	</section>
 }
 
-// Button takes only its label; any extra attributes (type, hx-*, etc.) fall
-// through to the root <button> automatically — no explicit attrs param.
+// Button takes only its label. Spreading { attrs... } on the root <button>
+// gives Button a synthesized Attrs prop: unmatched call-site attributes
+// (type, hx-*, etc.) collect there and land on the <button>.
 component Button(label string) {
 	<button
 		class="inline-flex items-center rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+		{ attrs... }
 	>
 		{ label }
 	</button>

@@ -3,11 +3,12 @@
 package blog
 
 import (
-	"context"
-	"io"
 	"net/http"
 
-	"github.com/gsxhq/gsx"
+	_gsxctx "context"
+	_gsxio "io"
+
+	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
@@ -37,12 +38,12 @@ func (p searchPage) Props(r *http.Request, s *store.Store, target structpages.Re
 }
 
 //line search.gsx:33:1
-func (p searchPage) Page(props searchProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-		_gsxgw := gsx.W(_gsxw)
+func (p searchPage) Page(props searchProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
 //line search.gsx:34:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Search", Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Search", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line search.gsx:35:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Search</h1>")
 //line search.gsx:36:3
@@ -76,9 +77,9 @@ func (p searchPage) Page(props searchProps) gsx.Node {
 }
 
 //line search.gsx:56:1
-func (p searchPage) Results(props searchProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-		_gsxgw := gsx.W(_gsxw)
+func (p searchPage) Results(props searchProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
 //line search.gsx:57:2
 		_gsxgw.S("<div")
 		_gsxv2, _gsxerr := _gsxf0.ID(ctx, (searchPage.Results))

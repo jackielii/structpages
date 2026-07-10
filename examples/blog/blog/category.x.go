@@ -3,12 +3,13 @@
 package blog
 
 import (
-	"context"
-	"io"
 	"net/http"
 	"strconv"
 
-	"github.com/gsxhq/gsx"
+	_gsxctx "context"
+	_gsxio "io"
+
+	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -57,12 +58,12 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 }
 
 //line category.gsx:54:1
-func (p categoryPage) Page(props categoryProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-		_gsxgw := gsx.W(_gsxw)
+func (p categoryPage) Page(props categoryProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
 //line category.gsx:55:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Category.Name, Children: gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
-			_gsxgw := gsx.W(_gsxw)
+		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Category.Name, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
 //line category.gsx:56:3
 			_gsxgw.S("<h1 class=\"mb-1 text-2xl font-semibold\">")
 //line category.gsx:56:43
