@@ -8,7 +8,7 @@ import (
 )
 
 type index struct {
-	add        `route:"POST /add AddTodo" form:"text"`
+	add        `route:"POST /add AddTodo"`
 	toggle     `route:"POST /toggle/{id} ToggleTodo"`
 	deleteTodo `route:"DELETE /delete/{id} DeleteTodo"`
 }

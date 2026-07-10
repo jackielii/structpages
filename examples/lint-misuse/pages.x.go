@@ -3,12 +3,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"strconv"
 
-	"github.com/gsxhq/gsx"
+	_gsxctx "context"
+	_gsxio "io"
+
+	_gsxrt "github.com/gsxhq/gsx"
 )
 
 // BadLinks mirrors the templ original — it deliberately uses hard-coded
@@ -30,11 +31,11 @@ type BadLinksProps struct {
 }
 
 //line pages.gsx:20:1
-func BadLinks(_gsxp BadLinksProps) gsx.Node {
-	return gsx.Func(func(ctx context.Context, _gsxw io.Writer) error {
+func BadLinks(_gsxp BadLinksProps) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		id := _gsxp.Id
 		name := _gsxp.Name
-		_gsxgw := gsx.W(_gsxw)
+		_gsxgw := _gsxrt.W(_gsxw)
 //line pages.gsx:21:2
 		_gsxgw.S("<a href=\"/login\">Hard-coded internal</a>")
 //line pages.gsx:22:2
