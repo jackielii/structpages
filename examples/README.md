@@ -2,7 +2,7 @@
 
 | Directory | What it shows |
 |---|---|
-| [`simple/`](./simple) | Minimal struct-routed pages with templ — no HTMX, no DI |
+| [`simple/`](./simple) | Minimal struct-routed pages with gsx — no HTMX, no DI |
 | [`html-template/`](./html-template) | Standard library `html/template` in an atomic-design layout (atoms / molecules / organisms), htmx 4 partial swaps, and a no-Clone `urlFor` template func wired up in user code |
 | [`htmx/`](./htmx) | HTMX navigation with `hx-target` + a small `urlFor` wrapper |
 | [`htmx-render-target/`](./htmx-render-target) | Standalone-function components shared across pages, driven by `RenderTarget` for per-component data loading |
@@ -11,16 +11,19 @@
 
 ## Running an example
 
-Each example has its own `go.mod`. From the example directory:
+Each example has its own `go.mod`, and the generated `.x.go` files are committed — so from
+the example directory:
 
 ```shell
-# Generate the .x.go files from .gsx sources first (required)
-gsx generate .
-
-# Run the server (defaults to :8080)
-go run .
+go run .   # serves on :8080
 ```
 
-You'll need:
-- Go 1.24+
-- `gsx` CLI: `go install github.com/gsxhq/gsx/cmd/gsx@latest` (not required for `html-template/`, which uses only the standard library)
+If you edit `.gsx` sources, regenerate before running (uses the gsx version pinned in the
+example's `go.mod`):
+
+```shell
+go run github.com/gsxhq/gsx/cmd/gsx generate .
+```
+
+You'll need Go 1.26+. `html-template/` and `url-validation/` use only the standard library —
+no gsx involved.
