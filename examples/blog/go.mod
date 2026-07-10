@@ -2,13 +2,11 @@ module github.com/jackielii/structpages/examples/blog
 
 go 1.26.1
 
-require github.com/jackielii/structpages v0.0.0-00010101000000-000000000000
-
 require (
-	github.com/gsxhq/gsx v0.0.0
-	github.com/jackielii/ctxkey v1.0.1 // indirect
+	github.com/gsxhq/gsx v0.0.0-20260710094418-9b957cb1d98c
+	github.com/jackielii/structpages v0.0.0-00010101000000-000000000000
 )
 
-replace github.com/jackielii/structpages => ../..
+require github.com/jackielii/ctxkey v1.0.1 // indirect
 
-replace github.com/gsxhq/gsx => /Users/jackieli/personal/gsxhq/gsx
+replace github.com/jackielii/structpages => ../..

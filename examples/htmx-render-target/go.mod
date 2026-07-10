@@ -2,13 +2,11 @@ module htmx-render-target-example
 
 go 1.26.1
 
-require github.com/jackielii/structpages v0.0.0
-
 require (
-	github.com/gsxhq/gsx v0.0.0
-	github.com/jackielii/ctxkey v1.0.1 // indirect
+	github.com/gsxhq/gsx v0.0.0-20260710094418-9b957cb1d98c
+	github.com/jackielii/structpages v0.0.0
 )
 
-replace github.com/jackielii/structpages => ../..
+require github.com/jackielii/ctxkey v1.0.1 // indirect
 
-replace github.com/gsxhq/gsx => /Users/jackieli/personal/gsxhq/gsx
+replace github.com/jackielii/structpages => ../..
