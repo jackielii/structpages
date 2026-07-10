@@ -50,6 +50,7 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 			URL: func(target int) (string, error) {
 				return structpages.URLFor(ctx,
 					[]any{categoryPage{}, "?page={page}"},
+					"slug", cat.Slug,
 					"page", target,
 				)
 			},
@@ -57,36 +58,36 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 	}, nil
 }
 
-//line category.gsx:55:1
+//line category.gsx:56:1
 func (p categoryPage) Page(props categoryProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line category.gsx:56:2
+//line category.gsx:57:2
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Category.Name, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line category.gsx:57:3
+//line category.gsx:58:3
 			_gsxgw.S("<h1 class=\"mb-1 text-2xl font-semibold\">")
-//line category.gsx:57:43
+//line category.gsx:58:43
 			_gsxgw.Text(string(props.Category.Name))
 			_gsxgw.S("</h1>")
-//line category.gsx:58:3
+//line category.gsx:59:3
 			_gsxgw.S("<p class=\"mb-6 text-sm text-slate-500\">Posts filed under this category.</p>")
-//line category.gsx:61:3
+//line category.gsx:62:3
 			_gsxgw.S("<div class=\"space-y-4\">")
-//line category.gsx:62:4
+//line category.gsx:63:4
 			if len(props.Posts) == 0 {
-//line category.gsx:63:5
+//line category.gsx:64:5
 				_gsxgw.S("<p class=\"text-sm text-slate-500\">Nothing here yet.</p>")
 			}
-//line category.gsx:65:4
+//line category.gsx:66:4
 			for _, post := range props.Posts {
-//line category.gsx:66:5
+//line category.gsx:67:5
 				_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
 			}
 			_gsxgw.S("</div>")
-//line category.gsx:69:3
+//line category.gsx:70:3
 			_gsxgw.S("<div class=\"mt-6\">")
-//line category.gsx:70:4
+//line category.gsx:71:4
 			_gsxgw.Node(ctx, components.Pagination(props.Pagination))
 			_gsxgw.S("</div>")
 			return _gsxgw.Err()
