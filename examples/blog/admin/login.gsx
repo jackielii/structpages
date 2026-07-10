@@ -1,8 +1,39 @@
 package admin
 
-import "github.com/jackielii/structpages/examples/blog/ui/components"
+import (
+	"net/http"
 
-// LoginShell is invoked from login.go (LoginPage.ServeHTTP). gsx requires
+	"github.com/jackielii/structpages"
+	"github.com/jackielii/structpages/examples/blog/auth"
+	"github.com/jackielii/structpages/examples/blog/ui/components"
+)
+
+// LoginPage handles both GET and POST at /admin/login. It is mounted as a
+// sibling of admin.Pages (in main), so RequireAdmin does not gate it.
+//
+// Because it defines ServeHTTP, structpages routes everything to that
+// method directly — there's no Props/Page split for this page.
+type LoginPage struct{}
+
+func (LoginPage) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Service) error {
+	var (
+		username string
+		errMsg   string
+	)
+	if r.Method == http.MethodPost {
+		username = r.FormValue("username")
+		password := r.FormValue("password")
+		if _, err := a.Login(w, username, password); err != nil {
+			errMsg = "Invalid username or password."
+		} else {
+			http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+			return nil
+		}
+	}
+	return structpages.RenderComponent(<LoginShell username={username} errMsg={errMsg}/>)
+}
+
+// LoginShell is rendered by LoginPage.ServeHTTP above. gsx requires
 // component names to be Capitalized (lowercase = HTML element), so the templ
 // `loginShell` becomes `LoginShell`.
 component LoginShell(username, errMsg string) {

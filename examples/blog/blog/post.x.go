@@ -3,10 +3,13 @@
 package blog
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	_gsxctx "context"
 	_gsxrt "github.com/gsxhq/gsx"
+	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
@@ -39,28 +42,28 @@ func (postPage) Props(r *http.Request, s *store.Store) (postProps, error) {
 	}, nil
 }
 
-//line post.gsx:36:1
+//line post.gsx:39:1
 func (p postPage) Page(props postProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line post.gsx:37:2
+//line post.gsx:40:2
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Post.Title, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line post.gsx:38:3
+//line post.gsx:41:3
 			_gsxgw.S("<article class=\"space-y-3\">")
-//line post.gsx:39:4
+//line post.gsx:42:4
 			_gsxgw.S("<h1 class=\"text-2xl font-semibold\">")
-//line post.gsx:39:39
+//line post.gsx:42:39
 			_gsxgw.Text(string(props.Post.Title))
 			_gsxgw.S("</h1>")
-//line post.gsx:40:4
+//line post.gsx:43:4
 			_gsxgw.S("<p class=\"text-sm text-slate-500\">by ")
-//line post.gsx:41:8
+//line post.gsx:44:8
 			_gsxgw.Text(string(props.Author.Username))
-//line post.gsx:42:5
+//line post.gsx:45:5
 			if props.Category.Slug != "" {
 				_gsxgw.S("· ")
-//line post.gsx:43:9
+//line post.gsx:46:9
 				_gsxgw.S("<a class=\"hover:underline\"")
 				_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (categoryPage{}), "slug", props.Category.Slug)
 				if _gsxerr != nil {
@@ -69,25 +72,25 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 				_gsxgw.S(" href=\"")
 				_gsxgw.URL(string(_gsxv0))
 				_gsxgw.S("\">")
-//line post.gsx:47:7
+//line post.gsx:50:7
 				_gsxgw.Text(string(props.Category.Name))
 				_gsxgw.S("</a>")
 			}
 			_gsxgw.S("</p>")
-//line post.gsx:51:4
+//line post.gsx:54:4
 			_gsxgw.S("<div class=\"prose max-w-none text-slate-800\">")
-//line post.gsx:52:5
+//line post.gsx:55:5
 			_gsxgw.S("<p>")
-//line post.gsx:52:8
+//line post.gsx:55:8
 			_gsxgw.Text(string(props.Post.Body))
 			_gsxgw.S("</p></div></article>")
-//line post.gsx:55:3
+//line post.gsx:58:3
 			_gsxgw.S("<section class=\"mt-10 space-y-4\">")
-//line post.gsx:56:4
+//line post.gsx:59:4
 			_gsxgw.S("<h2 class=\"text-lg font-semibold\">Comments</h2>")
-//line post.gsx:57:4
+//line post.gsx:60:4
 			_gsxgw.Node(ctx, CommentsList(CommentsListProps{Comments: props.Comments}))
-//line post.gsx:58:4
+//line post.gsx:61:4
 			_gsxgw.S("<form class=\"space-y-2 rounded border bg-white p-4\"")
 			_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (commentHandler{}), "slug", props.Post.Slug)
 			if _gsxerr != nil {
@@ -103,17 +106,50 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv2))
 			_gsxgw.S("\" hx-swap=\"outerHTML\" hx-on:htmx:after-request=\"this.reset()\">")
-//line post.gsx:65:5
+//line post.gsx:68:5
 			_gsxgw.S("<h3 class=\"text-sm font-semibold\">Add a comment</h3>")
-//line post.gsx:66:5
+//line post.gsx:69:5
 			_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "author", Label: "Name", Value: "", ErrMsg: ""}))
-//line post.gsx:72:5
+//line post.gsx:75:5
 			_gsxgw.Node(ctx, components.Textarea(components.TextareaProps{Name: "body", Label: "Comment", Value: "", ErrMsg: ""}))
-//line post.gsx:78:5
+//line post.gsx:81:5
 			_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Post comment", Attrs: _gsxrt.Attrs{{Key: "type", Value: "submit"}}}))
 			_gsxgw.S("</form></section>")
 			return _gsxgw.Err()
 		})}))
 		return _gsxgw.Err()
 	})
+}
+
+// commentHandler illustrates the "ServeHTTP that writes, then re-renders a
+// sibling component" pattern. For HTMX requests we return the refreshed
+// CommentsList directly; for non-HTMX submissions we redirect back to the
+// post so the full page reloads with the new comment in place.
+type commentHandler struct{}
+
+func (commentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store) error {
+	slug := r.PathValue("slug")
+	post, err := s.GetPostBySlug(slug)
+	if err != nil {
+		return err
+	}
+	author := strings.TrimSpace(r.FormValue("author"))
+	body := strings.TrimSpace(r.FormValue("body"))
+	if author == "" || body == "" {
+		return fmt.Errorf("author and body are required")
+	}
+	if _, err := s.AddComment(post.ID, author, body); err != nil {
+		return err
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line post.gsx:109:38
+			_gsxgw.Node(ctx, CommentsList(CommentsListProps{Comments: s.ListComments(post.ID)}))
+			return _gsxgw.Err()
+		}))
+	}
+	http.Redirect(w, r, "/posts/"+slug, http.StatusSeeOther)
+	return nil
 }

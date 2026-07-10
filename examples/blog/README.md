@@ -28,27 +28,32 @@ posts, comments, and sessions.
 ├── auth/                      cookie-session Service + RequireAdmin middleware
 ├── ui/
 │   ├── layout/                PublicShell, AdminShell (children-slot layout)
-│   └── components/            Button, Input, Textarea, Alert, Card, Pagination,
-│                              ErrorPage/ErrorBlock — standalone templ functions
+│   └── components.gsx         Button, Input, Textarea, Alert, Card, Pagination,
+│                              ErrorPage/ErrorBlock — standalone gsx functions
 ├── blog/                      public reader feature
 │   ├── routes.go
-│   ├── home.templ
-│   ├── post.templ
-│   ├── category.templ
-│   ├── search.templ
-│   ├── comment.go             ServeHTTP for POST /posts/{slug}/comments
-│   └── components.templ       PostCard, PostMeta, CommentsList (feature-local)
+│   ├── home.gsx
+│   ├── post.gsx               postPage + commentHandler (ServeHTTP for
+│   │                          POST /posts/{slug}/comments)
+│   ├── category.gsx
+│   ├── search.gsx
+│   └── components.gsx         PostCard, PostMeta, CommentsList (feature-local)
 └── admin/                     authenticated CMS feature
     ├── routes.go              admin.Pages with Middlewares() returning RequireAdmin,
     │                          plus an Assets field that owns /admin/static/*
     ├── static/                module-scoped assets (admin-logo.svg)
-    ├── login.go + login.templ LoginPage — sibling of admin.Pages, not a child
+    ├── login.gsx               LoginPage — sibling of admin.Pages, not a child
     ├── logout.go
-    ├── dashboard.templ        Props + RenderTarget refreshing widgets independently
-    ├── posts.go + posts.templ list / new / edit / create / update / delete
-    ├── users.go + users.templ list / create / delete
-    └── components.templ       StatsGrid, RecentPostsCard, PostsTable
+    ├── dashboard.gsx           Props + RenderTarget refreshing widgets independently
+    ├── posts.gsx               list / new / edit / create / update / delete
+    ├── users.gsx               list / create / delete
+    └── components.gsx          StatsGrid, RecentPostsCard, PostsTable
 ```
+
+Each `.gsx` file holds its handlers, Props, and page/component markup together —
+gsx passes top-level Go through verbatim, so there's no need to split a page
+into a `.go` + `.templ` pair the way this example did before the project
+switched from templ to gsx.
 
 The dependency graph is one-way: `main → {blog, admin} → ui/{layout,components}
 → store`, with `auth` as a peer of `store`. Cross-feature links (e.g. the public
@@ -59,19 +64,19 @@ header pointing at `/admin/login`) use `structpages.Ref("loginPage")` so the
 
 | Pattern | Where to look |
 |---|---|
-| Nested route hierarchies (3 levels: `/admin/posts/{id}/edit`) | `admin/routes.go`, `admin/posts.go` |
+| Nested route hierarchies (3 levels: `/admin/posts/{id}/edit`) | `admin/routes.go`, `admin/posts.gsx` |
 | Dependency injection via `WithArgs(store, authSvc)` consumed by `Props`, `ServeHTTP`, `Middlewares` | `main.go` and every `Props` method |
 | Page-level `Middlewares()` with DI returning `RequireAdmin` | `admin/routes.go` |
-| `Props(r, target RenderTarget, *store.Store)` with conditional partial loads | `admin/dashboard.templ`, `blog/search.templ` |
-| Standalone function components as HTMX targets — `target.Is(StatsGrid)` then `RenderComponent` | `admin/dashboard.templ`, `admin/components.templ` |
-| `Page()` + `Content()` split (HTMX swaps `#content`, full doc on direct nav) | `blog/home.templ`, `admin/dashboard.templ` |
-| `ServeHTTP` form handler with redirect or HTMX partial re-render | `blog/comment.go`, `admin/posts.go` |
+| `Props(r, target RenderTarget, *store.Store)` with conditional partial loads | `admin/dashboard.gsx`, `blog/search.gsx` |
+| Standalone function components as HTMX targets — `target.Is(StatsGrid)` then `RenderComponent` | `admin/dashboard.gsx`, `admin/components.gsx` |
+| `Page()` + `Content()` split (HTMX swaps `#content`, full doc on direct nav) | `blog/home.gsx`, `admin/dashboard.gsx` |
+| `ServeHTTP` form handler with redirect or HTMX partial re-render | `blog/post.gsx` (`commentHandler`), `admin/posts.gsx` |
 | Custom `WithErrorHandler` rendering a styled error component (cross-package) | `main.go` + `ui/components` |
-| `URLFor` with path params and query-string templates `[]any{p, "?page={page}"}` | `blog/category.templ` |
+| `URLFor` with path params and query-string templates `[]any{p, "?page={page}"}` | `blog/category.gsx` |
 | `ID`/`IDTarget` wiring for `hx-target` | throughout |
-| Cross-package component composition (`admin` imports `ui/layout` + `ui/components`) | every `.templ` |
-| `Ref("loginPage")` for cross-feature links to avoid import cycles | `ui/layout/layout.templ` |
-| Module-owned `/static/` subtree — `staticFiles` field on `admin.Pages` with `route:"/static/{path...}"` and `http.ServeFileFS(w, r, fs, r.PathValue("path"))` (no separate `pub.Handle("/admin/static/", …)` in `main`, no `StripPrefix`, handler is unaware of its mount path) | `admin/routes.go`, `admin/static/admin-logo.svg`, `ui/layout/layout.templ` |
+| Cross-package component composition (`admin` imports `ui/layout` + `ui/components`) | every `.gsx` |
+| `Ref("loginPage")` for cross-feature links to avoid import cycles | `ui/layout/layout.gsx` |
+| Module-owned `/static/` subtree — `staticFiles` field on `admin.Pages` with `route:"/static/{path...}"` and `http.ServeFileFS(w, r, fs, r.PathValue("path"))` (no separate `pub.Handle("/admin/static/", …)` in `main`, no `StripPrefix`, handler is unaware of its mount path) | `admin/routes.go`, `admin/static/admin-logo.svg`, `ui/layout/layout.gsx` |
 
 ## Quick verification (server running)
 

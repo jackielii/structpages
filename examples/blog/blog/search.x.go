@@ -3,6 +3,7 @@
 package blog
 
 import (
+	"fmt"
 	"net/http"
 
 	_gsxctx "context"
@@ -36,16 +37,16 @@ func (p searchPage) Props(r *http.Request, s *store.Store, target structpages.Re
 	return sp, nil
 }
 
-//line search.gsx:33:1
+//line search.gsx:34:1
 func (p searchPage) Page(props searchProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line search.gsx:34:2
+//line search.gsx:35:2
 		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Search", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line search.gsx:35:3
-			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Search</h1>")
 //line search.gsx:36:3
+			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Search</h1>")
+//line search.gsx:37:3
 			_gsxgw.S("<form class=\"mb-6\"")
 			_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (searchPage{}))
 			if _gsxerr != nil {
@@ -61,13 +62,13 @@ func (p searchPage) Page(props searchProps) _gsxrt.Node {
 			_gsxgw.S(" hx-target=\"")
 			_gsxgw.AttrValue(string(_gsxv1))
 			_gsxgw.S("\" hx-swap=\"outerHTML\" hx-trigger=\"input changed delay:250ms from:input, submit\" hx-push-url=\"true\">")
-//line search.gsx:44:4
+//line search.gsx:45:4
 			_gsxgw.S("<input name=\"q\" value=\"")
 			_gsxgw.AttrValue(string(props.Query))
 			_gsxgw.S("\" placeholder=\"Search posts...\" class=\"w-full rounded border border-slate-300 px-3 py-2 text-sm\"")
 			_gsxgw.BoolAttr("autofocus", true)
 			_gsxgw.S("/></form>")
-//line search.gsx:52:3
+//line search.gsx:53:3
 			_gsxgw.Node(ctx, p.Results(props))
 			return _gsxgw.Err()
 		})}))
@@ -75,11 +76,11 @@ func (p searchPage) Page(props searchProps) _gsxrt.Node {
 	})
 }
 
-//line search.gsx:56:1
+//line search.gsx:57:1
 func (p searchPage) Results(props searchProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line search.gsx:57:2
+//line search.gsx:58:2
 		_gsxgw.S("<div")
 		_gsxv2, _gsxerr := _gsxf0.ID(ctx, (searchPage.Results))
 		if _gsxerr != nil {
@@ -88,27 +89,27 @@ func (p searchPage) Results(props searchProps) _gsxrt.Node {
 		_gsxgw.S(" id=\"")
 		_gsxgw.AttrValue(string(_gsxv2))
 		_gsxgw.S("\" class=\"space-y-4\">")
-//line search.gsx:58:3
+//line search.gsx:59:3
 		if props.Query == "" {
-//line search.gsx:59:4
+//line search.gsx:60:4
 			_gsxgw.S("<p class=\"text-sm text-slate-500\">Type a query to search.</p>")
 		} else {
-//line search.gsx:60:10
+//line search.gsx:61:10
 			if len(props.Posts) == 0 {
-//line search.gsx:61:4
+//line search.gsx:62:4
 				_gsxgw.S("<p class=\"text-sm text-slate-500\">No results for \"")
-//line search.gsx:63:5
+//line search.gsx:64:5
 				_gsxgw.Text(string(props.Query))
 				_gsxgw.S("\".</p>")
 			} else {
-//line search.gsx:67:4
+//line search.gsx:68:4
 				_gsxgw.S("<p class=\"text-xs text-slate-500\">")
-//line search.gsx:68:5
+//line search.gsx:69:5
 				_gsxgw.Text(string(resultsCount(len(props.Posts))))
 				_gsxgw.S("</p>")
-//line search.gsx:70:4
+//line search.gsx:71:4
 				for _, post := range props.Posts {
-//line search.gsx:71:5
+//line search.gsx:72:5
 					_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
 				}
 			}
@@ -116,4 +117,14 @@ func (p searchPage) Results(props searchProps) _gsxrt.Node {
 		_gsxgw.S("</div>")
 		return _gsxgw.Err()
 	})
+}
+
+// resultsCount is a tiny helper for the result count line above.
+func resultsCount(n int) string { return fmt.Sprintf("%d result%s", n, plural(n)) }
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

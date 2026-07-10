@@ -91,7 +91,12 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 			addTodo(text)
 		}
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:56:37
+		_gsxgw.Node(ctx, TodoList())
+		return _gsxgw.Err()
+	}))
 }
 
 type toggle struct{}
@@ -104,7 +109,12 @@ func (t toggle) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "POST" {
 		toggleTodo(id)
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:69:37
+		_gsxgw.Node(ctx, TodoList())
+		return _gsxgw.Err()
+	}))
 }
 
 type deleteTodo struct{}
@@ -117,7 +127,12 @@ func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "DELETE" {
 		removeTodo(id)
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:82:37
+		_gsxgw.Node(ctx, TodoList())
+		return _gsxgw.Err()
+	}))
 }
 
 //line pages.gsx:85:1

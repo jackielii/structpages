@@ -1,6 +1,7 @@
 package blog
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/jackielii/structpages"
@@ -72,4 +73,14 @@ component (p searchPage) Results(props searchProps) {
 			} }
 		} }
 	</div>
+}
+
+// resultsCount is a tiny helper for the result count line above.
+func resultsCount(n int) string { return fmt.Sprintf("%d result%s", n, plural(n)) }
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

@@ -53,7 +53,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 			addTodo(text)
 		}
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(<TodoList/>)
 }
 
 type toggle struct{}
@@ -66,7 +66,7 @@ func (t toggle) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "POST" {
 		toggleTodo(id)
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(<TodoList/>)
 }
 
 type deleteTodo struct{}
@@ -79,7 +79,7 @@ func (d deleteTodo) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "DELETE" {
 		removeTodo(id)
 	}
-	return structpages.RenderComponent(index.TodoList)
+	return structpages.RenderComponent(<TodoList/>)
 }
 
 component TodoList() {
