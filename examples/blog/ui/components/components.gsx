@@ -8,10 +8,7 @@
 package components
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/jackielii/structpages"
 )
 
 type AlertKind string
@@ -96,15 +93,8 @@ component Textarea(name, label, value, errMsg string) {
 	</label>
 }
 
-// URL wraps structpages.URLFor. gsx auto-sanitizes URL-context attributes
-// (href/action/src/hx-*), so a plain (string, error) is enough — and it
-// auto-unwraps in attribute position, dropping the explicit error handling.
-func URL(ctx context.Context, page any, args ...any) (string, error) {
-	return structpages.URLFor(ctx, page, args...)
-}
-
 // PageNav describes a paginated control. URL builds the link for a
-// given page number; callers typically wrap structpages.URLFor with the
+// given page number; callers typically call structpages.URLFor with the
 // "?page={page}" template form.
 type PageNav struct {
 	Page     int
@@ -148,33 +138,25 @@ component Pagination(p PageNav) {
 	<nav id="pagination" class="flex items-center justify-between text-sm">
 		<span class="text-slate-500">{ p.Range() }</span>
 		<div class="flex gap-2">
-			{ if p.HasPrev() {
-				<a
-					class="rounded border px-2 py-1 hover:bg-slate-50"
+			<a
+				class={ "rounded border px-2 py-1", "hover:bg-slate-50": p.HasPrev(), "text-slate-300": !p.HasPrev() }
+				{ if p.HasPrev() {
 					href={p.URL(p.Page - 1)}
-				>
-					← Prev
-				</a>
-			} else {
-				<span class="rounded border px-2 py-1 text-slate-300">
-					← Prev
-				</span>
-			} }
+				} }
+			>
+				← Prev
+			</a>
 			<span class="px-2 py-1 text-slate-600">
 				Page { p.Page } of { p.Pages() }
 			</span>
-			{ if p.HasNext() {
-				<a
-					class="rounded border px-2 py-1 hover:bg-slate-50"
+			<a
+				class={ "rounded border px-2 py-1", "hover:bg-slate-50": p.HasNext(), "text-slate-300": !p.HasNext() }
+				{ if p.HasNext() {
 					href={p.URL(p.Page + 1)}
-				>
-					Next →
-				</a>
-			} else {
-				<span class="rounded border px-2 py-1 text-slate-300">
-					Next →
-				</span>
-			} }
+				} }
+			>
+				Next →
+			</a>
 		</div>
 	</nav>
 }

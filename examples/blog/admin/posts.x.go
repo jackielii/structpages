@@ -169,11 +169,31 @@ func (postCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *st
 	user, _ := auth.UserFromContext(r.Context())
 	p, errMsg := parsePostForm(r)
 	if errMsg != "" {
-		return renderPostForm(r.Context(), w, user, "New post", p, s.ListCategories(), errMsg)
+		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:119:38
+			_gsxgw.Node(ctx, AdminShellWith(AdminShellWithProps{Title: "New post", User: user, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+				_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:120:4
+				_gsxgw.Node(ctx, PostForm(PostFormProps{P: p, Cats: s.ListCategories(), ErrMsg: errMsg}))
+				return _gsxgw.Err()
+			})}))
+			return _gsxgw.Err()
+		}))
 	}
 	p.AuthorID = user.ID
 	if _, err := s.CreatePost(p); err != nil {
-		return renderPostForm(r.Context(), w, user, "New post", p, s.ListCategories(), err.Error())
+		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:125:38
+			_gsxgw.Node(ctx, AdminShellWith(AdminShellWithProps{Title: "New post", User: user, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+				_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:126:4
+				_gsxgw.Node(ctx, PostForm(PostFormProps{P: p, Cats: s.ListCategories(), ErrMsg: err.Error()}))
+				return _gsxgw.Err()
+			})}))
+			return _gsxgw.Err()
+		}))
 	}
 	http.Redirect(w, r, "/admin/posts/", http.StatusSeeOther)
 	return nil
@@ -196,16 +216,16 @@ func (postEditPage) Props(r *http.Request, s *store.Store) (postFormViewProps, e
 	return postFormViewProps{User: user, Categories: s.ListCategories(), Post: p}, nil
 }
 
-//line posts.gsx:146:1
+//line posts.gsx:150:1
 func (p postEditPage) Page(props postFormViewProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line posts.gsx:147:2
+//line posts.gsx:151:2
 		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Edit post", Current: props.User, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line posts.gsx:148:3
+//line posts.gsx:152:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Edit post</h1>")
-//line posts.gsx:149:3
+//line posts.gsx:153:3
 			_gsxgw.Node(ctx, PostForm(PostFormProps{P: props.Post, Cats: props.Categories, ErrMsg: ""}))
 			return _gsxgw.Err()
 		})}))
@@ -224,7 +244,17 @@ func (postUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *st
 	incoming, errMsg := parsePostForm(r)
 	incoming.ID = id
 	if errMsg != "" {
-		return renderPostForm(r.Context(), w, user, "Edit post", incoming, s.ListCategories(), errMsg)
+		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:168:38
+			_gsxgw.Node(ctx, AdminShellWith(AdminShellWithProps{Title: "Edit post", User: user, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+				_gsxgw := _gsxrt.W(_gsxw)
+//line posts.gsx:169:4
+				_gsxgw.Node(ctx, PostForm(PostFormProps{P: incoming, Cats: s.ListCategories(), ErrMsg: errMsg}))
+				return _gsxgw.Err()
+			})}))
+			return _gsxgw.Err()
+		}))
 	}
 	if _, err := s.UpdatePost(id, func(p *store.Post) {
 		p.Title = incoming.Title
@@ -249,7 +279,7 @@ type PostFormProps struct {
 	ErrMsg string
 }
 
-//line posts.gsx:183:1
+//line posts.gsx:189:1
 func PostForm(_gsxp PostFormProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		p := _gsxp.P
@@ -257,7 +287,7 @@ func PostForm(_gsxp PostFormProps) _gsxrt.Node {
 		errMsg := _gsxp.ErrMsg
 		_gsxgw := _gsxrt.W(_gsxw)
 		var _gsxnum [32]byte
-//line posts.gsx:184:2
+//line posts.gsx:190:2
 		_gsxgw.S("<form method=\"POST\"")
 		_gsxv1, _gsxerr := postFormAction(ctx, p)
 		if _gsxerr != nil {
@@ -266,46 +296,46 @@ func PostForm(_gsxp PostFormProps) _gsxrt.Node {
 		_gsxgw.S(" action=\"")
 		_gsxgw.URL(string(_gsxv1))
 		_gsxgw.S("\" class=\"space-y-3\">")
-//line posts.gsx:185:3
+//line posts.gsx:191:3
 		_gsxgw.Node(ctx, components.Alert(components.AlertProps{Kind: components.AlertError, Msg: errMsg}))
-//line posts.gsx:186:3
+//line posts.gsx:192:3
 		_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "title", Label: "Title", Value: p.Title, ErrMsg: ""}))
-//line posts.gsx:187:3
-		_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "slug", Label: "Slug (auto if blank)", Value: p.Slug, ErrMsg: ""}))
 //line posts.gsx:193:3
+		_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "slug", Label: "Slug (auto if blank)", Value: p.Slug, ErrMsg: ""}))
+//line posts.gsx:199:3
 		_gsxgw.S("<label class=\"block text-sm\">")
-//line posts.gsx:194:4
+//line posts.gsx:200:4
 		_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">Category</span>")
-//line posts.gsx:195:4
+//line posts.gsx:201:4
 		_gsxgw.S("<select name=\"category_id\" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\">")
-//line posts.gsx:199:5
+//line posts.gsx:205:5
 		_gsxgw.S("<option value=\"0\">— pick one —</option>")
-//line posts.gsx:200:5
+//line posts.gsx:206:5
 		for _, c := range cats {
-//line posts.gsx:201:6
+//line posts.gsx:207:6
 			_gsxgw.S("<option value=\"")
 			_gsxgw.IntInto(_gsxnum[:], int64(c.ID))
 			_gsxgw.S("\"")
 			_gsxgw.BoolAttr("selected", bool(c.ID == p.CategoryID))
 			_gsxgw.S(">")
-//line posts.gsx:202:7
+//line posts.gsx:208:7
 			_gsxgw.Text(string(c.Name))
 			_gsxgw.S("</option>")
 		}
 		_gsxgw.S("</select></label>")
-//line posts.gsx:207:3
+//line posts.gsx:213:3
 		_gsxgw.Node(ctx, components.Textarea(components.TextareaProps{Name: "body", Label: "Body", Value: p.Body, ErrMsg: ""}))
-//line posts.gsx:208:3
+//line posts.gsx:214:3
 		_gsxgw.S("<label class=\"flex items-center gap-2 text-sm\">")
-//line posts.gsx:209:4
+//line posts.gsx:215:4
 		_gsxgw.S("<input type=\"checkbox\" name=\"published\"")
 		_gsxgw.BoolAttr("checked", bool(p.Published))
 		_gsxgw.S("/>Publish immediately</label>")
-//line posts.gsx:212:3
+//line posts.gsx:218:3
 		_gsxgw.S("<div class=\"flex items-center gap-2\">")
-//line posts.gsx:213:4
+//line posts.gsx:219:4
 		_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Save", Attrs: _gsxrt.Attrs{{Key: "type", Value: "submit"}}}))
-//line posts.gsx:214:4
+//line posts.gsx:220:4
 		_gsxgw.S("<a class=\"text-sm text-slate-500 hover:underline\"")
 		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (postListPage{}))
 		if _gsxerr != nil {
@@ -340,19 +370,13 @@ func parsePostForm(r *http.Request) (store.Post, string) {
 	return p, ""
 }
 
-// renderPostForm re-renders the form on validation failure, preserving inputs.
-func renderPostForm(ctx context.Context, w http.ResponseWriter, user store.User, title string, p store.Post, cats []store.Category, errMsg string) error {
-	body := PostForm(PostFormProps{P: p, Cats: cats, ErrMsg: errMsg})
-	return AdminShellWith(AdminShellWithProps{Title: title, User: user, Children: body}).Render(ctx, w)
-}
-
 // postFormAction returns the POST URL for the form: create when ID==0,
 // update otherwise. Lives in Go code so the markup stays declarative; the
 // attribute hole auto-unwraps the (string, error) pair and any error
 // propagates through the render instead of being swallowed.
 func postFormAction(ctx context.Context, p store.Post) (string, error) {
 	if p.ID == 0 {
-		return components.URL(ctx, postCreateHandler{})
+		return structpages.URLFor(ctx, postCreateHandler{})
 	}
-	return components.URL(ctx, postUpdateHandler{}, "id", p.ID)
+	return structpages.URLFor(ctx, postUpdateHandler{}, "id", p.ID)
 }

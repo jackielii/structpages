@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 	"github.com/jackielii/structpages/examples/blog/ui/layout"
@@ -42,7 +43,7 @@ func (categoryPage) Props(r *http.Request, s *store.Store) (categoryProps, error
 			PageSize: store.DefaultPageSize,
 			Total:    total,
 			URL: func(target int) (string, error) {
-				return components.URL(ctx,
+				return structpages.URLFor(ctx,
 					[]any{categoryPage{}, "?page={page}"},
 					"page", target,
 				)
@@ -65,6 +66,8 @@ component (p categoryPage) Page(props categoryProps) {
 				<PostCard p={post}/>
 			} }
 		</div>
-		<div class="mt-6">{ components.Pagination(props.Pagination) }</div>
+		<div class="mt-6">
+			<components.Pagination { props.Pagination... }/>
+		</div>
 	</layout.PublicShell>
 }
