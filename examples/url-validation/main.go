@@ -53,8 +53,8 @@ func main() {
 }
 
 // htmlResp is a minimal renderable component: structpages accepts any
-// type with `Render(context.Context, io.Writer) error`, so we skip
-// templ entirely and write HTML strings directly.
+// type with `Render(context.Context, io.Writer) error`, so we write
+// HTML strings directly (no template engine involved).
 type htmlResp string
 
 func (h htmlResp) Render(_ context.Context, w io.Writer) error {

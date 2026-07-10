@@ -37,7 +37,7 @@ func (commentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store
 	return nil
 }
 
-// resultsCount is a tiny helper used by search.templ.
+// resultsCount is a tiny helper used by search.gsx.
 func resultsCount(n int) string { return fmt.Sprintf("%d result%s", n, plural(n)) }
 
 func plural(n int) string {

@@ -17,7 +17,7 @@ func SeedDemo(s *Store) {
 		{
 			Slug:       "welcome",
 			Title:      "Welcome to the structpages blog example",
-			Body:       "This blog is rendered by structpages, a struct-based router for Go that pairs with templ and HTMX. Read on for the patterns it demonstrates.",
+			Body:       "This blog is rendered by structpages, a struct-based router for Go that pairs with gsx and HTMX. Read on for the patterns it demonstrates.",
 			AuthorID:   1,
 			CategoryID: news.ID,
 			Published:  true,
@@ -25,7 +25,7 @@ func SeedDemo(s *Store) {
 		},
 		{
 			Slug:       "module-organization",
-			Title:      "Organizing templ components like a React app",
+			Title:      "Organizing gsx components like a React app",
 			Body:       "Each feature lives in its own Go package. Shared UI primitives live under ui/components and can be imported from any feature. Cross-feature links use Ref to avoid import cycles.",
 			AuthorID:   1,
 			CategoryID: guides.ID,
