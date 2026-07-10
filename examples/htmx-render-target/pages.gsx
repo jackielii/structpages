@@ -108,17 +108,15 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (dash
 	switch {
 	case target.Is(UserStatsWidget):
 		stats := loadUserStats()
-		return dashboardData{}, structpages.RenderComponent(UserStatsWidget(stats))
+		return dashboardData{}, structpages.RenderComponent(<UserStatsWidget { stats... }/>)
 
 	case target.Is(SalesChartWidget):
 		sales := loadSalesData()
-		return dashboardData{}, structpages.RenderComponent(SalesChartWidget(sales))
+		return dashboardData{}, structpages.RenderComponent(<SalesChartWidget { sales... }/>)
 
 	case target.Is(NotificationsList):
 		notifications := loadNotifications()
-		return dashboardData{}, structpages.RenderComponent(NotificationsList(NotificationsListProps{
-			Notifications: notifications,
-		}))
+		return dashboardData{}, structpages.RenderComponent(<NotificationsList notifications={notifications}/>)
 
 	case target.Is(p.Page):
 		return dashboardData{

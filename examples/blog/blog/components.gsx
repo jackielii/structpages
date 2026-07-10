@@ -28,7 +28,7 @@ component PostCard(p store.Post) {
 }
 
 // CommentsList is a standalone function component so the commentHandler
-// can re-render it from ServeHTTP via RenderComponent(CommentsList(...)).
+// can re-render it from ServeHTTP via RenderComponent(<CommentsList .../>).
 // It owns its own wrapper id, which doubles as the HTMX hx-target.
 component CommentsList(comments []store.Comment) {
 	<div id={CommentsList |> id} class="space-y-3">

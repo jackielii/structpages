@@ -34,11 +34,21 @@ type dashboardProps struct {
 func (p dashboardPage) Props(r *http.Request, s *store.Store, target structpages.RenderTarget) (dashboardProps, error) {
 	switch {
 	case target.Is(StatsGrid):
-		return dashboardProps{}, structpages.RenderComponent(StatsGrid(StatsGridProps{Stats: s.Stats()}))
+		return dashboardProps{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line dashboard.gsx:31:56
+			_gsxgw.Node(ctx, StatsGrid(StatsGridProps{Stats: s.Stats()}))
+			return _gsxgw.Err()
+		}))
 
 	case target.Is(RecentPostsCard):
 		posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 5})
-		return dashboardProps{}, structpages.RenderComponent(RecentPostsCard(RecentPostsCardProps{Posts: posts}))
+		return dashboardProps{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line dashboard.gsx:35:56
+			_gsxgw.Node(ctx, RecentPostsCard(RecentPostsCardProps{Posts: posts}))
+			return _gsxgw.Err()
+		}))
 	}
 
 	user, _ := auth.UserFromContext(r.Context())

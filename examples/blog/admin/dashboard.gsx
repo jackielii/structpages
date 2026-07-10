@@ -28,11 +28,11 @@ type dashboardProps struct {
 func (p dashboardPage) Props(r *http.Request, s *store.Store, target structpages.RenderTarget) (dashboardProps, error) {
 	switch {
 	case target.Is(StatsGrid):
-		return dashboardProps{}, structpages.RenderComponent(StatsGrid(StatsGridProps{Stats: s.Stats()}))
+		return dashboardProps{}, structpages.RenderComponent(<StatsGrid stats={s.Stats()}/>)
 
 	case target.Is(RecentPostsCard):
 		posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 5})
-		return dashboardProps{}, structpages.RenderComponent(RecentPostsCard(RecentPostsCardProps{Posts: posts}))
+		return dashboardProps{}, structpages.RenderComponent(<RecentPostsCard posts={posts}/>)
 	}
 
 	user, _ := auth.UserFromContext(r.Context())

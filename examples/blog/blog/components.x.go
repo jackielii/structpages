@@ -63,7 +63,7 @@ func PostCard(_gsxp PostCardProps) _gsxrt.Node {
 }
 
 // CommentsList is a standalone function component so the commentHandler
-// can re-render it from ServeHTTP via RenderComponent(CommentsList(...)).
+// can re-render it from ServeHTTP via RenderComponent(<CommentsList .../>).
 // It owns its own wrapper id, which doubles as the HTMX hx-target.
 
 type CommentsListProps struct {
