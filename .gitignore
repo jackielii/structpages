@@ -24,6 +24,7 @@ go.work.sum
 # env file
 .env
 .claude/
+/.worktrees/
 
 # Superpowers / in-progress design docs — local-only
 docs/superpowers/
