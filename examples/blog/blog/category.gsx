@@ -68,7 +68,7 @@ component (p categoryPage) Page(props categoryProps) {
 			} }
 		</div>
 		<div class="mt-6">
-			<components.Pagination { props.Pagination... }/>
+			<components.Pagination p={props.Pagination}/>
 		</div>
 	</layout.PublicShell>
 }

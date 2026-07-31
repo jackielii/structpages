@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/auth"
 	"github.com/jackielii/structpages/examples/blog/store"
@@ -29,10 +30,8 @@ type postsPages struct {
 }
 
 // AdminShellWith is a tiny gsx wrapper used by handlers that need to render a
-// custom body inside AdminShell from Go code. The body is passed as the
-// implicit Children prop — from Go: AdminShellWith(AdminShellWithProps{Title: …,
-// User: …, Children: body}).
-component AdminShellWith(title string, user store.User) {
+// custom body inside AdminShell — from Go: AdminShellWith(title, user, body).
+component AdminShellWith(title string, user store.User, children gsx.Node) {
 	<layout.AdminShell title={title} current={user}>
 		{ children }
 	</layout.AdminShell>
@@ -212,8 +211,7 @@ component PostForm(p store.Post, cats []store.Category, errMsg string) {
 		</label>
 		<components.Textarea name="body" label="Body" value={p.Body} errMsg=""/>
 		<label class="flex items-center gap-2 text-sm">
-			<input type="checkbox" name="published" checked={p.Published}/>
-			Publish immediately
+			<input type="checkbox" name="published" checked={p.Published}/>Publish immediately
 		</label>
 		<div class="flex items-center gap-2">
 			<components.Button label="Save" type="submit"/>

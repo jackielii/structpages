@@ -1,5 +1,7 @@
 package main
 
+import "github.com/gsxhq/gsx"
+
 // Page structs + route tags are plain Go — pass through unchanged.
 type index struct {
 	product `route:"/product Product"`
@@ -40,7 +42,7 @@ component (p contact) Page() {
 	</Layout>
 }
 
-component Layout() {
+component Layout(children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>

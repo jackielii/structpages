@@ -8,6 +8,7 @@ import (
 	"time"
 
 	_gsxctx "context"
+	"github.com/gsxhq/gsx"
 	_gsxrt "github.com/gsxhq/gsx"
 	_gsxstd "github.com/gsxhq/gsx/std"
 	"github.com/jackielii/structpages"
@@ -15,140 +16,159 @@ import (
 	_gsxio "io"
 )
 
+//line pages.gsx:12:1
 // Shared standalone function components (can be used across multiple pages).
 // These demonstrate the power of RenderTarget — no wrapper methods needed.
 
-//line pages.gsx:14:1
+//line pages.gsx:15:1
 func UserStatsWidget(stats UserStats) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-		var _gsxnum [32]byte
-//line pages.gsx:15:2
-		_gsxgw.S("<div class=\"widget\">")
-//line pages.gsx:16:3
-		_gsxgw.S("<h3>User Statistics</h3>")
-//line pages.gsx:17:3
-		_gsxgw.S("<p>Active Users: ")
-//line pages.gsx:17:20
-		_gsxgw.IntInto(_gsxnum[:], int64(stats.ActiveUsers))
-		_gsxgw.S("</p>")
-//line pages.gsx:18:3
-		_gsxgw.S("<p>New Today: ")
-//line pages.gsx:18:17
-		_gsxgw.IntInto(_gsxnum[:], int64(stats.NewToday))
-		_gsxgw.S("</p>")
-//line pages.gsx:19:3
-		_gsxgw.S("<button type=\"button\"")
-		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-get=\"")
-		_gsxgw.URL(string(_gsxv0))
-		_gsxgw.S("\"")
-		_gsxv1, _gsxerr := _gsxf0.IDTarget(ctx, (UserStatsWidget))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-target=\"")
-		_gsxgw.AttrValue(string(_gsxv1))
-		_gsxgw.S("\">Refresh Stats</button></div>")
-		return _gsxgw.Err()
+		return _gsxrenderUserStatsWidget(ctx, _gsxgw, stats)
 	})
 }
 
-//line pages.gsx:29:1
+func _gsxrenderUserStatsWidget(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, stats UserStats) error {
+	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
+		return _gsxerr
+	}
+	var _gsxnum [32]byte
+//line pages.gsx:16:2
+	_gsxgw.S("<div class=\"widget\">")
+//line pages.gsx:17:3
+	_gsxgw.S("<h3>User Statistics</h3>")
+//line pages.gsx:18:3
+	_gsxgw.S("<p>Active Users: ")
+//line pages.gsx:18:20
+	_gsxgw.IntInto(_gsxnum[:], int64(stats.ActiveUsers))
+	_gsxgw.S("</p>")
+//line pages.gsx:19:3
+	_gsxgw.S("<p>New Today: ")
+//line pages.gsx:19:17
+	_gsxgw.IntInto(_gsxnum[:], int64(stats.NewToday))
+	_gsxgw.S("</p>")
+//line pages.gsx:20:3
+	_gsxgw.S("<button type=\"button\"")
+	_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-get=\"")
+	_gsxgw.AttrValue(string(_gsxv0))
+	_gsxgw.S("\"")
+	_gsxv1, _gsxerr := _gsxf0.IDTarget(ctx, (UserStatsWidget))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-target=\"")
+	_gsxgw.AttrValue(string(_gsxv1))
+	_gsxgw.S("\">Refresh Stats</button></div>")
+	return _gsxgw.Err()
+}
+
+//line pages.gsx:30:1
 func SalesChartWidget(data SalesData) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-		var _gsxnum [32]byte
-//line pages.gsx:30:2
-		_gsxgw.S("<div class=\"widget\">")
-//line pages.gsx:31:3
-		_gsxgw.S("<h3>Sales Chart</h3>")
+		return _gsxrenderSalesChartWidget(ctx, _gsxgw, data)
+	})
+}
+
+func _gsxrenderSalesChartWidget(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, data SalesData) error {
+	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
+		return _gsxerr
+	}
+	var _gsxnum [32]byte
+//line pages.gsx:31:2
+	_gsxgw.S("<div class=\"widget\">")
 //line pages.gsx:32:3
-		_gsxgw.S("<div class=\"chart\">")
-//line pages.gsx:33:4
-		for _, point := range data.Points {
-//line pages.gsx:34:5
-			_gsxgw.S("<div class=\"bar\" data-h=\"")
-			_gsxgw.IntInto(_gsxnum[:], int64(point.Value))
-			_gsxgw.S("\" style=\"width: 30px; background: blue; display: inline-block; margin: 2px;\"></div>")
-		}
-		_gsxgw.S("</div>")
-//line pages.gsx:41:3
-		_gsxgw.S("<p>Total Sales: $")
-//line pages.gsx:41:20
-		_gsxgw.Text(string(_gsxstd.Format((data.Total), "%.2f")))
-		_gsxgw.S("</p>")
+	_gsxgw.S("<h3>Sales Chart</h3>")
+//line pages.gsx:33:3
+	_gsxgw.S("<div class=\"chart\">")
+//line pages.gsx:34:4
+	for _, point := range data.Points {
+//line pages.gsx:35:5
+		_gsxgw.S("<div class=\"bar\" data-h=\"")
+		_gsxgw.IntInto(_gsxnum[:], int64(point.Value))
+		_gsxgw.S("\" style=\"width: 30px; background: blue; display: inline-block; margin: 2px;\"></div>")
+	}
+	_gsxgw.S("</div>")
 //line pages.gsx:42:3
-		_gsxgw.S("<button type=\"button\"")
-		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-get=\"")
-		_gsxgw.URL(string(_gsxv2))
-		_gsxgw.S("\"")
-		_gsxv3, _gsxerr := _gsxf0.IDTarget(ctx, (SalesChartWidget))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-target=\"")
-		_gsxgw.AttrValue(string(_gsxv3))
-		_gsxgw.S("\">Refresh Sales</button></div>")
-		return _gsxgw.Err()
-	})
+	_gsxgw.S("<p>Total Sales: $")
+//line pages.gsx:42:20
+	_gsxgw.Text(string(_gsxstd.Printf((data.Total), "%.2f")))
+	_gsxgw.S("</p>")
+//line pages.gsx:43:3
+	_gsxgw.S("<button type=\"button\"")
+	_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-get=\"")
+	_gsxgw.AttrValue(string(_gsxv2))
+	_gsxgw.S("\"")
+	_gsxv3, _gsxerr := _gsxf0.IDTarget(ctx, (SalesChartWidget))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-target=\"")
+	_gsxgw.AttrValue(string(_gsxv3))
+	_gsxgw.S("\">Refresh Sales</button></div>")
+	return _gsxgw.Err()
 }
 
-type NotificationsListProps struct {
-	Notifications []Notification
-}
-
-//line pages.gsx:52:1
-func NotificationsList(_gsxp NotificationsListProps) _gsxrt.Node {
+//line pages.gsx:53:1
+func NotificationsList(notifications []Notification) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		notifications := _gsxp.Notifications
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:53:2
-		_gsxgw.S("<div class=\"widget\">")
-//line pages.gsx:54:3
-		_gsxgw.S("<h3>Recent Notifications</h3>")
-//line pages.gsx:55:3
-		_gsxgw.S("<ul>")
-//line pages.gsx:56:4
-		for _, n := range notifications {
-//line pages.gsx:57:5
-			_gsxgw.S("<li>")
-//line pages.gsx:58:6
-			_gsxgw.Text(string(n.Message))
-			_gsxgw.S(" ")
-//line pages.gsx:58:20
-			_gsxgw.S("<small>(")
-//line pages.gsx:58:28
-			_gsxgw.Text(string(n.Time.Format("15:04")))
-			_gsxgw.S(")</small></li>")
-		}
-		_gsxgw.S("</ul>")
-//line pages.gsx:62:3
-		_gsxgw.S("<button type=\"button\"")
-		_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-get=\"")
-		_gsxgw.URL(string(_gsxv4))
-		_gsxgw.S("\"")
-		_gsxv5, _gsxerr := _gsxf0.IDTarget(ctx, (NotificationsList))
-		if _gsxerr != nil {
-			return _gsxerr
-		}
-		_gsxgw.S(" hx-target=\"")
-		_gsxgw.AttrValue(string(_gsxv5))
-		_gsxgw.S("\">Refresh Notifications</button></div>")
-		return _gsxgw.Err()
+		return _gsxrenderNotificationsList(ctx, _gsxgw, notifications)
 	})
 }
+
+func _gsxrenderNotificationsList(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, notifications []Notification) error {
+	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
+		return _gsxerr
+	}
+//line pages.gsx:54:2
+	_gsxgw.S("<div class=\"widget\">")
+//line pages.gsx:55:3
+	_gsxgw.S("<h3>Recent Notifications</h3>")
+//line pages.gsx:56:3
+	_gsxgw.S("<ul>")
+//line pages.gsx:57:4
+	for _, n := range notifications {
+//line pages.gsx:58:5
+		_gsxgw.S("<li>")
+//line pages.gsx:59:6
+		_gsxgw.Text(string(n.Message))
+		_gsxgw.S(" ")
+//line pages.gsx:59:20
+		_gsxgw.S("<small>(")
+//line pages.gsx:59:28
+		_gsxgw.Text(string(n.Time.Format("15:04")))
+		_gsxgw.S(")</small></li>")
+	}
+	_gsxgw.S("</ul>")
+//line pages.gsx:63:3
+	_gsxgw.S("<button type=\"button\"")
+	_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (dashboard{}))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-get=\"")
+	_gsxgw.AttrValue(string(_gsxv4))
+	_gsxgw.S("\"")
+	_gsxv5, _gsxerr := _gsxf0.IDTarget(ctx, (NotificationsList))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-target=\"")
+	_gsxgw.AttrValue(string(_gsxv5))
+	_gsxgw.S("\">Refresh Notifications</button></div>")
+	return _gsxgw.Err()
+}
+
+/*line pages.gsx:71:2*/
 
 // Dashboard page.
 
@@ -191,28 +211,28 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (dash
 		stats := loadUserStats()
 		return dashboardData{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:111:55
-			_gsxgw.Node(ctx, UserStatsWidget(stats))
+//line pages.gsx:112:55
+			_gsxgw.NodeResult(_gsxrenderUserStatsWidget(ctx, _gsxgw, stats))
 			return _gsxgw.Err()
-		}))
+		}) /*line pages.gsx:112:87*/)
 
 	case target.Is(SalesChartWidget):
 		sales := loadSalesData()
 		return dashboardData{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:115:55
-			_gsxgw.Node(ctx, SalesChartWidget(sales))
+//line pages.gsx:116:55
+			_gsxgw.NodeResult(_gsxrenderSalesChartWidget(ctx, _gsxgw, sales))
 			return _gsxgw.Err()
-		}))
+		}) /*line pages.gsx:116:87*/)
 
 	case target.Is(NotificationsList):
 		notifications := loadNotifications()
 		return dashboardData{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:119:55
-			_gsxgw.Node(ctx, NotificationsList(NotificationsListProps{Notifications: notifications}))
+//line pages.gsx:120:55
+			_gsxgw.NodeResult(_gsxrenderNotificationsList(ctx, _gsxgw, notifications))
 			return _gsxgw.Err()
-		}))
+		}) /*line pages.gsx:120:105*/)
 
 	case target.Is(p.Page):
 		return dashboardData{
@@ -230,22 +250,22 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (dash
 	}
 }
 
-//line pages.gsx:137:1
+//line pages.gsx:138:1
 func (p dashboard) Page(props dashboardData) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:138:2
-		_gsxgw.Node(ctx, Html(HtmlProps{Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+//line pages.gsx:139:2
+		_gsxgw.NodeResult(_gsxrenderHtml(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:139:3
-			_gsxgw.S("<h1>Dashboard</h1>")
 //line pages.gsx:140:3
+			_gsxgw.S("<h1>Dashboard</h1>")
+//line pages.gsx:141:3
 			_gsxgw.S("<p>This example demonstrates the RenderTarget API with standalone function components.</p>")
-//line pages.gsx:143:3
+//line pages.gsx:144:3
 			_gsxgw.S("<p>Click \"Refresh\" buttons to see HTMX partial updates — each widget loads only its own data!</p>")
-//line pages.gsx:146:3
+//line pages.gsx:147:3
 			_gsxgw.S("<div style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;\">")
-//line pages.gsx:149:4
+//line pages.gsx:150:4
 			_gsxgw.S("<div")
 			_gsxv6, _gsxerr := _gsxf0.ID(ctx, (UserStatsWidget))
 			if _gsxerr != nil {
@@ -254,10 +274,10 @@ func (p dashboard) Page(props dashboardData) _gsxrt.Node {
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv6))
 			_gsxgw.S("\">")
-//line pages.gsx:150:5
-			_gsxgw.Node(ctx, UserStatsWidget(props.Stats))
+//line pages.gsx:151:5
+			_gsxgw.NodeResult(_gsxrenderUserStatsWidget(ctx, _gsxgw, props.Stats))
 			_gsxgw.S("</div>")
-//line pages.gsx:152:4
+//line pages.gsx:153:4
 			_gsxgw.S("<div")
 			_gsxv7, _gsxerr := _gsxf0.ID(ctx, (SalesChartWidget))
 			if _gsxerr != nil {
@@ -266,10 +286,10 @@ func (p dashboard) Page(props dashboardData) _gsxrt.Node {
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv7))
 			_gsxgw.S("\">")
-//line pages.gsx:153:5
-			_gsxgw.Node(ctx, SalesChartWidget(props.Sales))
+//line pages.gsx:154:5
+			_gsxgw.NodeResult(_gsxrenderSalesChartWidget(ctx, _gsxgw, props.Sales))
 			_gsxgw.S("</div>")
-//line pages.gsx:155:4
+//line pages.gsx:156:4
 			_gsxgw.S("<div")
 			_gsxv8, _gsxerr := _gsxf0.ID(ctx, (NotificationsList))
 			if _gsxerr != nil {
@@ -278,42 +298,44 @@ func (p dashboard) Page(props dashboardData) _gsxrt.Node {
 			_gsxgw.S(" id=\"")
 			_gsxgw.AttrValue(string(_gsxv8))
 			_gsxgw.S("\">")
-//line pages.gsx:156:5
-			_gsxgw.Node(ctx, NotificationsList(NotificationsListProps{Notifications: props.Notifications}))
+//line pages.gsx:157:5
+			_gsxgw.NodeResult(_gsxrenderNotificationsList(ctx, _gsxgw, props.Notifications))
 			_gsxgw.S("</div></div>")
-//line pages.gsx:159:3
+//line pages.gsx:160:3
 			_gsxgw.S("<div style=\"margin-top: 2rem; padding: 1rem; background: #f0f0f0; border-radius: 4px;\">")
-//line pages.gsx:162:4
-			_gsxgw.S("<h4>How it works:</h4>")
 //line pages.gsx:163:4
+			_gsxgw.S("<h4>How it works:</h4>")
+//line pages.gsx:164:4
 			_gsxgw.S("<ul>")
-//line pages.gsx:164:5
+//line pages.gsx:165:5
 			_gsxgw.S("<li>✅ ")
-//line pages.gsx:165:10
+//line pages.gsx:166:10
 			_gsxgw.S("<strong>Standalone functions</strong> — UserStatsWidget, SalesChartWidget, NotificationsList are shared components</li>")
-//line pages.gsx:169:5
+//line pages.gsx:170:5
 			_gsxgw.S("<li>✅ ")
-//line pages.gsx:170:10
+//line pages.gsx:171:10
 			_gsxgw.S("<strong>Conditional loading</strong> — Props checks target.Is() and loads only needed data</li>")
-//line pages.gsx:174:5
+//line pages.gsx:175:5
 			_gsxgw.S("<li>✅ ")
-//line pages.gsx:175:10
-			_gsxgw.S("<strong>RenderComponent (direct)</strong> — construct the gsx component with its props struct and pass directly</li>")
-//line pages.gsx:179:5
+//line pages.gsx:176:10
+			_gsxgw.S("<strong>RenderComponent (direct)</strong> — construct the gsx component as an element literal and pass directly</li>")
+//line pages.gsx:180:5
 			_gsxgw.S("<li>✅ ")
-//line pages.gsx:180:10
+//line pages.gsx:181:10
 			_gsxgw.S("<strong>No wrapper methods</strong> — No need to create dashboard.UserStats() method!</li>")
-//line pages.gsx:184:5
+//line pages.gsx:185:5
 			_gsxgw.S("<li>✅ ")
-//line pages.gsx:185:10
+//line pages.gsx:186:10
 			_gsxgw.S("<strong>HTMX integration</strong> — HTMXRenderTarget automatically handles partial updates</li></ul></div>")
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }
 
 // Mock data loaders (simulating database queries).
+//
+//line pages.gsx:195:1
 func loadUserStats() UserStats {
 	return UserStats{
 		ActiveUsers: 1000 + rand.IntN(500),
@@ -361,83 +383,82 @@ func loadNotifications() []Notification {
 
 // Html is the full-page layout.
 
-type HtmlProps struct {
-	Children _gsxrt.Node
+//line pages.gsx:242:1
+func Html(children gsx.Node) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+		return _gsxrenderHtml(ctx, _gsxgw, children)
+	})
 }
 
-//line pages.gsx:241:1
-func Html(_gsxp HtmlProps) _gsxrt.Node {
-	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		children := _gsxp.Children
-		_gsxgw := _gsxrt.W(_gsxw)
-		_gsxgw.S("<!DOCTYPE html>")
-//line pages.gsx:243:2
-		_gsxgw.S("<html lang=\"en\">")
-//line pages.gsx:244:3
-		_gsxgw.S("<head>")
-//line pages.gsx:245:4
-		_gsxgw.S("<link rel=\"stylesheet\" href=\"https://unpkg.com/missing.css@1.1.3\"/>")
+func _gsxrenderHtml(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, children gsx.Node) error {
+	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S("<!DOCTYPE html>")
+//line pages.gsx:244:2
+	_gsxgw.S("<html lang=\"en\">")
+//line pages.gsx:245:3
+	_gsxgw.S("<head>")
 //line pages.gsx:246:4
-		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
-		_gsxgw.Nonce(ctx)
-		_gsxgw.S("></script>")
+	_gsxgw.S("<link rel=\"stylesheet\" href=\"https://unpkg.com/missing.css@1.1.3\">")
 //line pages.gsx:247:4
-		_gsxgw.S("<title>RenderTarget API Example</title>")
+	_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
+	_gsxgw.Nonce(ctx)
+	_gsxgw.S("></script>")
 //line pages.gsx:248:4
-		_gsxgw.S("<style")
-		_gsxgw.Nonce(ctx)
-		_gsxgw.S(">\n\t\t\t\t.widget {\n\t\t\t\t\tpadding: 1rem;\n\t\t\t\t\tborder: 1px solid #ddd;\n\t\t\t\t\tborder-radius: 8px;\n\t\t\t\t\tbackground: white;\n\t\t\t\t}\n\t\t\t\t.widget h3 {\n\t\t\t\t\tmargin-top: 0;\n\t\t\t\t}\n\t\t\t\t.chart {\n\t\t\t\t\tdisplay: flex;\n\t\t\t\t\talign-items: flex-end;\n\t\t\t\t\theight: 150px;\n\t\t\t\t\tmargin: 1rem 0;\n\t\t\t\t}\n\t\t\t</style></head>")
-//line pages.gsx:266:3
-		_gsxgw.S("<body>")
-//line pages.gsx:267:4
-		_gsxgw.S("<main>")
-//line pages.gsx:267:10
-		_gsxgw.Node(ctx, children)
-		_gsxgw.S("</main>")
+	_gsxgw.S("<title>RenderTarget API Example</title>")
+//line pages.gsx:249:4
+	_gsxgw.S("<style")
+	_gsxgw.Nonce(ctx)
+	_gsxgw.S(">\n.widget {\n\tpadding: 1rem;\n\tborder: 1px solid #ddd;\n\tborder-radius: 8px;\n\tbackground: white;\n}\n.widget h3 {\n\tmargin-top: 0;\n}\n.chart {\n\tdisplay: flex;\n\talign-items: flex-end;\n\theight: 150px;\n\tmargin: 1rem 0;\n}\n</style></head>")
+//line pages.gsx:267:3
+	_gsxgw.S("<body>")
 //line pages.gsx:268:4
-		_gsxgw.S("<script")
-		_gsxgw.Nonce(ctx)
-		_gsxgw.S(">\n\t\t\t\t// Optional: Add some basic HTMX event listeners for debugging\n\t\t\t\tdocument.body.addEventListener('htmx:beforeRequest', (evt) => {\n\t\t\t\t\tconsole.log('HTMX Request:', evt.detail);\n\t\t\t\t});\n\t\t\t\tdocument.body.addEventListener('htmx:afterRequest', (evt) => {\n\t\t\t\t\tconsole.log('HTMX Response:', evt.detail);\n\t\t\t\t});\n\t\t\t</script></body></html>")
-		return _gsxgw.Err()
-	})
+	_gsxgw.S("<main>")
+//line pages.gsx:268:10
+	_gsxgw.Node(ctx, children)
+	_gsxgw.S("</main>")
+//line pages.gsx:269:4
+	_gsxgw.S("<script")
+	_gsxgw.Nonce(ctx)
+	_gsxgw.S(">\n// Optional: Add some basic HTMX event listeners for debugging\ndocument.body.addEventListener('htmx:beforeRequest', (evt) => {\n\tconsole.log('HTMX Request:', evt.detail);\n});\ndocument.body.addEventListener('htmx:afterRequest', (evt) => {\n\tconsole.log('HTMX Response:', evt.detail);\n});\n</script></body></html>")
+	return _gsxgw.Err()
 }
 
-type ErrorPageProps struct {
-	Err error
-}
-
-//line pages.gsx:281:1
-func ErrorPage(_gsxp ErrorPageProps) _gsxrt.Node {
+//line pages.gsx:282:1
+func ErrorPage(err error) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		err := _gsxp.Err
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:282:2
-		_gsxgw.Node(ctx, Html(HtmlProps{Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+//line pages.gsx:283:2
+		_gsxgw.NodeResult(_gsxrenderHtml(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:283:3
-			_gsxgw.Node(ctx, ErrorComp(ErrorCompProps{Err: err}))
+//line pages.gsx:284:3
+			_gsxgw.NodeResult(_gsxrenderErrorComp(ctx, _gsxgw, err))
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }
 
-type ErrorCompProps struct {
-	Err error
-}
-
-//line pages.gsx:287:1
-func ErrorComp(_gsxp ErrorCompProps) _gsxrt.Node {
+//line pages.gsx:288:1
+func ErrorComp(err error) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		err := _gsxp.Err
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:288:2
-		_gsxgw.S("<h1>Error</h1>")
-//line pages.gsx:289:2
-		_gsxgw.S("<p>")
-//line pages.gsx:289:5
-		_gsxgw.Text(string(err.Error()))
-		_gsxgw.S("</p>")
-		return _gsxgw.Err()
+		return _gsxrenderErrorComp(ctx, _gsxgw, err)
 	})
+}
+
+func _gsxrenderErrorComp(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, err error) error {
+	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
+		return _gsxerr
+	}
+//line pages.gsx:289:2
+	_gsxgw.S("<h1>Error</h1>")
+//line pages.gsx:290:2
+	_gsxgw.S("<p>")
+//line pages.gsx:290:5
+	_gsxgw.Text(string(err.Error()))
+	_gsxgw.S("</p>")
+	return _gsxgw.Err()
 }

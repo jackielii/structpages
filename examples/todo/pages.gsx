@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 )
 
@@ -113,7 +114,7 @@ component TodoList() {
 	} }
 }
 
-component Layout() {
+component Layout(children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>

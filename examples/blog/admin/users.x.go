@@ -18,6 +18,7 @@ import (
 	_gsxio "io"
 )
 
+//line users.gsx:15:1
 type usersPages struct {
 	userList   userListPage      `route:"/{$} All Users"`
 	userCreate userCreateHandler `route:"POST /{$} Create"`
@@ -41,14 +42,14 @@ func (p userListPage) Page(props userListProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line users.gsx:34:2
-		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Users", Current: props.User, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.AdminShell("Users", props.User, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line users.gsx:35:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Users</h1>")
 //line users.gsx:36:3
 			_gsxgw.S("<div class=\"grid gap-4 md:grid-cols-2\">")
 //line users.gsx:37:4
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Existing users", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw.Node(ctx, components.Card("Existing users", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 				_gsxgw := _gsxrt.W(_gsxw)
 //line users.gsx:38:5
 				_gsxgw.S("<ul class=\"divide-y text-sm\">")
@@ -80,9 +81,9 @@ func (p userListPage) Page(props userListProps) _gsxrt.Node {
 				}
 				_gsxgw.S("</ul>")
 				return _gsxgw.Err()
-			})}))
+			})))
 //line users.gsx:67:4
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Create user", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw.Node(ctx, components.Card("Create user", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 				_gsxgw := _gsxrt.W(_gsxw)
 //line users.gsx:68:5
 				_gsxgw.S("<form method=\"POST\"")
@@ -94,7 +95,7 @@ func (p userListPage) Page(props userListProps) _gsxrt.Node {
 				_gsxgw.URL(string(_gsxv1))
 				_gsxgw.S("\" class=\"space-y-3\">")
 //line users.gsx:73:6
-				_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "username", Label: "Username", Value: "", ErrMsg: ""}))
+				_gsxgw.Node(ctx, components.Input("username", "Username", "", ""))
 //line users.gsx:79:6
 				_gsxgw.S("<label class=\"block text-sm\">")
 //line users.gsx:80:7
@@ -102,23 +103,24 @@ func (p userListPage) Page(props userListProps) _gsxrt.Node {
 //line users.gsx:83:7
 				_gsxgw.S("<input type=\"password\" name=\"password\"")
 				_gsxgw.BoolAttr("required", true)
-				_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"/></label>")
+				_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"></label>")
 //line users.gsx:90:6
 				_gsxgw.S("<label class=\"flex items-center gap-2 text-sm\">")
 //line users.gsx:91:7
-				_gsxgw.S("<input type=\"checkbox\" name=\"is_admin\"/>Grant admin</label>")
-//line users.gsx:94:6
-				_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Create", Attrs: _gsxrt.Attrs{{Key: "type", Value: "submit"}}}))
+				_gsxgw.S("<input type=\"checkbox\" name=\"is_admin\">Grant admin</label>")
+//line users.gsx:93:6
+				_gsxgw.Node(ctx, components.Button("Create", _gsxrt.Attrs{{Key: "type", Value: "submit"}}))
 				_gsxgw.S("</form>")
 				return _gsxgw.Err()
-			})}))
+			})))
 			_gsxgw.S("</div>")
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }
 
+//line users.gsx:100:1
 type userCreateHandler struct{}
 
 func (userCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store) error {

@@ -4,6 +4,7 @@ package layout
 
 import (
 	_gsxctx "context"
+	"github.com/gsxhq/gsx"
 	_gsxrt "github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
@@ -11,50 +12,44 @@ import (
 	_gsxio "io"
 )
 
+//line layout.gsx:12:1
 // PublicShell wraps reader-facing pages. Cross-feature links (e.g. the admin
 // link) use structpages.Ref so this package never imports admin or blog —
 // keeping the dependency graph one-way (features → ui).
 
-type PublicShellProps struct {
-	Title    string
-	Children _gsxrt.Node
-}
-
-//line layout.gsx:14:1
-func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
+//line layout.gsx:15:1
+func PublicShell(title string, children gsx.Node) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		title := _gsxp.Title
-		children := _gsxp.Children
 		_gsxgw := _gsxrt.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
-//line layout.gsx:16:2
+//line layout.gsx:17:2
 		_gsxgw.S("<html lang=\"en\">")
-//line layout.gsx:17:3
+//line layout.gsx:18:3
 		_gsxgw.S("<head>")
-//line layout.gsx:18:4
-		_gsxgw.S("<meta charset=\"utf-8\"/>")
 //line layout.gsx:19:4
-		_gsxgw.S("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>")
-//line layout.gsx:23:4
+		_gsxgw.S("<meta charset=\"utf-8\">")
+//line layout.gsx:20:4
+		_gsxgw.S("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+//line layout.gsx:24:4
 		_gsxgw.S("<title>")
-//line layout.gsx:23:11
+//line layout.gsx:24:11
 		_gsxgw.Text(string(title))
 		_gsxgw.S(" — structpages blog</title>")
-//line layout.gsx:24:4
+//line layout.gsx:25:4
 		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
 		_gsxgw.Nonce(ctx)
 		_gsxgw.S("></script>")
-//line layout.gsx:25:4
+//line layout.gsx:26:4
 		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
 		_gsxgw.Nonce(ctx)
 		_gsxgw.S("></script></head>")
-//line layout.gsx:27:3
+//line layout.gsx:28:3
 		_gsxgw.S("<body class=\"bg-slate-50 text-slate-900\">")
-//line layout.gsx:28:4
+//line layout.gsx:29:4
 		_gsxgw.S("<header class=\"border-b bg-white\">")
-//line layout.gsx:29:5
+//line layout.gsx:30:5
 		_gsxgw.S("<div class=\"mx-auto flex max-w-3xl items-center justify-between px-4 py-3\">")
-//line layout.gsx:32:6
+//line layout.gsx:33:6
 		_gsxgw.S("<a class=\"text-lg font-semibold\"")
 		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("home")))
 		if _gsxerr != nil {
@@ -63,9 +58,9 @@ func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv0))
 		_gsxgw.S("\">structpages blog</a>")
-//line layout.gsx:38:6
+//line layout.gsx:39:6
 		_gsxgw.S("<nav class=\"flex gap-4 text-sm\">")
-//line layout.gsx:39:7
+//line layout.gsx:40:7
 		_gsxgw.S("<a class=\"hover:underline\"")
 		_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("home")))
 		if _gsxerr != nil {
@@ -74,7 +69,7 @@ func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv1))
 		_gsxgw.S("\">Home</a>")
-//line layout.gsx:45:7
+//line layout.gsx:46:7
 		_gsxgw.S("<a class=\"hover:underline\"")
 		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("search")))
 		if _gsxerr != nil {
@@ -83,7 +78,7 @@ func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv2))
 		_gsxgw.S("\">Search</a>")
-//line layout.gsx:51:7
+//line layout.gsx:52:7
 		_gsxgw.S("<a class=\"text-slate-500 hover:text-slate-900\"")
 		_gsxv3, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("loginPage")))
 		if _gsxerr != nil {
@@ -92,59 +87,51 @@ func PublicShell(_gsxp PublicShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv3))
 		_gsxgw.S("\">Admin</a></nav></div></header>")
-//line layout.gsx:60:4
+//line layout.gsx:61:4
 		_gsxgw.S("<main id=\"content\" class=\"mx-auto max-w-3xl px-4 py-8\">")
-//line layout.gsx:61:5
+//line layout.gsx:62:5
 		_gsxgw.Node(ctx, children)
 		_gsxgw.S("</main></body></html>")
 		return _gsxgw.Err()
 	})
 }
 
+//line layout.gsx:68:1
 // AdminShell wraps the authenticated admin app.
 
-type AdminShellProps struct {
-	Title    string
-	Current  store.User
-	Children _gsxrt.Node
-}
-
-//line layout.gsx:68:1
-func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
+//line layout.gsx:69:1
+func AdminShell(title string, current store.User, children gsx.Node) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		title := _gsxp.Title
-		current := _gsxp.Current
-		children := _gsxp.Children
 		_gsxgw := _gsxrt.W(_gsxw)
 		_gsxgw.S("<!DOCTYPE html>")
-//line layout.gsx:70:2
+//line layout.gsx:71:2
 		_gsxgw.S("<html lang=\"en\">")
-//line layout.gsx:71:3
+//line layout.gsx:72:3
 		_gsxgw.S("<head>")
-//line layout.gsx:72:4
-		_gsxgw.S("<meta charset=\"utf-8\"/>")
 //line layout.gsx:73:4
-		_gsxgw.S("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>")
-//line layout.gsx:77:4
+		_gsxgw.S("<meta charset=\"utf-8\">")
+//line layout.gsx:74:4
+		_gsxgw.S("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+//line layout.gsx:78:4
 		_gsxgw.S("<title>Admin — ")
-//line layout.gsx:77:21
+//line layout.gsx:78:21
 		_gsxgw.Text(string(title))
 		_gsxgw.S("</title>")
-//line layout.gsx:78:4
+//line layout.gsx:79:4
 		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
 		_gsxgw.Nonce(ctx)
 		_gsxgw.S("></script>")
-//line layout.gsx:79:4
+//line layout.gsx:80:4
 		_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
 		_gsxgw.Nonce(ctx)
 		_gsxgw.S("></script></head>")
-//line layout.gsx:81:3
+//line layout.gsx:82:3
 		_gsxgw.S("<body class=\"bg-slate-100 text-slate-900\">")
-//line layout.gsx:82:4
+//line layout.gsx:83:4
 		_gsxgw.S("<header class=\"border-b bg-slate-900 text-slate-100\">")
-//line layout.gsx:83:5
+//line layout.gsx:84:5
 		_gsxgw.S("<div class=\"mx-auto flex max-w-5xl items-center justify-between px-4 py-3\">")
-//line layout.gsx:86:6
+//line layout.gsx:87:6
 		_gsxgw.S("<a class=\"flex items-center gap-2 text-lg font-semibold\"")
 		_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("dashboard")))
 		if _gsxerr != nil {
@@ -153,11 +140,11 @@ func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv4))
 		_gsxgw.S("\">")
-//line layout.gsx:90:7
-		_gsxgw.S("<img src=\"/admin/static/admin-logo.svg\" alt=\"\" class=\"h-5 w-5\"/>blog admin</a>")
-//line layout.gsx:97:6
+//line layout.gsx:91:7
+		_gsxgw.S("<img src=\"/admin/static/admin-logo.svg\" alt=\"\" class=\"h-5 w-5\">blog admin</a>")
+//line layout.gsx:98:6
 		_gsxgw.S("<nav class=\"flex items-center gap-4 text-sm\">")
-//line layout.gsx:98:7
+//line layout.gsx:99:7
 		_gsxgw.S("<a class=\"hover:underline\"")
 		_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("dashboard")))
 		if _gsxerr != nil {
@@ -166,7 +153,7 @@ func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv5))
 		_gsxgw.S("\">Dashboard</a>")
-//line layout.gsx:104:7
+//line layout.gsx:105:7
 		_gsxgw.S("<a class=\"hover:underline\"")
 		_gsxv6, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("postList")))
 		if _gsxerr != nil {
@@ -175,7 +162,7 @@ func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv6))
 		_gsxgw.S("\">Posts</a>")
-//line layout.gsx:110:7
+//line layout.gsx:111:7
 		_gsxgw.S("<a class=\"hover:underline\"")
 		_gsxv7, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("userList")))
 		if _gsxerr != nil {
@@ -184,14 +171,14 @@ func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
 		_gsxgw.S(" href=\"")
 		_gsxgw.URL(string(_gsxv7))
 		_gsxgw.S("\">Users</a>")
-//line layout.gsx:116:7
-		_gsxgw.S("<span class=\"text-slate-400\">|</span>")
 //line layout.gsx:117:7
+		_gsxgw.S("<span class=\"text-slate-400\">|</span>")
+//line layout.gsx:118:7
 		_gsxgw.S("<span class=\"text-slate-300\">")
-//line layout.gsx:117:36
+//line layout.gsx:118:36
 		_gsxgw.Text(string(current.Username))
 		_gsxgw.S("</span>")
-//line layout.gsx:118:7
+//line layout.gsx:119:7
 		_gsxgw.S("<form method=\"POST\"")
 		_gsxv8, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("logout")))
 		if _gsxerr != nil {
@@ -200,11 +187,11 @@ func AdminShell(_gsxp AdminShellProps) _gsxrt.Node {
 		_gsxgw.S(" action=\"")
 		_gsxgw.URL(string(_gsxv8))
 		_gsxgw.S("\" class=\"m-0\">")
-//line layout.gsx:123:8
+//line layout.gsx:124:8
 		_gsxgw.S("<button class=\"text-slate-300 hover:text-white\" type=\"submit\">Sign out</button></form></nav></div></header>")
-//line layout.gsx:133:4
+//line layout.gsx:134:4
 		_gsxgw.S("<main id=\"content\" class=\"mx-auto max-w-5xl px-4 py-8\">")
-//line layout.gsx:134:5
+//line layout.gsx:135:5
 		_gsxgw.Node(ctx, children)
 		_gsxgw.S("</main></body></html>")
 		return _gsxgw.Err()

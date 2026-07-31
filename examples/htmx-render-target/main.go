@@ -39,8 +39,8 @@ func main() {
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("Error: %v", err)
 	if r.Header.Get("Hx-Request") == "true" {
-		ErrorComp(ErrorCompProps{Err: err}).Render(r.Context(), w)
+		ErrorComp(err).Render(r.Context(), w)
 		return
 	}
-	ErrorPage(ErrorPageProps{Err: err}).Render(r.Context(), w)
+	ErrorPage(err).Render(r.Context(), w)
 }

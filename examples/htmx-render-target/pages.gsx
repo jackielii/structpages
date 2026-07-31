@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 )
 
@@ -38,7 +39,7 @@ component SalesChartWidget(data SalesData) {
 				></div>
 			} }
 		</div>
-		<p>Total Sales: ${ data.Total |> format("%.2f") }</p>
+		<p>Total Sales: ${ data.Total |> printf("%.2f") }</p>
 		<button
 			type="button"
 			hx-get={dashboard{} |> url}
@@ -108,11 +109,11 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (dash
 	switch {
 	case target.Is(UserStatsWidget):
 		stats := loadUserStats()
-		return dashboardData{}, structpages.RenderComponent(<UserStatsWidget { stats... }/>)
+		return dashboardData{}, structpages.RenderComponent(<UserStatsWidget stats={stats}/>)
 
 	case target.Is(SalesChartWidget):
 		sales := loadSalesData()
-		return dashboardData{}, structpages.RenderComponent(<SalesChartWidget { sales... }/>)
+		return dashboardData{}, structpages.RenderComponent(<SalesChartWidget data={sales}/>)
 
 	case target.Is(NotificationsList):
 		notifications := loadNotifications()
@@ -147,10 +148,10 @@ component (p dashboard) Page(props dashboardData) {
 			style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 2rem;"
 		>
 			<div id={UserStatsWidget |> id}>
-				<UserStatsWidget { props.Stats... }/>
+				<UserStatsWidget stats={props.Stats}/>
 			</div>
 			<div id={SalesChartWidget |> id}>
-				<SalesChartWidget { props.Sales... }/>
+				<SalesChartWidget data={props.Sales}/>
 			</div>
 			<div id={NotificationsList |> id}>
 				<NotificationsList notifications={props.Notifications}/>
@@ -174,7 +175,7 @@ component (p dashboard) Page(props dashboardData) {
 				<li>
 					✅ <strong>
 						RenderComponent (direct)
-					</strong> — construct the gsx component with its props struct and pass directly
+					</strong> — construct the gsx component as an element literal and pass directly
 				</li>
 				<li>
 					✅ <strong>
@@ -238,7 +239,7 @@ func loadNotifications() []Notification {
 }
 
 // Html is the full-page layout.
-component Html() {
+component Html(children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>

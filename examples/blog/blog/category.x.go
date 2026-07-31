@@ -15,6 +15,7 @@ import (
 	_gsxio "io"
 )
 
+//line category.gsx:13:1
 type categoryPage struct{}
 
 type categoryProps struct {
@@ -63,7 +64,7 @@ func (p categoryPage) Page(props categoryProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line category.gsx:57:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Category.Name, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.PublicShell(props.Category.Name, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line category.gsx:58:3
 			_gsxgw.S("<h1 class=\"mb-1 text-2xl font-semibold\">")
@@ -82,7 +83,7 @@ func (p categoryPage) Page(props categoryProps) _gsxrt.Node {
 //line category.gsx:66:4
 			for _, post := range props.Posts {
 //line category.gsx:67:5
-				_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
+				_gsxgw.NodeResult(_gsxrenderPostCard(ctx, _gsxgw, post))
 			}
 			_gsxgw.S("</div>")
 //line category.gsx:70:3
@@ -91,7 +92,7 @@ func (p categoryPage) Page(props categoryProps) _gsxrt.Node {
 			_gsxgw.Node(ctx, components.Pagination(props.Pagination))
 			_gsxgw.S("</div>")
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }

@@ -50,7 +50,7 @@ component (p searchPage) Page(props searchProps) {
 				autofocus
 			/>
 		</form>
-		<p.Results { props... }/>
+		<p.Results props={props}/>
 	</layout.PublicShell>
 }
 
@@ -61,8 +61,7 @@ component (p searchPage) Results(props searchProps) {
 		} else if len(props.Posts) == 0 {
 			<p class="text-sm text-slate-500">
 				No results for "
-				{ props.Query }
-				".
+				{ props.Query }".
 			</p>
 		} else {
 			<p class="text-xs text-slate-500">

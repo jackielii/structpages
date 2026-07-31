@@ -9,6 +9,8 @@ package components
 
 import (
 	"fmt"
+
+	"github.com/gsxhq/gsx"
 )
 
 type AlertKind string
@@ -38,7 +40,7 @@ component Alert(kind AlertKind, msg string) {
 	} }
 }
 
-component Card(title string) {
+component Card(title string, children gsx.Node) {
 	<section class="rounded-lg border bg-white p-5 shadow-sm">
 		{ if title != "" {
 			<h2 class="mb-3 text-base font-semibold text-slate-900">
@@ -49,10 +51,9 @@ component Card(title string) {
 	</section>
 }
 
-// Button takes only its label. Spreading { attrs... } on the root <button>
-// gives Button a synthesized Attrs prop: unmatched call-site attributes
-// (type, hx-*, etc.) collect there and land on the <button>.
-component Button(label string) {
+// Button takes its label plus an attrs bag: unmatched call-site attributes
+// (type, hx-*, etc.) collect in attrs and land on the root <button>.
+component Button(label string, attrs gsx.Attrs) {
 	<button
 		class="inline-flex items-center rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
 		{ attrs... }

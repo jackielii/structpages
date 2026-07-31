@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/gsxhq/gsx"
 )
 
 type index struct {
@@ -67,7 +69,7 @@ component (p throw) Page() {
 	<p>{ errFunc() }</p>
 }
 
-component Layout() {
+component Layout(children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>

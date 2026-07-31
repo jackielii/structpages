@@ -15,6 +15,7 @@ import (
 	_gsxio "io"
 )
 
+//line search.gsx:12:1
 type searchPage struct{}
 
 type searchProps struct {
@@ -42,7 +43,7 @@ func (p searchPage) Page(props searchProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line search.gsx:35:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Search", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.PublicShell("Search", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line search.gsx:36:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Search</h1>")
@@ -53,7 +54,7 @@ func (p searchPage) Page(props searchProps) _gsxrt.Node {
 				return _gsxerr
 			}
 			_gsxgw.S(" hx-get=\"")
-			_gsxgw.URL(string(_gsxv0))
+			_gsxgw.AttrValue(string(_gsxv0))
 			_gsxgw.S("\"")
 			_gsxv1, _gsxerr := _gsxf0.IDTarget(ctx, (p.Results))
 			if _gsxerr != nil {
@@ -67,11 +68,11 @@ func (p searchPage) Page(props searchProps) _gsxrt.Node {
 			_gsxgw.AttrValue(string(props.Query))
 			_gsxgw.S("\" placeholder=\"Search posts...\" class=\"w-full rounded border border-slate-300 px-3 py-2 text-sm\"")
 			_gsxgw.BoolAttr("autofocus", true)
-			_gsxgw.S("/></form>")
+			_gsxgw.S("></form>")
 //line search.gsx:53:3
 			_gsxgw.Node(ctx, p.Results(props))
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }
@@ -102,15 +103,15 @@ func (p searchPage) Results(props searchProps) _gsxrt.Node {
 				_gsxgw.Text(string(props.Query))
 				_gsxgw.S("\".</p>")
 			} else {
-//line search.gsx:68:4
+//line search.gsx:67:4
 				_gsxgw.S("<p class=\"text-xs text-slate-500\">")
-//line search.gsx:69:5
+//line search.gsx:68:5
 				_gsxgw.Text(string(resultsCount(len(props.Posts))))
 				_gsxgw.S("</p>")
-//line search.gsx:71:4
+//line search.gsx:70:4
 				for _, post := range props.Posts {
-//line search.gsx:72:5
-					_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
+//line search.gsx:71:5
+					_gsxgw.NodeResult(_gsxrenderPostCard(ctx, _gsxgw, post))
 				}
 			}
 		}
@@ -120,6 +121,8 @@ func (p searchPage) Results(props searchProps) _gsxrt.Node {
 }
 
 // resultsCount is a tiny helper for the result count line above.
+//
+//line search.gsx:77:1
 func resultsCount(n int) string { return fmt.Sprintf("%d result%s", n, plural(n)) }
 
 func plural(n int) string {

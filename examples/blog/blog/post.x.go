@@ -17,6 +17,7 @@ import (
 	_gsxio "io"
 )
 
+//line post.gsx:14:1
 type postPage struct{}
 
 type postProps struct {
@@ -47,7 +48,7 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line post.gsx:40:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: props.Post.Title, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.PublicShell(props.Post.Title, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line post.gsx:41:3
 			_gsxgw.S("<article class=\"space-y-3\">")
@@ -89,7 +90,7 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 //line post.gsx:59:4
 			_gsxgw.S("<h2 class=\"text-lg font-semibold\">Comments</h2>")
 //line post.gsx:60:4
-			_gsxgw.Node(ctx, CommentsList(CommentsListProps{Comments: props.Comments}))
+			_gsxgw.NodeResult(_gsxrenderCommentsList(ctx, _gsxgw, props.Comments))
 //line post.gsx:61:4
 			_gsxgw.S("<form class=\"space-y-2 rounded border bg-white p-4\"")
 			_gsxv1, _gsxerr := _gsxf0.URLFor(ctx, (commentHandler{}), "slug", props.Post.Slug)
@@ -97,7 +98,7 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 				return _gsxerr
 			}
 			_gsxgw.S(" hx-post=\"")
-			_gsxgw.URL(string(_gsxv1))
+			_gsxgw.AttrValue(string(_gsxv1))
 			_gsxgw.S("\"")
 			_gsxv2, _gsxerr := _gsxf0.IDTarget(ctx, (CommentsList))
 			if _gsxerr != nil {
@@ -109,17 +110,19 @@ func (p postPage) Page(props postProps) _gsxrt.Node {
 //line post.gsx:68:5
 			_gsxgw.S("<h3 class=\"text-sm font-semibold\">Add a comment</h3>")
 //line post.gsx:69:5
-			_gsxgw.Node(ctx, components.Input(components.InputProps{Name: "author", Label: "Name", Value: "", ErrMsg: ""}))
+			_gsxgw.Node(ctx, components.Input("author", "Name", "", ""))
 //line post.gsx:75:5
-			_gsxgw.Node(ctx, components.Textarea(components.TextareaProps{Name: "body", Label: "Comment", Value: "", ErrMsg: ""}))
+			_gsxgw.Node(ctx, components.Textarea("body", "Comment", "", ""))
 //line post.gsx:81:5
-			_gsxgw.Node(ctx, components.Button(components.ButtonProps{Label: "Post comment", Attrs: _gsxrt.Attrs{{Key: "type", Value: "submit"}}}))
+			_gsxgw.Node(ctx, components.Button("Post comment", _gsxrt.Attrs{{Key: "type", Value: "submit"}}))
 			_gsxgw.S("</form></section>")
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }
+
+/*line post.gsx:85:2*/
 
 // commentHandler illustrates the "ServeHTTP that writes, then re-renders a
 // sibling component" pattern. For HTMX requests we return the refreshed
@@ -146,9 +149,9 @@ func (commentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store
 		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line post.gsx:109:38
-			_gsxgw.Node(ctx, CommentsList(CommentsListProps{Comments: s.ListComments(post.ID)}))
+			_gsxgw.NodeResult(_gsxrenderCommentsList(ctx, _gsxgw, s.ListComments(post.ID)))
 			return _gsxgw.Err()
-		}))
+		}) /*line post.gsx:109:88*/)
 	}
 	http.Redirect(w, r, "/posts/"+slug, http.StatusSeeOther)
 	return nil

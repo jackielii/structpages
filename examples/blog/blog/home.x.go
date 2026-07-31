@@ -14,6 +14,7 @@ import (
 	_gsxio "io"
 )
 
+//line home.gsx:11:1
 type homePage struct{}
 
 type homeProps struct {
@@ -38,7 +39,7 @@ func (p homePage) Page(props homeProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:30:2
-		_gsxgw.Node(ctx, layout.PublicShell(layout.PublicShellProps{Title: "Home", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.PublicShell("Home", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:31:3
 			_gsxgw.S("<h1 class=\"mb-4 text-2xl font-semibold\">Recent Posts</h1>")
@@ -47,11 +48,11 @@ func (p homePage) Page(props homeProps) _gsxrt.Node {
 //line home.gsx:33:4
 			for _, post := range props.Posts {
 //line home.gsx:34:5
-				_gsxgw.Node(ctx, PostCard(PostCardProps{P: post}))
+				_gsxgw.NodeResult(_gsxrenderPostCard(ctx, _gsxgw, post))
 			}
 			_gsxgw.S("</div>")
 //line home.gsx:37:3
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Browse by category", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw.Node(ctx, components.Card("Browse by category", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 				_gsxgw := _gsxrt.W(_gsxw)
 //line home.gsx:38:4
 				_gsxgw.S("<ul class=\"flex flex-wrap gap-2\">")
@@ -74,9 +75,9 @@ func (p homePage) Page(props homeProps) _gsxrt.Node {
 				}
 				_gsxgw.S("</ul>")
 				return _gsxgw.Err()
-			})}))
+			})))
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }

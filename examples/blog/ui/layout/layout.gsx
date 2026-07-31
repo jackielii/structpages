@@ -4,6 +4,7 @@
 package layout
 
 import (
+	"github.com/gsxhq/gsx"
 	"github.com/jackielii/structpages"
 	"github.com/jackielii/structpages/examples/blog/store"
 )
@@ -11,7 +12,7 @@ import (
 // PublicShell wraps reader-facing pages. Cross-feature links (e.g. the admin
 // link) use structpages.Ref so this package never imports admin or blog —
 // keeping the dependency graph one-way (features → ui).
-component PublicShell(title string) {
+component PublicShell(title string, children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -65,7 +66,7 @@ component PublicShell(title string) {
 }
 
 // AdminShell wraps the authenticated admin app.
-component AdminShell(title string, current store.User) {
+component AdminShell(title string, current store.User, children gsx.Node) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>

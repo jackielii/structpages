@@ -16,6 +16,7 @@ import (
 	_gsxio "io"
 )
 
+/*line dashboard.gsx:13:1*/
 type dashboardPage struct{}
 
 type dashboardProps struct {
@@ -37,18 +38,18 @@ func (p dashboardPage) Props(r *http.Request, s *store.Store, target structpages
 		return dashboardProps{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:31:56
-			_gsxgw.Node(ctx, StatsGrid(StatsGridProps{Stats: s.Stats()}))
+			_gsxgw.NodeResult(_gsxrenderStatsGrid(ctx, _gsxgw, s.Stats()))
 			return _gsxgw.Err()
-		}))
+		}) /*line dashboard.gsx:31:86*/)
 
 	case target.Is(RecentPostsCard):
 		posts, _ := s.ListPosts(store.PostFilter{IncludeDraft: true, PageSize: 5})
 		return dashboardProps{}, structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:35:56
-			_gsxgw.Node(ctx, RecentPostsCard(RecentPostsCardProps{Posts: posts}))
+			_gsxgw.NodeResult(_gsxrenderRecentPostsCard(ctx, _gsxgw, posts))
 			return _gsxgw.Err()
-		}))
+		}) /*line dashboard.gsx:35:88*/)
 	}
 
 	user, _ := auth.UserFromContext(r.Context())
@@ -65,7 +66,7 @@ func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:48:2
-		_gsxgw.Node(ctx, layout.AdminShell(layout.AdminShellProps{Title: "Dashboard", Current: props.User, Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw.Node(ctx, layout.AdminShell("Dashboard", props.User, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:49:3
 			_gsxgw.S("<header class=\"mb-6 flex items-end justify-between\">")
@@ -80,7 +81,7 @@ func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
 				return _gsxerr
 			}
 			_gsxgw.S(" hx-get=\"")
-			_gsxgw.URL(string(_gsxv0))
+			_gsxgw.AttrValue(string(_gsxv0))
 			_gsxgw.S("\"")
 			_gsxv1, _gsxerr := _gsxf0.IDTarget(ctx, (StatsGrid))
 			if _gsxerr != nil {
@@ -96,7 +97,7 @@ func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
 				return _gsxerr
 			}
 			_gsxgw.S(" hx-get=\"")
-			_gsxgw.URL(string(_gsxv2))
+			_gsxgw.AttrValue(string(_gsxv2))
 			_gsxgw.S("\"")
 			_gsxv3, _gsxerr := _gsxf0.IDTarget(ctx, (RecentPostsCard))
 			if _gsxerr != nil {
@@ -108,11 +109,11 @@ func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
 //line dashboard.gsx:70:3
 			_gsxgw.S("<section class=\"space-y-6\">")
 //line dashboard.gsx:71:4
-			_gsxgw.Node(ctx, StatsGrid(StatsGridProps{Stats: props.Stats}))
+			_gsxgw.NodeResult(_gsxrenderStatsGrid(ctx, _gsxgw, props.Stats))
 //line dashboard.gsx:72:4
-			_gsxgw.Node(ctx, RecentPostsCard(RecentPostsCardProps{Posts: props.RecentPosts}))
+			_gsxgw.NodeResult(_gsxrenderRecentPostsCard(ctx, _gsxgw, props.RecentPosts))
 //line dashboard.gsx:73:4
-			_gsxgw.Node(ctx, components.Card(components.CardProps{Title: "Try it", Children: _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw.Node(ctx, components.Card("Try it", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 				_gsxgw := _gsxrt.W(_gsxw)
 //line dashboard.gsx:74:5
 				_gsxgw.S("<ul class=\"list-disc space-y-1 pl-5 text-sm text-slate-700\">")
@@ -123,10 +124,10 @@ func (p dashboardPage) Page(props dashboardProps) _gsxrt.Node {
 //line dashboard.gsx:81:6
 				_gsxgw.S("<li>Hard refresh — the full document re-renders via Page().</li></ul>")
 				return _gsxgw.Err()
-			})}))
+			})))
 			_gsxgw.S("</section>")
 			return _gsxgw.Err()
-		})}))
+		})))
 		return _gsxgw.Err()
 	})
 }

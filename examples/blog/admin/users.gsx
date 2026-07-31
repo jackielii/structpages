@@ -88,8 +88,7 @@ component (p userListPage) Page(props userListProps) {
 						/>
 					</label>
 					<label class="flex items-center gap-2 text-sm">
-						<input type="checkbox" name="is_admin"/>
-						Grant admin
+						<input type="checkbox" name="is_admin"/>Grant admin
 					</label>
 					<components.Button label="Create" type="submit"/>
 				</form>

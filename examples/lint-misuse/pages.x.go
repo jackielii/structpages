@@ -11,6 +11,7 @@ import (
 	_gsxio "io"
 )
 
+//line pages.gsx:8:1
 // BadLinks mirrors the templ original — it deliberately uses hard-coded
 // internal URLs as targets for the structpages-lint [url-attr] rule.
 // In gsx the component uses inline params just like the templ version.
@@ -29,16 +30,9 @@ import (
 // bug is orthogonal to XSS escaping, so gsx's auto-escaping would not
 // make such findings go away once [url-attr] learns to scan .gsx.
 
-type BadLinksProps struct {
-	Id   int
-	Name string
-}
-
 //line pages.gsx:25:1
-func BadLinks(_gsxp BadLinksProps) _gsxrt.Node {
+func BadLinks(id int, name string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		id := _gsxp.Id
-		name := _gsxp.Name
 		_gsxgw := _gsxrt.W(_gsxw)
 //line pages.gsx:26:2
 		_gsxgw.S("<a href=\"/login\">Hard-coded internal</a>")
@@ -56,7 +50,7 @@ func BadLinks(_gsxp BadLinksProps) _gsxrt.Node {
 		_gsxgw.S("\">Sprintf</a>")
 //line pages.gsx:30:2
 		_gsxgw.S("<a hx-get=\"")
-		_gsxgw.URL(string("/api/items"))
+		_gsxgw.AttrValue(string("/api/items"))
 		_gsxgw.S("\">Bad hx-get</a>")
 //line pages.gsx:31:2
 		_gsxgw.S("<form action=\"")
