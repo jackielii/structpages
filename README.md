@@ -14,12 +14,12 @@ Struct Pages provides a way to define routing using struct tags and methods. It 
 
 ## Features
 
-- 🏗️ **Struct-based routing** - Define routes using struct tags
-- 🎨 **Templ support** - Built-in integration with [Templ](https://templ.guide/)
-- ⚡ **HTMX-friendly** - Automatic partial rendering support
-- 🔧 **Middleware** - Standard Go middleware pattern
-- 🎯 **Type-safe URLs** - Generate URLs from struct references
-- 📦 **Dependency injection** - Pass dependencies to handlers via options
+- **Struct-based routing** - Define routes using struct tags
+- **Templ support** - Built-in integration with [Templ](https://templ.guide/)
+- **HTMX-friendly** - Automatic partial rendering support
+- **Middleware** - Standard Go middleware pattern
+- **Type-safe URLs** - Generate URLs from struct references
+- **Dependency injection** - Pass dependencies to handlers via options
 
 ## Installation
 
