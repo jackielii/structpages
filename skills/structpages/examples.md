@@ -1,177 +1,123 @@
-# structpages Real-World Patterns & Examples
+# structpages Patterns and Examples
 
-## Helpers used in this document
-
-These helpers are app-level conveniences referenced throughout. They are NOT part of the framework — define them in your own package once if you want them.
-
-```go
-// Generic must — panics on error. Useful when you need a plain string in a context
-// that doesn't accept (string, error), e.g. inside templ.Attributes.
-func must[T any](v T, err error) T {
-    if err != nil { panic(err) }
-    return v
-}
-```
-
-For appending query strings to a generated URL, the framework accepts a `[]any` slice as the page argument. There is no `join()` function — pass the slice directly. Use `map[string]any` for placeholders (recommended over positional or key/value-pair forms):
-
-```go
-url, err := structpages.URLFor(ctx,
-    []any{MyPage{}, "?page={page}&q={q}"},
-    map[string]any{"page": pageNum, "q": query},
-)
-```
-
-Some apps wrap this into a small `join` helper to read more nicely:
-
-```go
-func join(parts ...any) []any { return parts }
-
-// then:
-structpages.URLFor(ctx, join(MyPage{}, "?page={page}"), map[string]any{"page": pageNum})
-```
+Markup is gsx with the `url`/`id`/`target` filters registered (SKILL.md, "gsx setup"). Go code in a
+`.gsx` file may use element literals (`<Widget n={1}/>`); in a `.go` file call the generated function
+instead. `AppContext`, `store` and `ui` stand for application code.
 
 ---
 
-## 1. Complete Page with HTMX Partials
+## 1. Page with independently refreshed regions
 
-This is the most common pattern: a page with multiple sections that can be independently updated via HTMX.
-
-### Route Definition
+### Routes and props
 
 ```go
-// ui/pages.go
 type DashboardPages struct {
-    NcrAnalyticsPage `route:"/ncr-analytics NCR Analytics"`
+    Ncr NcrAnalyticsPage `route:"/ncr-analytics NCR Analytics"`
 }
-```
 
-### Props with RenderTarget
-
-```go
-// ui/dashboard_ncr_pages.go
 type NcrDashboardProps struct {
-    Filter      NcrFilter
-    TotalCounts NcrTotalCounts
-    ChartData   []NcrChartPoint
-    Items       []db.NcrItem
-    Pagination  *PaginationProps
+    Filter NcrFilter
+    Charts NcrCharts
+    Table  NcrTableProps
+}
+
+type NcrTableProps struct {
+    Filter NcrFilter
+    Items  []db.NcrItem
+    Page   int
+    NPages int
 }
 
 func (p NcrAnalyticsPage) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (NcrDashboardProps, error) {
     filter := p.parseFilter(r)
-    var props NcrDashboardProps
-    props.Filter = filter
-
-    // HTMX partial: table only
-    if sel.Is(p.NcrTable) {
-        p.loadTableData(r.Context(), appCtx.Store, filter, &props)
-        return props, structpages.RenderComponent(p.NcrTable(props))
+    switch {
+    case sel.Is(p.NcrTable):
+        table, err := p.tableProps(r.Context(), appCtx.Store, filter)
+        if err != nil {
+            return NcrDashboardProps{}, err
+        }
+        return NcrDashboardProps{}, structpages.RenderComponent(p.NcrTable(table))
+    case sel.Is(p.NcrContent):
+        props, err := p.fullProps(r.Context(), appCtx.Store, filter)
+        if err != nil {
+            return NcrDashboardProps{}, err
+        }
+        return NcrDashboardProps{}, structpages.RenderComponent(p.NcrContent(props))
+    default:
+        return p.fullProps(r.Context(), appCtx.Store, filter)
     }
-
-    // Load full data (charts, totals, table)
-    p.loadAllData(r.Context(), appCtx.Store, filter, &props)
-
-    // HTMX partial: content area (filters + table + charts)
-    if sel.Is(p.NcrContent) {
-        return props, structpages.RenderComponent(p.NcrContent(props))
-    }
-
-    // Full page render
-    return props, nil
 }
 ```
 
-### Template with ID
+### Markup
 
-```templ
-templ (p NcrAnalyticsPage) Page(props NcrDashboardProps) {
-    @DashboardLayout("ncr-analytics") {
-        @p.Content(props)
-    }
+```gsx
+component (p NcrAnalyticsPage) Page(props NcrDashboardProps) {
+    <DashboardLayout current="ncr-analytics">
+        <p.Content props={props}/>
+    </DashboardLayout>
 }
 
-templ (p NcrAnalyticsPage) Content(props NcrDashboardProps) {
+component (p NcrAnalyticsPage) Content(props NcrDashboardProps) {
     <div class="flex gap-6">
-        // Filter sidebar — targets the content area
-        <form hx-get={ structpages.URLFor(ctx, NcrAnalyticsPage{}) }
-              hx-target={ structpages.IDTarget(ctx, NcrAnalyticsPage.NcrContent) }
-              hx-swap="innerHTML"
-              hx-trigger="change delay:300ms"
-              hx-push-url="true">
-            @p.FilterSection(props)
+        <form
+            hx-get={NcrAnalyticsPage{} |> url}
+            hx-target={NcrAnalyticsPage.NcrContent |> target}
+            hx-trigger="change delay:300ms"
+            hx-push-url="true"
+        >
+            <p.FilterSection filter={props.Filter}/>
         </form>
-
-        // Content area with unique ID
-        <div id={ structpages.ID(ctx, NcrAnalyticsPage.NcrContent) }>
-            @p.NcrContent(props)
+        <div id={NcrAnalyticsPage.NcrContent |> id}>
+            <p.NcrContent props={props}/>
         </div>
     </div>
 }
 
-templ (p NcrAnalyticsPage) NcrContent(props NcrDashboardProps) {
-    @p.ChartSection(props)
-    @p.NcrTable(props)
+component (p NcrAnalyticsPage) NcrContent(props NcrDashboardProps) {
+    <p.ChartSection charts={props.Charts}/>
+    <div id={NcrAnalyticsPage.NcrTable |> id}>
+        <p.NcrTable table={props.Table}/>
+    </div>
 }
 
-templ (p NcrAnalyticsPage) NcrTable(props NcrDashboardProps) {
-    <div id={ structpages.ID(ctx, NcrAnalyticsPage.NcrTable) }>
-        // table content...
-    </div>
+component (p NcrAnalyticsPage) NcrTable(table NcrTableProps) {
+    <table>…</table>
+    <Pager current={table.Page} total={table.NPages} status={table.Filter.Status}/>
 }
 ```
 
-### Pagination using `[]any` for query strings
+### Pagination links
 
-```go
-func (p NcrAnalyticsPage) buildPagination(filter NcrFilter, page, nPages int) *PaginationProps {
-    return &PaginationProps{
-        Page:   page,
-        NPages: nPages,
-        GetAttrs: func(ctx context.Context, pg int) (templ.Attributes, error) {
-            url, err := structpages.URLFor(ctx,
-                []any{NcrAnalyticsPage{}, "?page={page}"},
-                "page", pg,
-            )
-            if err != nil {
-                return nil, err
-            }
-            // Append additional filter params
-            if filter.Status != "" {
-                url += "&status=" + filter.Status
-            }
-            target, err := structpages.IDTarget(ctx, NcrAnalyticsPage.NcrTable)
-            if err != nil {
-                return nil, err
-            }
-            return templ.Attributes{
-                "href":      url,
-                "hx-get":    url,
-                "hx-target": target,
-                "hx-swap":   "outerHTML",
-            }, nil
-        },
-    }
+A component builds the links from filters; no attribute map and no helper that has to unwrap errors.
+
+```gsx
+component Pager(current int, total int, status string) {
+    <nav class="pager">
+        { for n := 1; n <= total; n++ {
+            <a
+                href={[]any{NcrAnalyticsPage{}, "?page={page}&status={status}"} |> url(map[string]any{"page": n, "status": status})}
+                hx-get={[]any{NcrAnalyticsPage{}, "?page={page}&status={status}"} |> url(map[string]any{"page": n, "status": status})}
+                hx-target={NcrAnalyticsPage.NcrTable |> target}
+                { if n == current { aria-current="page" } }
+            >
+                { n }
+            </a>
+        } }
+    </nav>
 }
 ```
 
 ---
 
-## 2. Team Management (Two-Pane with Independent Partials)
-
-A complex page where each pane updates independently.
-
-### Route & Props
+## 2. Two panes refreshed independently
 
 ```go
-// Route
 type TeamManagementPages struct {
-    TeamManagementView    `route:"/{$}      Team Management"`
-    TeamManagementAddUser `route:"POST /add Add User to Group"`
-    // ...
+    View    TeamManagementView    `route:"/{$} Team Management"`
+    AddUser TeamManagementAddUser `route:"POST /add Add User to Group"`
 }
 
-// Page props compose the panes; each partial takes its own pane struct.
 type TeamManagementProps struct {
     UserPaneProps
     GroupPaneProps
@@ -187,274 +133,225 @@ type GroupPaneProps struct {
     GroupSearchQuery string
 }
 
-// Partials get partial data (their pane struct), never the page props —
-// the TeamManagementProps{} returned alongside RenderComponent is ignored.
-// The default falls back to FULL props, never empty props.
 func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (TeamManagementProps, error) {
     switch {
     case sel.Is(p.GroupList):
-        groupPane, err := p.GroupListProps(r, appCtx)
-        if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groupPane))
-
+        pane, err := p.groupPane(r, appCtx)
+        if err != nil {
+            return TeamManagementProps{}, err
+        }
+        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(pane))
     case sel.Is(p.UserList):
-        userPane, err := p.UserListProps(r, appCtx)
-        if err != nil { return TeamManagementProps{}, err }
-        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(userPane))
-
-    default: // Page, Content, or anything unrecognised — full props
-        return p.fullProps(r, appCtx)
+        pane, err := p.userPane(r, appCtx)
+        if err != nil {
+            return TeamManagementProps{}, err
+        }
+        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(pane))
+    default:
+        users, err := p.userPane(r, appCtx)
+        if err != nil {
+            return TeamManagementProps{}, err
+        }
+        groups, err := p.groupPane(r, appCtx)
+        if err != nil {
+            return TeamManagementProps{}, err
+        }
+        return TeamManagementProps{UserPaneProps: users, GroupPaneProps: groups}, nil
     }
 }
-```
 
-### Helper Props Methods
-
-Each pane has a dedicated helper returning its pane struct, feeding both the partial branches and `fullProps` — each query written once. These are *just methods* — the framework only auto-invokes the method literally named `Props`.
-
-```go
-func (p TeamManagementView) UserListProps(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
-    search := r.FormValue("user-search")
-    users, err := appCtx.Store.SearchUsers(r.Context(), search)
+func (p TeamManagementView) userPane(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
+    q := r.FormValue("user-search")
+    users, err := appCtx.Store.SearchUsers(r.Context(), q)
     if err != nil {
         return UserPaneProps{}, fmt.Errorf("search users: %w", err)
     }
-    return UserPaneProps{Users: users, UserSearchQuery: search}, nil
-}
-
-func (p TeamManagementView) GroupListProps(r *http.Request, appCtx *AppContext) (GroupPaneProps, error) {
-    search := r.FormValue("group-search")
-    groups, err := appCtx.Store.SearchGroups(r.Context(), search)
-    if err != nil {
-        return GroupPaneProps{}, fmt.Errorf("search groups: %w", err)
-    }
-    return GroupPaneProps{Groups: groups, GroupSearchQuery: search}, nil
-}
-
-func (p TeamManagementView) fullProps(r *http.Request, appCtx *AppContext) (TeamManagementProps, error) {
-    userPane, err := p.UserListProps(r, appCtx)
-    if err != nil { return TeamManagementProps{}, err }
-    groupPane, err := p.GroupListProps(r, appCtx)
-    if err != nil { return TeamManagementProps{}, err }
-    return TeamManagementProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
+    return UserPaneProps{Users: users, UserSearchQuery: q}, nil
 }
 ```
 
-### Partial Templates
+Each pane component takes only its pane struct and is wrapped where it is composed:
 
-Each partial takes ONLY its pane struct, and its wrapper id comes from `ID` — never hand-written (Rule 14). Full render and partial re-render share one signature:
-
-```templ
-templ (p TeamManagementView) UserList(pane UserPaneProps) {
-    <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
-        for _, u := range pane.Users {
-            <div>{ u.User.Name }</div>
-        }
-    </div>
+```gsx
+component (p TeamManagementView) Content(props TeamManagementProps) {
+    <section>
+        <input
+            name="user-search"
+            value={props.UserSearchQuery}
+            hx-get={TeamManagementView{} |> url}
+            hx-target={TeamManagementView.UserList |> target}
+            hx-trigger="input changed delay:300ms, refresh-users from:body"
+        />
+        <div id={TeamManagementView.UserList |> id}>
+            <p.UserList pane={props.UserPaneProps}/>
+        </div>
+    </section>
+    <section>
+        <div id={TeamManagementView.GroupList |> id}>
+            <p.GroupList pane={props.GroupPaneProps}/>
+        </div>
+    </section>
 }
 
-templ (p TeamManagementView) GroupList(pane GroupPaneProps) {
-    <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
-        for _, g := range pane.Groups {
-            <div>{ g.Name }</div>
-        }
-    </div>
+component (p TeamManagementView) UserList(pane UserPaneProps) {
+    { for _, u := range pane.Users {
+        <div>{ u.User.Name }</div>
+    } }
 }
 ```
 
-### POST Handler with HTMX Trigger
+An action that affects both panes asks the client to refresh them:
 
 ```go
-func (p TeamManagementAddUser) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
-    email := r.FormValue("email")
-    groupID := r.FormValue("group_id")
-    if err := appCtx.Store.AddUserToGroup(r.Context(), email, groupID); err != nil {
+func (TeamManagementAddUser) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
+    if err := appCtx.Store.AddUserToGroup(r.Context(), r.FormValue("email"), r.FormValue("group_id")); err != nil {
         return err
     }
-    // Trigger both panes to refresh via HTMX events
     w.Header().Set("HX-Trigger", "refresh-groups, refresh-users")
     w.WriteHeader(http.StatusNoContent)
     return nil
 }
 ```
 
-### Search inputs listen for refresh events
-
-```templ
-<input name="user-search"
-       hx-get={ structpages.URLFor(ctx, TeamManagementView{}) }
-       hx-target="#user-list"
-       hx-trigger="keyup changed delay:300ms, refresh-users from:body" />
-```
-
 ---
 
-## 3. Index Page with View Mode Switching (ServeHTTP + RenderTarget)
-
-When a page needs `ServeHTTP` but also supports HTMX partials, the DI form of `ServeHTTP` can take a `RenderTarget`:
+## 3. ServeHTTP with RenderTarget (view modes)
 
 ```go
-func (p *IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext, target structpages.RenderTarget) error {
-    viewMode := r.FormValue("view")
-    if viewMode == "table" {
-        return p.renderTable(r, appCtx, target)
+func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) error {
+    if r.FormValue("view") == "table" {
+        rows, err := p.tableRows(r, appCtx)
+        if err != nil {
+            return err
+        }
+        if sel.Is(p.TableView) {
+            return structpages.RenderComponent(p.TableView(rows))
+        }
+        return structpages.RenderComponent(p.TablePage(rows))
     }
-    return p.renderCards(r, appCtx, target)
-}
-
-func (p IndexPage) renderTable(r *http.Request, appCtx *AppContext, target structpages.RenderTarget) error {
-    tableProps, err := p.buildTableViewProps(r, appCtx)
-    if err != nil { return err }
-    if target.Is(p.TableView) {
-        return structpages.RenderComponent(p.TableView(tableProps))
-    }
-    return structpages.RenderComponent(p.TablePage(tableProps))
+    return p.renderCards(r, appCtx, sel)
 }
 ```
 
-View mode switching in templates:
-
-```templ
-<a href={ structpages.URLFor(ctx, []any{IndexPage{}, "?view={view}"}, "view", "card") }
-   hx-target={ structpages.IDTarget(ctx, IndexPage.CardContent) }>
-   Card View
-</a>
-<a href={ structpages.URLFor(ctx, []any{IndexPage{}, "?view={view}"}, "view", "table") }
-   hx-target={ structpages.IDTarget(ctx, IndexPage.TableView) }>
-   Table View
-</a>
+```gsx
+<a
+    href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "card"})}
+    hx-target={IndexPage.CardContent |> target}
+>Cards</a>
+<a
+    href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "table"})}
+    hx-target={IndexPage.TableView |> target}
+>Table</a>
 ```
 
 ---
 
-## 4. Entity CRUD Pages (Standard Pattern)
-
-### Route Structure
+## 4. CRUD pages
 
 ```go
 type EntityPages struct {
-    EntityDetailPage `route:"/entity/{entity_id}        Entity Detail"`
-    EntityEditPage   `route:"/entity/{entity_id}/edit   Entity Edit"`
-    EntityDeletePage `route:"DELETE /entity/{entity_id} Delete Entity"`
+    List   EntityListPage   `route:"/{$} Entities"`
+    Detail EntityDetailPage `route:"/{entityId} Entity"`
+    Edit   EntityEditPage   `route:"/{entityId}/edit Edit Entity"`
+    Delete EntityDeletePage `route:"DELETE /{entityId} Delete Entity"`
 }
-```
 
-### Detail Page
-
-```go
 func (p EntityDetailPage) Props(r *http.Request, appCtx *AppContext) (EntityDetailProps, error) {
-    id := r.PathValue("entity_id")
-    entity, err := appCtx.Store.GetEntity(r.Context(), id)
+    entity, err := appCtx.Store.GetEntity(r.Context(), r.PathValue("entityId"))
+    if errors.Is(err, store.ErrNotFound) {
+        return EntityDetailProps{}, ErrorWithStatus{Status: http.StatusNotFound, Title: "Not found", Message: "No such entity"}
+    }
     if err != nil {
         return EntityDetailProps{}, err
     }
     return EntityDetailProps{Entity: entity}, nil
 }
 
-templ (p EntityDetailPage) Page(props EntityDetailProps) {
-    @AppShellLayout() {
-        if props.Entity == nil {
-            @ErrorPage(404, "Not found", "Entity not found")
-        } else {
-            @p.Content(props)
-        }
-    }
-}
-
-templ (p EntityDetailPage) Content(props EntityDetailProps) {
-    @PageHeaderWithBack(EntityListPage{}, "Back to List", props.Entity.Name, "Entity details")
-    // detail content...
-}
-```
-
-### Delete Handler (no HTML, redirect)
-
-Redirects go through the `Redirect` control-flow signal (see §13), never `http.Redirect` — an HTMX XHR follows a 3xx and swaps the target page's body into the partial's swap target:
-
-```go
 func (p EntityDeletePage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
-    id := r.PathValue("entity_id")
-    if err := appCtx.Store.DeleteEntity(r.Context(), id); err != nil {
+    if err := appCtx.Store.DeleteEntity(r.Context(), r.PathValue("entityId")); err != nil {
         return err
     }
     listURL, err := structpages.URLFor(r.Context(), EntityListPage{})
-    if err != nil { return err }
-    return Redirect{To: listURL}
+    if err != nil {
+        return err
+    }
+    return Redirect{To: listURL} // see §13
 }
 ```
 
+```gsx
+component (p EntityDetailPage) Content(props EntityDetailProps) {
+    <a href={EntityListPage{} |> url}>&larr; Entities</a>
+    <h1>{ props.Entity.Name }</h1>
+    <a href={EntityEditPage{} |> url}>Edit</a>
+    <button hx-delete={EntityDeletePage{} |> url} hx-confirm="Delete this entity?">Delete</button>
+}
+```
+
+`EntityEditPage{} |> url` needs no params here: `{entityId}` is auto-filled from the current request.
+
 ---
 
-## 5. Lazy-Loaded Partials (Separate Routes)
+## 5. Lazy-loaded region on its own route
 
-For sections that load independently:
-
-```templ
-<div id={ structpages.ID(ctx, ListActionsPartial.Page) }
-     hx-get={ structpages.URLFor(ctx, ListActionsPartial{}, "entity_type", entityType, "entity_id", entityID) }
-     hx-trigger="load, refresh-actions from:body"
-     hx-swap="morph:innerHTML"
-     hx-target="this">
-    Loading...
+```gsx
+<div
+    id={ListActionsPartial.Page |> id}
+    hx-get={ListActionsPartial{} |> url(map[string]any{"entityType": entityType, "entityId": entityID})}
+    hx-trigger="load, refresh-actions from:body"
+    hx-target="this"
+>
+    Loading…
 </div>
 ```
 
 ---
 
-## 6. Mounting with Options
+## 6. Mounting with options
 
 ```go
 sp, err := structpages.Mount(mux, ui.TopPages{}, "/", "App",
-    structpages.WithErrorHandler(errorHandler), // see §13 for the status-aware version
-    structpages.WithMiddlewares(
-        loggingMiddleware,
-        sessionMiddleware,
-        flashMiddleware,
-    ),
-    structpages.WithArgs(appCtx),  // DI: makes *AppContext available everywhere
+    structpages.WithErrorHandler(errorHandler), // §13
+    structpages.WithMiddlewares(loggingMiddleware, sessionMiddleware),
+    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget), // htmx 4 front end
+    structpages.WithArgs(appCtx),
 )
 if err != nil {
     log.Fatal(err)
 }
-appCtx.Pages = sp  // Store *StructPages for URL/ID generation outside request context
+if err := validateURLs(sp); err != nil { // §14
+    log.Fatal(err)
+}
 ```
 
 ---
 
-## 7. Middleware Patterns
-
-### Auth middleware on a page group
-
-`Middlewares` returns `[]structpages.MiddlewareFunc`. The signature is `func(http.Handler, *PageNode) http.Handler` — second arg gives middleware access to route metadata.
+## 7. Middleware
 
 ```go
 type RequiresAuth struct {
-    IndexPage `route:"/{$} Home"`
-    // all children require auth
+    Home IndexPage `route:"/{$} Home"`
 }
 
 func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc {
     return []structpages.MiddlewareFunc{
         func(next http.Handler, pn *structpages.PageNode) http.Handler {
             return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                if !isAuthenticated(r) {
-                    // Middleware is outside the error-return path, so do the
-                    // HTMX check here: a 3xx would be swapped into the partial.
-                    loginURL, err := structpages.URLFor(r.Context(), LoginPage{})
-                    if err != nil {
-                        // http.Error is ok here because it's outside of structpages' error handling.
-                        // This is a fallback for framework-level errors.
-                        http.Error(w, "internal error", http.StatusInternalServerError)
-                        return
-                    }
-                    if r.Header.Get("HX-Request") == "true" {
-                        w.Header().Set("HX-Location", loginURL) // ajax navigation; status must stay 2xx
-                        return
-                    }
-                    http.Redirect(w, r, loginURL, http.StatusSeeOther)
+                if appCtx.Sessions.User(r) != nil {
+                    next.ServeHTTP(w, r)
                     return
                 }
-                next.ServeHTTP(w, r)
+                loginURL, err := structpages.URLFor(r.Context(), LoginPage{})
+                if err != nil {
+                    // Middleware is outside the structpages error path.
+                    http.Error(w, "internal error", http.StatusInternalServerError)
+                    return
+                }
+                if r.Header.Get("HX-Request") == "true" {
+                    w.Header().Set("HX-Location", loginURL) // must stay 2xx for htmx to act
+                    return
+                }
+                http.Redirect(w, r, loginURL, http.StatusSeeOther)
             })
         },
     }
@@ -463,307 +360,135 @@ func (RequiresAuth) Middlewares(appCtx *AppContext) []structpages.MiddlewareFunc
 
 ---
 
-## 8. Common UI Patterns
+## 8. Components that forward attributes
 
-### Button with HTMX attributes (uses `must` for plain string)
+A shared button forwards an attrs bag, so call sites put filters straight on it; errors still propagate.
 
-```templ
-@PrimaryButton(templ.Attributes{
-    "hx-get":    must(structpages.URLFor(ctx, UserNewModal{})),
-    "hx-target": "#modal-container",
-    "hx-swap":   "innerHTML",
-}) {
-    + New User
+```gsx
+component PrimaryButton(children gsx.Node, attrs gsx.Attrs) {
+    <button type="button" class="btn btn-primary" { attrs... }>{ children }</button>
+}
+
+component (p UsersPage) Toolbar() {
+    <PrimaryButton
+        hx-get={UserNewModal{} |> url}
+        hx-target={ui.ModalSlot |> target}
+    >+ New user</PrimaryButton>
 }
 ```
 
-### Links using URLFor
+A component that links to a page takes the URL (or the page value) as a parameter and sets it on the native
+element:
 
-```templ
-@PrimaryButtonLink(DetailPage{}, item.ID) {
-    View Details
+```gsx
+component BackLink(href string, label string) {
+    <a class="back-link" href={href}>&larr; { label }</a>
 }
-```
 
-### Query params with `[]any` in templ
-
-```templ
-<a href={ structpages.URLFor(ctx,
-    []any{TeamManagementRemoveUser{}, "?email={email}&group_id={groupId}"},
-    "email", user.Email,
-    "groupId", group.ID) }>
-    Remove
-</a>
+<BackLink href={EntityListPage{} |> url} label="Entities"/>
 ```
 
 ---
 
-## 9. RenderComponent Variants
-
-`RenderComponent` accepts several shapes. They fall into two groups: **direct construction** (no reflection, compile-time-checked) and **reflective dispatch** (framework looks up the method and applies DI). Prefer direct construction — page structs are stateless, so a zero-value receiver constructs another page's component too. Reach for reflective dispatch only when the method's parameters should be DI-injected by the framework.
-
-### Preferred: direct construction
+## 9. RenderComponent forms in practice
 
 ```go
-// Same-page method — receiver is in scope, just call it.
+// Same page: receiver in scope.
 return MyPageProps{}, structpages.RenderComponent(p.UserList(users))
 
-// Another page's method — zero-value receiver works; pages are stateless.
+// Another page: zero-value receiver, pages are stateless.
 return structpages.RenderComponent(MyPage{}.ItemList(items))
 
-// Standalone function component — call it directly.
-return MyPageProps{}, structpages.RenderComponent(UserStatsWidget(stats))
+// Standalone component (.gsx file).
+return MyPageProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}/>)
 
-// Pre-built templ component captured in a variable.
-comp := p.Dialog(entityType, entityID, users)
-return nil, structpages.RenderComponent(comp)
+// Nothing.
+return structpages.RenderComponent(gsx.Text(""))
 
-// Render literally nothing.
-return structpages.RenderComponent(templ.NopComponent)
-```
-
-### Reflective dispatch (when params need framework DI)
-
-```go
-// Method expression — framework finds the mounted page, DI-injects the
-// method's params (e.g. *http.Request, *AppContext), and invokes it.
-// Explicit args fill the non-injected params, checked at runtime.
-return structpages.RenderComponent(MyPage.ItemList, items)
-
-// Bound method expression — equivalent to the unbound form; useful when the
-// receiver came from somewhere other than `p` (e.g. a parent's child field).
-return structpages.RenderComponent(other.EditSection, props)
-
-// Via RenderTarget — still works, but `RenderComponent(p.X(args))` is usually
-// clearer when `p` is in scope. Required only if the target was produced by a
-// custom TargetSelector and the call site genuinely doesn't know which method
-// it refers to.
-return MyPageProps{}, structpages.RenderComponent(sel, users)
-```
-
-### Extension point: custom `RenderTarget` with `Component()`
-
-```go
-// A custom TargetSelector can return a RenderTarget that also implements
-// Component() — RenderComponent(target) will then call Component() directly.
-type myTarget struct{ data string }
-func (t myTarget) Is(method any) bool   { /* ... */ }
-func (t myTarget) Component() component { return MyComponent(t.data) }
-// Then: return Props{}, structpages.RenderComponent(target)  // no args
+// Parameters DI-injected by the framework (e.g. *http.Request, *AppContext).
+return structpages.RenderComponent(MyPage.ItemList)
 ```
 
 ---
 
-## 10. html/template Instead of templ
+## 10. html/template instead of gsx
 
-structpages is render-engine agnostic — any value with a `Render(ctx context.Context, w io.Writer) error` method works as a page output. The pattern below is what `examples/html-template/` demonstrates.
-
-### Atomic-design layout
-
-Slash-namespaced template names mirror the directory tree. Only `body` is reused (one per per-page parsed set):
-
-```
-templates/
-  layout/public.html         {{ define "layout/public" }}
-  ui/atoms/button.html       {{ define "ui/atoms/button" }}
-  ui/molecules/card.html     {{ define "ui/molecules/card" }}
-  post/comments-list.html    {{ define "post/comments-list" }}  (organism, HTMX-targetable)
-  post/page.html             {{ define "body" }}                (page-specific)
-  pages/home.html            {{ define "body" }}
-```
-
-### Renderable type + helpers
+Any type with `Render(ctx, io.Writer) error` is a component; `examples/html-template/` uses this shape:
 
 ```go
-//go:embed templates
-var tmplFS embed.FS
-var pageTmpls map[string]*template.Template // populated in main
-
 type tpl struct {
-    page  string
-    entry string
-    data  any
+    page, entry string
+    data        any
 }
 
-func (p tpl) Render(_ context.Context, w io.Writer) error {
-    t, ok := pageTmpls[p.page]
-    if !ok {
-        return fmt.Errorf("unknown page %q", p.page)
-    }
-    return t.ExecuteTemplate(w, p.entry, p.data)
+func (t tpl) Render(_ context.Context, w io.Writer) error {
+    return pageTmpls[t.page].ExecuteTemplate(w, t.entry, t.data)
 }
 
-// args is a Hugo/Sprig-style helper for passing multiple inputs to a
-// partial. Defined in user code (not provided by the framework).
-func args(kv ...any) (map[string]any, error) {
-    if len(kv)%2 != 0 {
-        return nil, fmt.Errorf("args: odd number of arguments (%d)", len(kv))
-    }
-    m := make(map[string]any, len(kv)/2)
-    for i := 0; i < len(kv); i += 2 {
-        k, ok := kv[i].(string)
-        if !ok {
-            return nil, fmt.Errorf("args: key at position %d is %T", i, kv[i])
-        }
-        m[k] = kv[i+1]
-    }
-    return m, nil
-}
+func (post) Page(p postProps) tpl     { return tpl{page: "post", entry: "layout/public", data: p} }
+func (post) Comments(p postProps) tpl { return tpl{page: "post", entry: "post/comments-list", data: p.Comments} }
 ```
 
-### Parse in `main` after `Mount`
-
-The key move: parse templates AFTER `Mount` so `urlFor` can close over `sp.URLFor`. The FuncMap is bound once and the same parsed `*template.Template` serves every request — no Clone, no per-render rebinding.
+Parse templates after `Mount` so a template func can close over `sp`:
 
 ```go
-func main() {
-    mux := http.NewServeMux()
-    sp, err := structpages.Mount(mux, root{}, "/", "App",
-        structpages.WithTargetSelector(structpages.HTMXv4RenderTarget))
-    if err != nil { log.Fatal(err) }
-
-    funcs := template.FuncMap{
-        "urlFor": func(name string, a ...any) (string, error) {
-            return sp.URLFor(structpages.Ref(name), a...)
-        },
-        "args": args,
-    }
-    parseSet := func(body string) *template.Template {
-        return template.Must(template.New("").Funcs(funcs).ParseFS(tmplFS,
-            "templates/layout/public.html",
-            "templates/ui/atoms/*.html",
-            "templates/ui/molecules/*.html",
-            "templates/post/*.html",
-            "templates/"+body,
-        ))
-    }
-    pageTmpls = map[string]*template.Template{
-        "home": parseSet("pages/home.html"),
-        "post": parseSet("post/page.html"),
-    }
-
-    log.Fatal(http.ListenAndServe(":8080", mux))
+funcs := template.FuncMap{
+    "urlFor": func(name string, a ...any) (string, error) {
+        return sp.URLFor(structpages.Ref(name), a...)
+    },
 }
 ```
 
-Trade-off: `sp.URLFor` doesn't have access to per-request URL params extracted by structpages middleware, so this pattern works for routes whose URLs don't need request-bound params (top-level nav). For `/users/{userId}`-style routes that need to generate URLs from the *current* request's path params, switch to ctx-bound funcs by Cloning inside `Render`:
-
-```go
-func (p tpl) Render(ctx context.Context, w io.Writer) error {
-    base := pageTmpls[p.page]
-    t, err := base.Clone()
-    if err != nil { return err }
-    t.Funcs(template.FuncMap{
-        "urlFor": func(name string, a ...any) (string, error) {
-            return structpages.URLFor(ctx, structpages.Ref(name), a...)
-        },
-    })
-    return t.ExecuteTemplate(w, p.entry, p.data)
-}
-```
-
-### Pages, Props, organisms
-
-Page methods all return `tpl` with different `entry` names. Props loads once per request; the matched component method receives it as an argument.
-
-```go
-type postProps struct {
-    Title    string
-    Body     string
-    Comments []string
-}
-type post struct{}
-
-func (post) Props() postProps { /* load from store */ }
-
-func (post) Page(p postProps) tpl {
-    return tpl{page: "post", entry: "layout/public", data: p}
-}
-func (post) Main(p postProps) tpl {
-    return tpl{page: "post", entry: "body", data: p}
-}
-// HTMX-targetable organism — name matches <section id="comments">
-func (post) Comments(p postProps) tpl {
-    return tpl{page: "post", entry: "post/comments-list", data: p.Comments}
-}
-```
-
-`HTMXv4RenderTarget` resolves `HX-Target: section#comments` to the `Comments` method via kebab-cased name matching — same mechanism that works with templ.
-
-### Templates
-
-Atoms/molecules receive ad-hoc data via `args` (no framework helpers visible inside — pure presentation). Organisms get whatever data slice they need; `urlFor` is callable inside any template since the FuncMap is parse-time-bound.
-
-```html
-{{ define "layout/public" }}
-<!DOCTYPE html>
-<html><body>
-  <nav><a hx-get="{{ urlFor "post" }}" hx-target="main">Post</a></nav>
-  <main>{{ template "body" . }}</main>
-</body></html>
-{{ end }}
-
-{{ define "body" }}
-<h1>{{ .Title }}</h1>
-{{ range .Recent }}
-  {{ template "ui/molecules/card" (args "Title" .Title "Body" .Excerpt) }}
-{{ end }}
-{{ template "post/comments-list" .Comments }}
-{{ end }}
-
-{{ define "post/comments-list" }}
-<section id="comments">
-  <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
-</section>
-{{ end }}
-```
+`html/template` has no request context in a FuncMap bound at parse time, so this resolves without
+auto-filled request params. For routes that need them, `Clone` the template inside `Render` and bind
+`structpages.URLFor(ctx, ...)`. Element ids are hand-written here (`<section id="comments">`), which is why
+gsx's `id`/`target` filters are preferred.
 
 ---
 
-## 11. Search Picklist with Positional Args
+## 11. JavaScript, Alpine and htmx values
 
-Prefer a `map[string]any` — explicit and refactor-safe — over positional fills:
+Filters inside `js`/`f` literal holes work when the literal is written on the native element:
 
-```go
-<button hx-get={ structpages.URLFor(ctx,
-    []any{SearchPicklist{}, "?field={field}&q={q}&page={page}"},
-    map[string]any{
-        "field": props.Field,
-        "q":     props.Query,
-        "page":  props.Page + 1,
-    }) }>
-    Load More
-</button>
+```gsx
+component (p Index) Canvas() {
+    <div
+        x-data="{ open: false }"
+        @keydown.escape=js`htmx.ajax('GET', @{Index{} |> url}, @{Index.Canvas |> target})`
+    >
+        <button
+            hx-get={Index{} |> url}
+            hx-target=f`closest @{Index.PickerList |> target}`
+            hx-vals=js`{"pane": @{Index.Canvas |> id}}`
+        >Reload</button>
+    </div>
+}
 ```
 
-The `URLFor` argument forms (in order of detection):
+A wrapper component that needs a JavaScript handler takes ordinary values and builds the literal on its
+own element:
 
-- **Map** (recommended): a single `map[string]any` first arg. Refactor-safe and self-documenting.
-- **Positional**: arg count exactly matches placeholder count. Brittle if placeholders are added or reordered.
-- **Key-value pairs**: even arg count, all even-indexed args are strings, AND at least one matches a placeholder name. (E.g. `"userId", 123, "slug", "x"`.) Equivalent to the map form but spread across positional args.
-- **Auto-fill from request**: any unfilled placeholders that match the *current request's* path params get filled automatically.
+```gsx
+component OpenButton(slot string, href string, children gsx.Node) {
+    <button @click=js`htmx.ajax('GET', @{href}, @{slot})`>{ children }</button>
+}
+
+<OpenButton slot={Index.Canvas |> target} href={Detail{} |> url}>Open</OpenButton>
+```
+
+Assigning such a literal inside a `{{ }}` block fails to generate when a hole uses an error-returning
+filter, because a Go statement has no error channel.
 
 ---
 
-## 12. Module-Owned Static Assets
+## 12. Module-owned static assets
 
-When a feature package owns a chunk of CSS/JS/images, mount its file server **as a field on the same struct as its pages** instead of in a separate `mux.Handle` call. The whole module — pages and assets — wires up by one struct field on the root type, and the static URL prefix tracks the module's mount path automatically.
-
-### The pattern
+Mount a module's file server as a field next to its pages, so `/profile` and `/profile/static/*` register
+together and follow the module's mount path.
 
 ```go
-// modules/profile/profile.go
 package profile
 
-import (
-    "embed"
-    "io/fs"
-    "net/http"
-)
-
-// Root is what the root struct embeds with `route:"/profile Profile"`.
-// Listing Assets here means /profile and /profile/static/* register
-// together — no separate pub.Handle("/profile/static/", …) in main.
 type Root struct {
     Me     mePage      `route:"GET /me Me"`
     View   viewPage    `route:"GET /{userID} Profile"`
@@ -773,21 +498,14 @@ type Root struct {
 //go:embed all:static
 var staticFS embed.FS
 
-// fs.Sub strips the leading "static/" so the request path resolves
-// directly. Computed once at init.
 var staticRoot = func() fs.FS {
     sub, err := fs.Sub(staticFS, "static")
     if err != nil {
-        panic(err) // unreachable: directory is //go:embed'd above
+        panic(err) // the directory is embedded above
     }
     return sub
 }()
 
-// staticFiles serves the embedded /static/ directory. The {path...}
-// wildcard in the route tag captures everything after /profile/static/,
-// so r.PathValue("path") IS the file path inside the embedded FS — no
-// http.StripPrefix needed, no need for the handler to know it's mounted
-// under /profile.
 type staticFiles struct{}
 
 func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -795,247 +513,163 @@ func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-### Why `{path...}` and not a trailing slash
-
-`route:"GET /static/"` would *look* right (Go ServeMux treats trailing-slash patterns as prefix matches), but structpages joins parent and child routes with `path.Join`, which strips trailing slashes. The resulting pattern becomes `GET /admin/static` — an exact match, not a prefix — and subpath requests get 404. **Always use `{path...}` for prefix subtrees.**
-
-### Linking to an asset from a templ page
-
-There is no `URLFor` for arbitrary asset filenames — assets aren't pages. Use a plain string in the template:
-
-```templ
-<link rel="stylesheet" href="/profile/static/profile.css"/>
-<img src="/profile/static/avatar-default.svg" alt=""/>
-```
-
-The pattern eliminates the *handler-side* duplication (no second mount call in main). Link-side duplication (knowing the URL string) is a separate concern, typically handled by a build-time manifest (e.g. Vite/esbuild fingerprinting).
-
-### Middleware applies to assets too
-
-If the module has `Middlewares()` (e.g. `RequireAdmin`), it gates the static subtree as well — Assets is just another child of the page struct. Move Assets out of the gated struct (sibling instead of child) if you want public assets under a private module's URL space.
-
-### Mounting in main
-
-The root struct treats every module identically — pages and assets are bundled:
-
-```go
-type webPages struct {
-    Home    home.Index   `route:"/{$} HIS"`
-    Patient patient.Root `route:"/patient Patient"`
-    Profile profile.Root `route:"/profile Profile"`  // brings /profile/static/* with it
-}
-
-// main.go:
-structpages.Mount(pub, webPages{}, "/", "HIS",
-    structpages.WithArgs(profiles),
-)
-// No separate pub.Handle("/profile/static/", ...) needed.
-```
+- Use `{path...}`: `route:"GET /static/"` would be joined to an exact `GET /profile/static`.
+- `r.PathValue("path")` is the file path, so no `StripPrefix` is needed.
+- The module's `Middlewares` gate the assets too; make `Assets` a sibling of the gated struct for public
+  assets.
+- Asset files are not pages: link them with a plain path or a build manifest (e.g. Vite), not `url`.
 
 ---
 
-## 13. Error Handling in `ServeHTTP` and `Props`
+## 13. Error handling
 
-The error-returning forms of `ServeHTTP` and every `Props` method run against a **buffered** `http.ResponseWriter`. When the method returns a non-nil error the framework **discards the buffer** and hands the error to the `WithErrorHandler` callback. This has three consequences that decide how you write handlers.
-
-### Rule 1 — never call `http.Error` (or otherwise write `w`) in an error-returning handler
-
-This AI-generated style is wrong:
+### Typed status errors and the redirect signal
 
 ```go
-// ANTI-PATTERN — do not do this
-func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
-    if err := r.ParseForm(); err != nil {
-        http.Error(w, "invalid form", http.StatusBadRequest)
-        return nil
-    }
-    patient, err := svc.GetPatientByMRN(r.Context(), mrn)
-    switch {
-    case errors.Is(err, ErrNotFound):
-        http.Error(w, "patient not found", http.StatusNotFound)
-        return nil
-    case err != nil:
-        return fmt.Errorf("GetPatientByMRN: %w", err)
-    }
-    // ...
-}
-```
-
-It is broken either way the control flow goes:
-
-- `http.Error(w, …); return nil` — the write *does* land (the buffer flushes on `nil`), but it bypasses `WithErrorHandler` entirely: no consistent HTML/HTMX error page, no `HX-Retarget`, no tracing. The framework also thinks the handler *succeeded*.
-- `http.Error(w, …); return err` — the buffer is **reset before the error handler runs**, so your `http.Error` write is silently thrown away. Pure dead code.
-
-The error-returning handler's only job is to **return an error**. Rendering is the error handler's job.
-
-### Rule 2 — for a specific status code, return a typed error
-
-Define one error type that carries the status, and have the global handler inspect it with `errors.As`. This is the only thing that gives a handler control over the status code.
-
-```go
-// errors.go
 type ErrorWithStatus struct {
     Status  int
     Title   string
     Message string
 }
 
-func (e ErrorWithStatus) Error() string {
-    return fmt.Sprintf("Error %d: %s", e.Status, e.Title)
-}
-```
+func (e ErrorWithStatus) Error() string { return fmt.Sprintf("%d %s: %s", e.Status, e.Title, e.Message) }
 
-The corrected handler — no `w` writes, just typed returns:
-
-```go
-func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
-    if err := r.ParseForm(); err != nil {
-        return ErrorWithStatus{Status: http.StatusBadRequest, Title: "Bad request", Message: "invalid form"}
-    }
-
-    patient, err := svc.GetPatientByMRN(r.Context(), mrn)
-    switch {
-    case errors.Is(err, ErrNotFound):
-        return ErrorWithStatus{Status: http.StatusNotFound, Title: "Not found", Message: "patient not found at this facility"}
-    case errors.Is(err, authz.ErrDenied):
-        return ErrorWithStatus{Status: http.StatusForbidden, Title: "Forbidden", Message: "patient at a different facility"}
-    case err != nil:
-        return fmt.Errorf("scheduling.book: GetPatientByMRN: %w", err) // plain error -> 500
-    }
-    // ... success: redirect to the detail page via the control-flow signal
-    return Redirect{To: detailURL}
-}
-```
-
-Redirects ride the same error-return path as a control-flow signal — **never call `http.Redirect` from a handler**: during an HTMX request the XHR follows the 3xx and swaps the redirect target's body into the partial's swap target. The signal type:
-
-```go
-// Redirect is control flow, not a real error — it implements error only to
-// ride the error-return path, which is what unwinds the render flow without
-// writing the ResponseWriter directly.
+// Redirect is control flow carried on the error path.
 type Redirect struct{ To string }
 
 func (Redirect) Error() string { return "redirect" }
 ```
 
-The matching global handler, wired once at `Mount`:
+### Handlers return, they don't write
+
+```go
+// Wrong: http.Error then return nil bypasses the error handler; then return err is discarded.
+func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
+    if err := r.ParseForm(); err != nil {
+        http.Error(w, "invalid form", http.StatusBadRequest)
+        return nil
+    }
+    // …
+}
+
+// Right.
+func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) error {
+    if err := r.ParseForm(); err != nil {
+        return ErrorWithStatus{Status: http.StatusBadRequest, Title: "Bad request", Message: "invalid form"}
+    }
+    patient, err := svc.GetPatientByMRN(r.Context(), r.FormValue("mrn"))
+    switch {
+    case errors.Is(err, ErrNotFound):
+        return ErrorWithStatus{Status: http.StatusNotFound, Title: "Not found", Message: "patient not found"}
+    case err != nil:
+        return fmt.Errorf("book: %w", err) // logged 500
+    }
+    detailURL, err := structpages.URLFor(r.Context(), PatientPage{}, map[string]any{"patientId": patient.ID})
+    if err != nil {
+        return err
+    }
+    return Redirect{To: detailURL}
+}
+```
+
+`Props` follows the same rule, for a different reason: its writer is not buffered, so a body write reaches
+the client and the error handler's output is appended to it. Set headers there if needed, return errors,
+and return `ErrSkipPageRender` only when `Props` deliberately wrote the whole response.
+
+### The global handler
 
 ```go
 structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
     if errors.Is(err, context.Canceled) || r.Context().Err() != nil {
-        w.WriteHeader(499) // client closed request — expected, don't log as error
+        w.WriteHeader(499) // client went away
         return
     }
     var redir Redirect
     if errors.As(err, &redir) {
         if r.Header.Get("HX-Request") == "true" {
-            // Ajax navigation, like a boosted link. The status must stay 2xx:
-            // htmx does not process response headers on 3xx responses.
-            w.Header().Set("HX-Location", redir.To)
+            w.Header().Set("HX-Location", redir.To) // htmx ignores headers on 3xx
             return
         }
         http.Redirect(w, r, redir.To, http.StatusSeeOther)
         return
     }
-    status, title, message := http.StatusInternalServerError, "Server error", err.Error()
+    status, title, msg := http.StatusInternalServerError, "Server error", "Something went wrong"
     var se ErrorWithStatus
     if errors.As(err, &se) {
-        status, title, message = se.Status, se.Title, se.Message
+        status, title, msg = se.Status, se.Title, se.Message
     } else {
-        slog.Error("unhandled error rendering page", "error", err, "path", r.URL.Path)
+        slog.ErrorContext(r.Context(), "render failed", "error", err, "path", r.URL.Path)
     }
-    // One place that knows how to render: HTMX-aware retarget, AppShell vs bare page, tracing.
-    renderHTTPError(w, r, status, title, message)
+    w.WriteHeader(status)
+    if r.Header.Get("HX-Request") == "true" {
+        _ = ErrorPanel(title, msg).Render(r.Context(), w)
+        return
+    }
+    _ = ErrorPage(status, title, msg).Render(r.Context(), w)
 })
 ```
 
-(Use `HX-Redirect` instead of `HX-Location` only when the destination genuinely needs a full browser load — a non-htmx endpoint, or a page with different `<head>` content/scripts. `HX-Location` also accepts a JSON object — `{"path": "...", "target": "..."}` — for finer swap control.)
+Use `HX-Redirect` instead of `HX-Location` only when the destination needs a full browser load.
 
-`errors.As` unwraps, so `fmt.Errorf("...: %w", ErrorWithStatus{...})` still resolves to its status. A plain `error` (a wrapped DB failure, say) falls through to a logged 500 — exactly what you want for an unexpected fault.
-
-### Rule 3 — API endpoints use the *no-error* `ServeHTTP` form
-
-For endpoints that serve JSON (or any non-HTML response), do **not** use the error-returning form. Two reasons:
-
-1. The error-returning form buffers the whole response in memory before anything reaches the client.
-2. `WithErrorHandler` renders an **HTML** error page. An API client expects a JSON body or a bare status code, not an AppShell document.
-
-Use signature #3 — `ServeHTTP(w, r, deps...)` with **no return value**. The framework hands it the raw `w` (no structpages buffering wrapper), and because no error flows back, you own status codes yourself — and the error *bodies*: a JSON API returns JSON errors. Don't reach for `http.Error`; its `text/plain` body is the wrong shape for an API client (the Rule 1 prohibition covers the buffered forms; here it's wrong for content-type reasons instead).
+### JSON endpoints: the no-error form
 
 ```go
-type TrackTime struct{}
-
-// No error return: direct unbuffered writes, framework's HTML error handler stays out of it.
 func (TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
-    var body struct {
-        ViewID    int64 `json:"view_id"`
-        TimeSpent int32 `json:"time_spent"`
-    }
-    if err := json.UnmarshalRead(r.Body, &body); err != nil {
-        writeJSONError(w, http.StatusBadRequest, "invalid request: "+err.Error())
+    var body trackTimeRequest
+    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+        writeJSONError(w, http.StatusBadRequest, "invalid request")
         return
     }
-    if err := appCtx.Store.UpdateTimeSpent(r.Context(), body.ViewID, body.TimeSpent); err != nil {
+    if err := appCtx.Store.UpdateTime(r.Context(), body); err != nil {
         writeJSONError(w, http.StatusInternalServerError, "update failed")
         return
     }
-    w.WriteHeader(http.StatusOK)
+    w.WriteHeader(http.StatusNoContent)
 }
 
-// The API's single error shape, defined once:
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
-    json.NewEncoder(w).Encode(map[string]string{"error": msg})
+    _ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 ```
 
-### Rule 4 — for streaming (SSE), flush with `http.ResponseController`
+### Streaming (SSE)
 
-Picking the no-return form is *not* enough to guarantee writes reach the client immediately: the `w` you get may still be wrapped by upstream middleware (observability, response-writer wrappers, etc.). For **truly guaranteed unbuffered delivery** — Server-Sent Events, progress streams — use `http.ResponseController`, which walks the `Unwrap()` chain to find a flusher and drains everything in its path.
-
-This also means you *can* stream from the error-returning DI form: structpages' buffering wrapper implements `FlushError()` and `Unwrap()`, so `http.ResponseController.Flush()` pushes the buffer straight to the wire. That lets a handler validate-and-error-render up front (Rules 1–2), then commit to streaming:
+Validate first while still buffered, then flush through `http.ResponseController`:
 
 ```go
-func (p EdmImportUpload) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
+func (p ImportUpload) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) error {
     if err := r.ParseMultipartForm(32 << 20); err != nil {
-        // still buffered here — render an HTML error partial and return
-        return renderImportError(w, r, "Failed to parse upload form", err)
+        return ErrorWithStatus{Status: http.StatusBadRequest, Title: "Upload failed", Message: err.Error()}
     }
-    // ... more validation that returns errors ...
-
-    // commit to streaming
     w.Header().Set("Content-Type", "text/event-stream")
     w.Header().Set("Cache-Control", "no-cache")
-    w.Header().Set("X-Accel-Buffering", "no")
-
-    rc := http.NewResponseController(w) // works through the buffered wrapper via FlushError/Unwrap
-    fmt.Fprint(w, ": connected\n\n")
-    rc.Flush()                          // drains the buffer to the client now
-
-    for update := range progressChan {
+    rc := http.NewResponseController(w)
+    for update := range appCtx.Imports.Run(r.Context(), r.MultipartForm) {
         fmt.Fprintf(w, "event: progress\ndata: %s\n\n", update)
-        rc.Flush()                      // each event reaches the client immediately
+        if err := rc.Flush(); err != nil {
+            return nil // client gone; headers are already sent
+        }
     }
     return nil
 }
 ```
 
-Once you've started flushing a stream, returning a non-nil error can no longer produce a clean error page (headers and body bytes are already on the wire) — send an `event: error` SSE frame instead and `return nil`.
+Once bytes are flushed an error can no longer become an error page; send an `event: error` frame instead.
 
-### Which form to use
+| Handler does | Signature | Errors via |
+|---|---|---|
+| HTML page or partial, may redirect | `(w, r, deps...) error` | `return ErrorWithStatus{…}`, `return err`, `return Redirect{…}` |
+| JSON API | `(w, r, deps...)` | JSON error body written directly |
+| SSE stream | either, flushed with `http.NewResponseController` | `event: error` frame after streaming starts |
 
-| Handler does…                                  | `ServeHTTP` signature              | Errors via                          |
-|-------------------------------------------------|------------------------------------|-------------------------------------|
-| Renders HTML / HTMX partial, may redirect       | `(w, r, deps...) error`            | `return ErrorWithStatus{…}` / `return err`; redirects via `return Redirect{To: …}` |
-| Serves JSON / API (one-shot response)           | `(w, r, deps...)` *(no return)*    | write `w` directly with a JSON error body (`writeJSONError`) |
-| Streams (SSE, progress)                         | either form, flush via `http.NewResponseController(w)` | SSE `event: error` frame, then `return nil` |
+---
 
-`Props` methods always follow the first row — they are buffered and their error flows to `WithErrorHandler`, so return `ErrorWithStatus{…}` for status-coded failures, never write `w`.
+## 14. Validating URLs at boot
 
-## 14. Validating URLs (no dangling URLs in production)
-
-`structpages-lint` is the primary guard — it statically validates `URLFor`/`Ref` calls, params, and hard-coded routes in CI (see SKILL.md §3). For what static analysis can't see (URLs assembled from runtime data, refs behind dynamic dispatch), a boot-time inventory of `URLFor` calls kills the startup with the list of what's dangling — same dynamic as a database migration check:
+`structpages-lint` covers static call sites. For URLs built from runtime data or behind dynamic dispatch,
+resolve an inventory after `Mount` and fail the boot:
 
 ```go
 func validateURLs(sp *structpages.StructPages) error {
@@ -1055,4 +689,5 @@ func validateURLs(sp *structpages.StructPages) error {
 }
 ```
 
-Call it from `main` after `Mount` (fail the boot) and from a one-line test (coverage in CI). For end-to-end assurance, an integration test that mounts the tree, renders real pages, and asserts expected `href`s in the body also catches call sites that bypass your helpers. Full runnable pattern: `examples/url-validation/` in the repo.
+Call it from `main` and from a test. `examples/url-validation/` in the repository has the runnable version,
+including an integration test that renders pages and asserts their `href`s.
