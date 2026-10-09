@@ -1,6 +1,6 @@
 # structpages
 
-> A Go web framework that defines routes via struct tags and methods on top of `http.ServeMux`. Built-in support for the Templ templating engine, HTMX partial rendering (`HTMXRenderTarget`, `ID`/`IDTarget`), type-safe URL generation (`URLFor`, `Ref`), standard Go middleware, and type-based dependency injection (`WithArgs`). Status: alpha.
+> A Go web framework that defines routes via struct tags and methods on top of `http.ServeMux`. Renders any `Render(ctx, io.Writer) error` component (gsx in the examples, with `url`/`id`/`target` pipeline filters over `URLFor`/`ID`/`IDTarget`; templ and `html/template` also work), HTMX partial rendering (`HTMXRenderTarget`, `HTMXv4RenderTarget`, `ID`/`IDTarget`), type-safe URL generation (`URLFor`, `Ref`), standard Go middleware, and type-based dependency injection (`WithArgs`). Status: beta.
 
 Module path: `github.com/jackielii/structpages`. Go reference: <https://pkg.go.dev/github.com/jackielii/structpages>.
 
@@ -22,13 +22,14 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 
 ## Claude Code skill
 
-- [SKILL.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/SKILL.md): Authoritative summary of the public API and idioms for consumers of the library (`Props`/`RenderTarget`, HTMX partials, `URLFor`/`ID`/`IDTarget`, middleware, DI). Kept in sync with source.
+- [SKILL.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/SKILL.md): Authoritative summary of the public API and idioms for consumers of the library (`Props`/`RenderTarget`, HTMX partials, gsx `url`/`id`/`target` filters over `URLFor`/`ID`/`IDTarget`, middleware, DI). Kept in sync with source.
 - [reference.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/reference.md): Extended reference material the skill loads on demand.
 - [examples.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/examples.md): Worked examples that pair with the skill.
+- [templ.md](https://raw.githubusercontent.com/jackielii/structpages/main/skills/structpages/templ.md): The same idioms for projects that render with templ.
 
 ## Tooling
 
-- `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `id`, `idtarget`, `params`) and for URL-bearing HTML attributes in `.templ` files (`url-attr`). Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go or `<!-- structpages:lint:ignore <cat> -->` in templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint Tool" sections have the full category list.
+- `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `idfor`, `params`), `.go` string literals equal to a mounted route (`route-literal`), and URL-bearing HTML attributes in `.templ` files (`url-attr`; `.gsx` is not scanned yet). Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go, or `// structpages:lint:ignore <cat>` in templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint" sections have the full category list.
 
 ## Optional
 
