@@ -59,7 +59,7 @@ already accept `(T, error)` and hoist the error out of `Render`. Full rules in �
 | Term | What it is |
 |---|---|
 | **page** | a route-tagged struct, a node in the route tree |
-| **page group** | a page with no render of its own (no `Page`, `Props` or `ServeHTTP`), only child pages; served through its `/{$}` child |
+| **page group** | a page with no render of its own (no component methods, `Props` or `ServeHTTP`), only child pages; served through its `/{$}` child |
 | **component** | a standalone `component Foo(...)`: mount-independent, package-prefixed id |
 | **page component** | a method component `component (p Page) Foo(...)`: mount-aware, includes `Page` and `Content`. Composed inside another page component, or returned alone as a partial |
 | **partial** | a page component (or component) rendered alone as an HTMX response; a role, not a kind |
@@ -156,12 +156,16 @@ func (addTodo) ServeHTTP(w http.ResponseWriter, r *http.Request, s *store.Store)
     if err := s.Add(r.Context(), r.FormValue("text")); err != nil {
         return err
     }
-    return structpages.RenderComponent(<TodoList todos={s.List(r.Context())}/>)
+    todos, err := s.List(r.Context())
+    if err != nil {
+        return err
+    }
+    return structpages.RenderComponent(<TodoList todos={todos}/>)
 }
 ```
 
 In a `.gsx` file an element literal is a Go expression; in a `.go` file call the generated function
-(`TodoList(todos)`, or `index{}.TodoList(todos)` for a page component; page structs are stateless, so a
+(`TodoList(todos)`, or `Index{}.TodoList(todos)` for a page component; page structs are stateless, so a
 zero-value receiver works across pages).
 
 ### Errors, redirects and the writer
@@ -248,13 +252,15 @@ Never hand-write the id at one site and generate it at another.
 
 **Id format.** A page component's id is the page's field-name path from the root plus the method, kebab
 cased: `index-user-list`, or `admin-users-user-list` when nested. Over the length budget (default 40,
-`WithMaxIDLength`) it degrades to the leaf form (`user-list`) plus a stable hash when the leaf is shared.
+`WithMaxIDLength`) it degrades to the leaf page plus method (`users-user-list`), with a stable hash
+appended when that leaf page name is shared.
 A standalone component is prefixed by its Go package (`dashboard-stats-widget`), so same-named components
 in different packages never collide. `target` prepends `#`. Plain strings pass through both unchanged:
 `"body" |> target` is `body`.
 
 **Mounts.** Inside a page's own render, `p.X |> id` uses the current mount, so one struct mounted twice
-yields different ids per mount. From outside, a type mounted twice is ambiguous and errors; disambiguate
+yields different ids per mount. From outside, a type mounted twice under different paths is ambiguous
+and errors; disambiguate
 with a chain (`[]any{adminRoot{}, dashboard.Header}`), `structpages.Ref("AdminDash.Header")`, or make the
 slot a standalone component.
 
@@ -298,7 +304,11 @@ func (p Index) Props(r *http.Request, s *store.Store, sel structpages.RenderTarg
         }
         return indexProps{}, structpages.RenderComponent(p.UserList(pane))
     case sel.Is(StatsWidget): // standalone component
-        return indexProps{}, structpages.RenderComponent(StatsWidget(loadStats()))
+        stats, err := loadStats(r.Context(), s)
+        if err != nil {
+            return indexProps{}, err
+        }
+        return indexProps{}, structpages.RenderComponent(StatsWidget(stats))
     default:
         return p.fullProps(r, s)
     }
@@ -307,13 +317,15 @@ func (p Index) Props(r *http.Request, s *store.Store, sel structpages.RenderTarg
 
 `RenderComponent` forms, preferred first:
 
-1. **Constructed component** — `RenderComponent(p.UserList(pane))`, `RenderComponent(<StatsWidget s={s}/>)`,
+1. **Constructed component** — `RenderComponent(p.UserList(pane))`, `RenderComponent(<StatsWidget stats={stats}/>)`,
    `RenderComponent(other{}.Row(row))`. Compile-time checked.
 2. **Method expression** — `RenderComponent(Index.ItemList)` or `RenderComponent(Index.ItemList, items)`:
-   the framework finds the mounted page and DI-injects parameters you don't pass. Use only when the
-   component's parameters should be injected; arguments are checked at runtime.
-3. **Via target** — `RenderComponent(sel, args...)` after `sel.Is(fn)` matched. Required for a target from
-   a custom selector whose function you don't know statically; `Is` stores the function on match.
+   the framework finds the mounted page and fills parameters you don't pass from `WithArgs` values and
+   `*PageNode` (not `*http.Request` or the writer). Use only when the component's parameters should be
+   injected; arguments are checked at runtime.
+3. **Via target** — `RenderComponent(sel, args...)` after `sel.Is(fn)` matched; `Is` stores the function
+   on match. Works with the built-in selectors (and custom selectors that delegate to them); any other
+   `RenderTarget` implementation is rejected.
 
 ### Nested swap levels
 
@@ -324,16 +336,16 @@ Give each independently swappable region its own page component, outer wrapping 
 - `Detail` (or another name) — an inner region that swaps on its own and has **no** chrome.
 
 ```gsx
-component (d fooDetail) Page(p fooProps) {
-    <Layout><d.Content p={p}/></Layout>
+component (p fooDetail) Page(props fooProps) {
+    <Layout><p.Content props={props}/></Layout>
 }
 
-component (d fooDetail) Content(p fooProps) {
+component (p fooDetail) Content(props fooProps) {
     <a href={fooList{} |> url}>&larr; Foos</a>
-    <div id={fooDetail.Detail |> id}><d.Detail p={p}/></div>
+    <div id={fooDetail.Detail |> id}><p.Detail props={props}/></div>
 }
 
-component (d fooDetail) Detail(p fooProps) {
+component (p fooDetail) Detail(props fooProps) {
     <dl>…fields, actions…</dl>
 }
 ```
@@ -364,15 +376,17 @@ sending a 3xx). See examples.md §7.
 
 ```go
 sp, err := structpages.Mount(mux, pages{}, "/", "App",
-    structpages.WithArgs(store, logger),
+    structpages.WithArgs(appStore, logger),
     structpages.WithErrorHandler(errorHandler),
 )
 ```
 
 Registered values are matched by type into `Props`, `ServeHTTP`, `Middlewares`, `Init` and DI-injected
 components. Each type may be registered once (use named types to register two values of one type).
-Pointer and value forms coerce, and interface parameters are filled by any registered value that
-implements them. `*PageNode` is always injectable. Application services go here, not in globals.
+A registered pointer also fills a value parameter, but a registered value does not fill a pointer
+parameter, so register services as pointers. Parameters match the registered concrete type; an
+interface parameter is not filled by a registered implementation (only the built-in
+`http.ResponseWriter` and `RenderTarget` are). `*PageNode` is always injectable. Application services go here, not in globals.
 
 ## 8. Testing renders with a bare context
 

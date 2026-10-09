@@ -187,6 +187,13 @@ component (p TeamManagementView) Content(props TeamManagementProps) {
         </div>
     </section>
     <section>
+        <input
+            name="group-search"
+            value={props.GroupSearchQuery}
+            hx-get={TeamManagementView{} |> url}
+            hx-target={TeamManagementView.GroupList |> target}
+            hx-trigger="input changed delay:300ms, refresh-groups from:body"
+        />
         <div id={TeamManagementView.GroupList |> id}>
             <p.GroupList pane={props.GroupPaneProps}/>
         </div>
@@ -217,32 +224,52 @@ func (TeamManagementAddUser) ServeHTTP(w http.ResponseWriter, r *http.Request, a
 
 ## 3. ServeHTTP with RenderTarget (view modes)
 
+Both view modes render into one `Results` region, so the toggle always has a target in the DOM:
+
 ```go
+type resultsProps struct {
+    View  string // "card" or "table"
+    Items []Item
+}
+
 func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) error {
-    if r.FormValue("view") == "table" {
-        rows, err := p.tableRows(r, appCtx)
-        if err != nil {
-            return err
-        }
-        if sel.Is(p.TableView) {
-            return structpages.RenderComponent(p.TableView(rows))
-        }
-        return structpages.RenderComponent(p.TablePage(rows))
+    items, err := appCtx.Store.ListItems(r.Context())
+    if err != nil {
+        return fmt.Errorf("list items: %w", err)
     }
-    return p.renderCards(r, appCtx, sel)
+    results := resultsProps{View: r.FormValue("view"), Items: items}
+    if sel.Is(p.Results) {
+        return structpages.RenderComponent(p.Results(results))
+    }
+    return structpages.RenderComponent(p.Page(results))
 }
 ```
 
 ```gsx
-<a
-    href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "card"})}
-    hx-target={IndexPage.CardContent |> target}
->Cards</a>
-<a
-    href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "table"})}
-    hx-target={IndexPage.TableView |> target}
->Table</a>
+component (p IndexPage) Toolbar() {
+    <nav hx-target={IndexPage.Results |> target} hx-push-url="true">
+        <a
+            href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "card"})}
+            hx-get={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "card"})}
+        >Cards</a>
+        <a
+            href={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "table"})}
+            hx-get={[]any{IndexPage{}, "?view={view}"} |> url(map[string]any{"view": "table"})}
+        >Table</a>
+    </nav>
+}
+
+component (p IndexPage) Results(props resultsProps) {
+    { if props.View == "table" {
+        <p.TableView items={props.Items}/>
+    } else {
+        <p.CardView items={props.Items}/>
+    } }
+}
 ```
+
+`Page` wraps `<div id={IndexPage.Results |> id}><p.Results props={props}/></div>`. `href` keeps the links
+working without JavaScript.
 
 ---
 
@@ -405,8 +432,9 @@ return MyPageProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}
 // Nothing.
 return structpages.RenderComponent(gsx.Text(""))
 
-// Parameters DI-injected by the framework (e.g. *http.Request, *AppContext).
-return structpages.RenderComponent(MyPage.ItemList)
+// Parameters filled from WithArgs values and *PageNode, e.g.
+// component (p MyPage) RecentActivity(appCtx *AppContext).
+return structpages.RenderComponent(MyPage.RecentActivity)
 ```
 
 ---
@@ -491,7 +519,7 @@ package profile
 
 type Root struct {
     Me     mePage      `route:"GET /me Me"`
-    View   viewPage    `route:"GET /{userID} Profile"`
+    View   viewPage    `route:"GET /{userId} Profile"`
     Assets staticFiles `route:"GET /static/{path...} Assets"`
 }
 
@@ -559,10 +587,10 @@ func (Submit) ServeHTTP(w http.ResponseWriter, r *http.Request, svc *Service) er
     }
     patient, err := svc.GetPatientByMRN(r.Context(), r.FormValue("mrn"))
     switch {
-    case errors.Is(err, ErrNotFound):
+    case errors.Is(err, store.ErrNotFound):
         return ErrorWithStatus{Status: http.StatusNotFound, Title: "Not found", Message: "patient not found"}
     case err != nil:
-        return fmt.Errorf("book: %w", err) // logged 500
+        return fmt.Errorf("get patient: %w", err) // logged 500
     }
     detailURL, err := structpages.URLFor(r.Context(), PatientPage{}, map[string]any{"patientId": patient.ID})
     if err != nil {
@@ -601,13 +629,19 @@ structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err er
         slog.ErrorContext(r.Context(), "render failed", "error", err, "path", r.URL.Path)
     }
     w.WriteHeader(status)
+    page := ErrorPage(status, title, msg)
     if r.Header.Get("HX-Request") == "true" {
-        _ = ErrorPanel(title, msg).Render(r.Context(), w)
-        return
+        page = ErrorPanel(title, msg)
     }
-    _ = ErrorPage(status, title, msg).Render(r.Context(), w)
+    if err := page.Render(r.Context(), w); err != nil {
+        slog.ErrorContext(r.Context(), "render error page", "error", err, "path", r.URL.Path)
+    }
 })
 ```
+
+htmx 2 does not swap 4xx/5xx responses by default. Allow it for the panel to show, for example
+`htmx.config.responseHandling = [{code: "204", swap: false}, {code: "[2345]..", swap: true, error: true}]`,
+or send `HX-Retarget`/`HX-Reswap` to put the panel in a dedicated error slot.
 
 Use `HX-Redirect` instead of `HX-Location` only when the destination needs a full browser load.
 
@@ -617,20 +651,23 @@ Use `HX-Redirect` instead of `HX-Location` only when the destination needs a ful
 func (TrackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext) {
     var body trackTimeRequest
     if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-        writeJSONError(w, http.StatusBadRequest, "invalid request")
+        writeJSONError(w, r, http.StatusBadRequest, "invalid request")
         return
     }
     if err := appCtx.Store.UpdateTime(r.Context(), body); err != nil {
-        writeJSONError(w, http.StatusInternalServerError, "update failed")
+        slog.ErrorContext(r.Context(), "update time", "error", err)
+        writeJSONError(w, r, http.StatusInternalServerError, "update failed")
         return
     }
     w.WriteHeader(http.StatusNoContent)
 }
 
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
+func writeJSONError(w http.ResponseWriter, r *http.Request, status int, msg string) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
-    _ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+    if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+        slog.ErrorContext(r.Context(), "write json error", "error", err)
+    }
 }
 ```
 
@@ -646,17 +683,34 @@ func (p ImportUpload) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *
     w.Header().Set("Content-Type", "text/event-stream")
     w.Header().Set("Cache-Control", "no-cache")
     rc := http.NewResponseController(w)
-    for update := range appCtx.Imports.Run(r.Context(), r.MultipartForm) {
-        fmt.Fprintf(w, "event: progress\ndata: %s\n\n", update)
-        if err := rc.Flush(); err != nil {
-            return nil // client gone; headers are already sent
+    // Imports.Run returns iter.Seq2[string, error].
+    for update, err := range appCtx.Imports.Run(r.Context(), r.MultipartForm) {
+        if err != nil {
+            slog.ErrorContext(r.Context(), "import failed", "error", err)
+            if err := writeEvent(w, rc, "error", "import failed"); err != nil {
+                slog.DebugContext(r.Context(), "sse client gone", "error", err)
+            }
+            return nil
+        }
+        if err := writeEvent(w, rc, "progress", update); err != nil {
+            slog.DebugContext(r.Context(), "sse client gone", "error", err)
+            return nil
         }
     }
     return nil
 }
+
+func writeEvent(w io.Writer, rc *http.ResponseController, event, data string) error {
+    if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, data); err != nil {
+        return err
+    }
+    return rc.Flush()
+}
 ```
 
-Once bytes are flushed an error can no longer become an error page; send an `event: error` frame instead.
+Once bytes are flushed an error can no longer become an error page, so the handler reports it in-band
+with an `event: error` frame and returns `nil`; returning the error would append the error handler's
+output to the stream.
 
 | Handler does | Signature | Errors via |
 |---|---|---|
@@ -680,7 +734,7 @@ func validateURLs(sp *structpages.StructPages) error {
         }
     }
     check("components detail", func() (string, error) {
-        return sp.URLFor([]any{componentsRoot{}, entryPage{}}, map[string]any{"slug": "sample"})
+        return sp.URLFor([]any{components{}, entry{}}, map[string]any{"slug": "sample"})
     })
     check("admin settings", func() (string, error) {
         return sp.URLFor(structpages.Ref("Admin.Settings"))

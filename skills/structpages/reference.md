@@ -34,7 +34,7 @@ func (sp *StructPages) PageContext(ctx context.Context) context.Context
 
 The methods resolve against the tree without a request: use them at boot (URL validation, building
 config) and in tooling. They cannot auto-fill path params from a current request, and `ID`/`IDTarget`
-have no current mount, so a type mounted twice is ambiguous.
+have no current mount, so a type mounted twice (with differing ids) is ambiguous.
 
 `PageContext` returns `ctx` carrying the tree, so the context functions and gsx filters work under a bare
 `context.Background()` (SKILL.md §8).
@@ -103,7 +103,8 @@ Detected in this order:
 - **Auto-fill**: unfilled placeholders that are path params of the current request's route are taken from
   the request. Params of other routes are not.
 
-Path values are escaped per segment; `{path...}` wildcards keep their slashes. `{$}` is removed and
+Explicitly passed path values are escaped per segment; `{path...}` wildcards keep their slashes.
+Auto-filled values are taken from `r.PathValue` (already decoded) and inserted as is. `{$}` is removed and
 `WithURLPrefix` is prepended.
 
 ## ID and IDTarget
@@ -113,8 +114,9 @@ Input forms:
 - **Method expression** `Index.UserList` or **bound method** `p.UserList` → `index-user-list` (page path +
   method).
 - **Standalone function** `StatsWidget` → `<package>-stats-widget` (short package name prefix).
-- **Chain** `[]any{adminRoot{}, dashboard{}, "Header"}` or `[]any{adminRoot{}, dashboard.Header}`; when the
-  trailing method expression's receiver and the explicit leaf both appear they must agree.
+- **Chain** `[]any{adminRoot{}, dashboard{}, "Header"}` or `[]any{adminRoot{}, dashboard.Header}`. A trailing
+  method expression whose receiver is the last chain step collapses into it; otherwise its receiver is
+  resolved as one more child step.
 - **`Ref`** `Ref("Index.UserList")`, or `Ref("UserList")` when unambiguous.
 - **Plain string** → returned unchanged, by both functions (`IDTarget(ctx, "body")` is `body`, not `#body`).
   `ID`/`IDTarget` have no string-as-`Ref` sugar; wrap in `Ref(...)` for a lookup.
@@ -122,13 +124,14 @@ Input forms:
 `IDTarget` prefixes `#` to every resolved id.
 
 **Format.** The kebab-cased field-name path from the root (root excluded) joined with the method:
-`admin-users-user-list`. Longer than the budget (`WithMaxIDLength`, default 40) it becomes the leaf form
-`user-list`, plus a 4-hex hash when another node shares the leaf name. An id only changes when that node
+`admin-users-user-list`. Longer than the budget (`WithMaxIDLength`, default 40) it becomes the leaf page plus
+method, `users-user-list`, with a 4-hex hash appended when another node shares the leaf page name. An id only changes when that node
 is renamed or moved. Kebab conversion: `HTMLParser` → `html-parser`.
 
 **Mount context.** During a page's own render the current mount is used, so `p.Header |> id` differs per
-mount of the same struct. Without a current mount (another page, `sp.ID`) a type mounted twice is an error
-naming the mounts; disambiguate with a chain, a `Ref`, or a standalone component.
+mount of the same struct. Without a current mount (another page, `sp.ID`) a type mounted twice with
+differing ids is an error naming the mounts; disambiguate with a chain, a `Ref`, or a standalone
+component.
 
 ## Options
 
@@ -221,8 +224,9 @@ For a function target, `Is` records the matched function; `RenderComponent(sel, 
 ### HTMXRenderTarget (default) and HTMXv4RenderTarget
 
 - Not an HTMX request (`HX-Request` ≠ `true`) or no `HX-Target` → `Page`.
-- Otherwise the target is matched to a component: exact generated id first, then `page-prefix-component`,
-  then bare `component`, then the longest suffix match.
+- Otherwise the target is matched to a component: an exact generated id, or a `page-prefix-component` or
+  bare `component` match (checked together, so don't rely on precedence between them), then the longest
+  suffix match.
 - No component match → a function target, resolved lazily by `Is(fn)` in `Props`.
 
 `HTMXv4RenderTarget` additionally treats `HX-Request-Type: full` as a full page and reads the id from
@@ -230,8 +234,9 @@ htmx 4's `tag#id` `HX-Target` (falling back to the tag, so a `Form` component ma
 
 ### Custom selectors
 
-A custom `RenderTarget` that also has `Component() <component>` can be returned as
-`RenderComponent(target)`; the framework calls `Component()`.
+A custom `TargetSelector` should delegate to `HTMXRenderTarget` (or `HTMXv4RenderTarget`) and return
+its result: `RenderComponent(sel, ...)` only accepts the built-in target implementations, so a
+selector that returns its own `RenderTarget` type can use `Is` but not the via-target form.
 
 ## RenderComponent
 
@@ -244,9 +249,8 @@ Returned as an error from `Props` or a `ServeHTTP` that returns `error`; other `
 | First argument | Args | Resolution |
 |---|---|---|
 | component value (`p.List(items)`, `<Widget n={1}/>`) | none | rendered directly; compile-time checked |
-| custom target with `Component()` | none | `Component()` result rendered |
 | `RenderTarget` after `Is` matched | optional | method target: called on the current page; function target: the recorded function |
-| method expression `Index.List` / bound method | optional | owning mounted page found; missing params DI-filled |
+| method expression `Index.List` / bound method | optional | owning mounted page found; missing params filled from `WithArgs` values and `*PageNode` |
 | other function | must match | called with `args` |
 
 Argument count and types are checked before the call and reported as errors.
