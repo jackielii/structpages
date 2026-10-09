@@ -1,30 +1,29 @@
 # structpages API Reference
 
-## Core Function: Mount
+Signatures are from the package source. Markup examples are gsx with the `url`/`id`/`target` filters
+registered as in SKILL.md; for templ see [templ.md](templ.md).
+
+## Mount and Parse
 
 ```go
 func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPages, error)
-```
-
-Main entry point. Parses page tree, registers routes on mux, returns `*StructPages` for URL/ID generation.
-
-- `mux`: `*http.ServeMux` (or nil for default)
-- `page`: Root struct with route tags
-- `route`: Base path (usually `"/"`)
-- `title`: Root page title
-- `options`: `WithArgs`, `WithErrorHandler`, `WithMiddlewares`, `WithTargetSelector`, `WithWarnEmptyRoute`, `WithMaxIDLength`, `WithURLPrefix`
-
-## Parse (no-mux variant)
-
-```go
 func Parse(page any, route, title string, options ...Option) (*StructPages, error)
 ```
 
-Builds the page tree without registering any routes on a mux. Use in tests and tooling that need URLFor/ID/IDTarget against the real page tree but don't want an HTTP server. Accepts the same options as `Mount`; mux-shaped options (middlewares) are inert.
+`Mount` parses the page tree, calls every `Init`, and registers handlers on `mux` (`nil` means
+`http.DefaultServeMux`). `route` is the base path (usually `"/"`), `title` the root page title.
 
-## StructPages Type
+`Parse` builds the same tree without registering anything; use it in tests and tooling. It applies
+`WithArgs`, `WithURLPrefix` and `WithTargetSelector`; middleware and error-handler options are inert. It
+currently ignores `WithMaxIDLength`, so ids generated under `Parse` use the default budget of 40.
 
-Returned by `Mount()` and `Parse()`. Methods:
+```go
+type Mux interface {
+    Handle(pattern string, handler http.Handler)
+}
+```
+
+## *StructPages
 
 ```go
 func (sp *StructPages) URLFor(page any, args ...any) (string, error)
@@ -33,229 +32,206 @@ func (sp *StructPages) IDTarget(v any) (string, error)
 func (sp *StructPages) PageContext(ctx context.Context) context.Context
 ```
 
-`PageContext` wraps `ctx` with `sp`'s page tree so the context-form `URLFor` / `ID` / `IDTarget` (in templ renders, props helpers) resolve against `sp`. The recommended test pattern: `Parse` once per package, wrap a bare `context.Background()` in `PageContext`, render against the wrapped ctx.
+The methods resolve against the tree without a request: use them at boot (URL validation, building
+config) and in tooling. They cannot auto-fill path params from a current request, and `ID`/`IDTarget`
+have no current mount, so a type mounted twice is ambiguous.
 
-Use the method form of `URLFor`/`ID`/`IDTarget` outside of request context (e.g., during initialization). Within request handlers, use the context-based versions.
+`PageContext` returns `ctx` carrying the tree, so the context functions and gsx filters work under a bare
+`context.Background()` (SKILL.md §8).
 
-## Context Functions
+## Context functions and gsx filters
 
 ```go
 func URLFor(ctx context.Context, page any, args ...any) (string, error)
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
+func CurrentPage(ctx context.Context) *PageNode
 ```
 
-### URLFor Page Argument Types
+All three resolvers return an error when `ctx` carries no page tree (outside a request and without
+`PageContext`).
 
-Recommended call shape: `URLFor(ctx, page, params)` where `params` is a `map[string]any`.
+Registered as gsx filters (`gsx.toml`):
 
-1. **Struct instance**: `URLFor(ctx, MyPage{}, params)` — matches by type. Strict: errors if the type matches multiple nodes (use the chain or Ref form below). For a subtree **container** (a page with only child routes and no render logic of its own), `URLFor` returns its index child's URL (the `/{$}` route) — i.e. the canonical trailing-slash form `/section/`, not the bare `/section` that would 307-redirect. Leaf pages return their own path unchanged.
-2. **`[]any` chain / composition**: `URLFor(ctx, []any{ParentPage{}, LeafPage{}}, params)` — typed values form a chain (descend by child type). Trailing strings concat as literal URL fragments: `[]any{Page{}, "?q={q}"}`. Mixing typed values after a string fragment is rejected.
-3. **Ref string**: `URLFor(ctx, Ref("Parent.Field"), params)` — qualified path (walks down by `PageNode.Name`). The first segment (the anchor) matches a top-level node if one has that name, otherwise any uniquely-named node anywhere in the tree — so a Ref needn't spell out structural wrappers above its target (e.g. `Ref("Receptionist.Patients")` resolves even when `Receptionist` is mounted under an authed subtree). An anchor that names more than one node is an error; qualify it with a parent segment. `Ref("PageName")` matches the first node with that name. Use Ref when the typed page can't be imported (cross-package cycle) or for type aliases. `structpages-lint`'s `ref` check validates Ref strings — including those stored in struct fields/vars (e.g. a nav table) — against the tree, so a lint-passing Ref resolves at runtime.
-4. **Predicate**: `URLFor(ctx, func(*PageNode) bool { ... })` — escape hatch for custom matching.
-
-### URLFor Args Formats
-
-**Recommended: `map[string]any`** — explicit, position-independent, refactor-safe.
-
-```go
-URLFor(ctx, page{}, map[string]any{"userId": 123, "slug": "hello"})
+```toml
+[filters]
+url    = "github.com/jackielii/structpages.URLFor"
+id     = "github.com/jackielii/structpages.ID"
+target = "github.com/jackielii/structpages.IDTarget"
 ```
 
-The other forms are also supported. Order of detection inside `formatPathSegments`:
+| gsx | Go equivalent |
+|---|---|
+| `{ x \|> url }` | `structpages.URLFor(ctx, x)` |
+| `{ x \|> url(params) }` | `structpages.URLFor(ctx, x, params)` |
+| `{ x \|> id }` | `structpages.ID(ctx, x)` |
+| `{ x \|> target }` | `structpages.IDTarget(ctx, x)` |
 
-- **Map**: a single `map[string]any` first arg. Recommended; values are looked up by placeholder name.
-- **Positional**: arg count exactly matches placeholder count → `URLFor(ctx, page{}, "val1", "val2")` fills left to right. Brittle if placeholders are reordered.
-- **Key-value pairs**: even arg count, every even-indexed arg is a string, AND at least one of those strings matches a placeholder name → `URLFor(ctx, page{}, "userId", 123, "slug", "hello")`. Equivalent to map form but spread across positional args; harder to scan.
-- **Auto-fill from request**: unfilled placeholders that match path params from the *current request's route* are filled automatically. Other routes' params do not auto-fill.
+Filters work in element and component attribute holes, text holes, and `@{}` holes of `js`/`f` literals
+on attributes; a non-nil error is returned from `Render`. gsx rejects them in a literal assigned inside a
+`{{ }}` block, which has no error channel. A direct call such as
+`href={structpages.URLFor(ctx, x)}` also compiles, because gsx holes accept `(string, error)`, but the
+filter is the idiom. Do not register the package with `filter_packages`: names would become `uRLFor`.
 
-### ID / IDTarget Input Types
+`CurrentPage` returns the matched leaf `*PageNode` while serving a `Props`/component page, nil otherwise
+(including `ServeHTTP` pages and `PageContext`). Walk `Parent` for active-navigation state.
 
-- **Unbound method**: `ID(ctx, MyPage.UserList)` → the page's full field-name path from the root joined with the method — `"my-page-user-list"` for a top-level page, `"admin-users-user-list"` when nested. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form `"user-list"`, with a short stable hash suffix appended when the leaf name is not unique in the tree.
-- **Bound method**: `ID(ctx, p.UserList)` → same result
-- **Standalone function**: `ID(ctx, UserWidget)` → `"<package>-user-widget"` — prefixed by the function's short package name so two same-named functions in different packages get distinct ids
-- **`[]any` chain form**: leading typed values + trailing method spec; the trailing element is either a string method name or a method expression
-  - `IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})` — chain + string
-  - `IDTarget(ctx, []any{adminRoot{}, dashboardPage.Header})` — chain + method expression (receiver type collapses with the leaf if both appear, and must agree)
-- **Ref string**: `ID(ctx, Ref("MyPage.UserList"))` qualified, or `Ref("UserList")` if unambiguous across all pages
-- **Plain string**: `ID(ctx, "my-custom-id")` → returned as-is
+## URLFor
 
-`IDTarget` works the same way but prepends `#` to method-derived IDs: `"#my-page-user-list"`. **For plain string inputs, `IDTarget` returns the string verbatim** — `IDTarget("body")` is `"body"`, not `"#body"`. Pass `"#body"` if you want the hash.
+### Page argument
 
-#### Mount-context semantics
+1. **Typed page value** — `Detail{}`. Strict: a type mounted under several parents is an error listing
+   every match. A page group (only child routes, no render of its own) resolves to its `/{$}` child, so
+   the URL is the canonical `/section/` rather than a redirecting `/section`.
+2. **`[]any` composition** — leading typed values are a chain: the first resolves normally, each next one
+   descends into a uniquely typed child. Strings after the chain are appended literally (query templates,
+   suffixes). A typed value after a string is an error.
+3. **`Ref`** — `structpages.Ref("Parent.Field")` walks field names; the first segment matches a top-level
+   node or any uniquely named node. `Ref("Name")` matches by name; `Ref("/route/{x}")` by route pattern.
+   A top-level plain string is sugar for `Ref`: `"Admin.Settings" |> url`. Strings inside `[]any` stay URL
+   fragments.
+4. **Predicate** — `func(*PageNode) bool`, an escape hatch.
 
-The id is built from the node's **field-name path from the root** (root excluded) — every ancestor mount field name joined, then the method. That path uniquely identifies the mount, so two different mounts of the same struct always produce different ids (e.g. `foundations-entry-detail-overlays` vs `components-entry-detail-overlays`), even when their leaf field names match.
+### Arguments
 
-- **Self-render** (inside the page's own templ): the resolver consults the current request's page node from context, so the id reflects *that mount* — admin's render emits `"admin-dash-header"`, user's emits `"user-dash-header"`.
-- **Cross-page** (call site has no current-page context): a bare method expression for a type mounted in more than one place is ambiguous — each mount has its own path-based id — so it errors with the available mounts and three disambiguation primitives:
-  1. `[]any` chain form (type-safe — chain steps are real types)
-  2. `Ref("Parent.Field")` (string lookup, lint-validated, useful when the type isn't importable)
-  3. Move the slot to a standalone function (package-prefixed id, no mount dependency)
+Detected in this order:
 
-**Length / readability**: the full-path form is used while it fits the budget set by `WithMaxIDLength` (default 40 chars). Beyond that, the id degrades to the compact leaf-only form (`user-list`), with a stable 4-hex-char hash suffix appended when the leaf name is shared by another node. Each id is a pure function of that node's own path, so it changes only when *that* node is renamed or moved — never because an unrelated sibling changed.
+- **Map** (recommended): one `map[string]any`, values looked up by placeholder name, path and query alike.
+- **Positional**: argument count equals placeholder count; filled left to right.
+- **Key/value pairs**: even count, string keys, at least one key naming a placeholder
+  (`url("itemId", 7)`).
+- **Auto-fill**: unfilled placeholders that are path params of the current request's route are taken from
+  the request. Params of other routes are not.
 
-Naming: CamelCase → kebab-case (`HTMLParser` → `html-parser`). The reverse direction (`kebabToPascal`) is lossy: `html-parser` → `HtmlParser`, not `HTMLParser`. HX-Target matching uses suffix and page-prefix rules (see `HTMXRenderTarget` below) rather than simple reverse conversion, so this lossiness rarely matters in practice.
+Path values are escaped per segment; `{path...}` wildcards keep their slashes. `{$}` is removed and
+`WithURLPrefix` is prepended.
+
+## ID and IDTarget
+
+Input forms:
+
+- **Method expression** `Index.UserList` or **bound method** `p.UserList` → `index-user-list` (page path +
+  method).
+- **Standalone function** `StatsWidget` → `<package>-stats-widget` (short package name prefix).
+- **Chain** `[]any{adminRoot{}, dashboard{}, "Header"}` or `[]any{adminRoot{}, dashboard.Header}`; when the
+  trailing method expression's receiver and the explicit leaf both appear they must agree.
+- **`Ref`** `Ref("Index.UserList")`, or `Ref("UserList")` when unambiguous.
+- **Plain string** → returned unchanged, by both functions (`IDTarget(ctx, "body")` is `body`, not `#body`).
+  `ID`/`IDTarget` have no string-as-`Ref` sugar; wrap in `Ref(...)` for a lookup.
+
+`IDTarget` prefixes `#` to every resolved id.
+
+**Format.** The kebab-cased field-name path from the root (root excluded) joined with the method:
+`admin-users-user-list`. Longer than the budget (`WithMaxIDLength`, default 40) it becomes the leaf form
+`user-list`, plus a 4-hex hash when another node shares the leaf name. An id only changes when that node
+is renamed or moved. Kebab conversion: `HTMLParser` → `html-parser`.
+
+**Mount context.** During a page's own render the current mount is used, so `p.Header |> id` differs per
+mount of the same struct. Without a current mount (another page, `sp.ID`) a type mounted twice is an error
+naming the mounts; disambiguate with a chain, a `Ref`, or a standalone component.
 
 ## Options
 
-### WithArgs
+| Option | Effect |
+|---|---|
+| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. |
+| `WithErrorHandler(func(http.ResponseWriter, *http.Request, error))` | Renders every error from `Props`, `ServeHTTP`, component lookup and render. Default: plain 500. |
+| `WithMiddlewares(mw ...MiddlewareFunc)` | Global middleware, first is outermost, runs before page `Middlewares`. |
+| `WithTargetSelector(TargetSelector)` | Chooses the `RenderTarget`. Default `HTMXRenderTarget`; use `HTMXv4RenderTarget` for htmx 4. |
+| `WithURLPrefix(prefix string)` | Prefix added to generated URLs when served behind `StripPrefix` or a proxy. Routing unchanged. |
+| `WithMaxIDLength(n int)` | Id budget before the compact form. Ids only, never routes. |
+| `WithWarnEmptyRoute(func(*PageNode))` | Called for pages with no handler and no children (skipped). `nil` prints a default warning; a no-op func silences it. |
 
-```go
-structpages.WithArgs(db, logger, appCtx)
-```
+## Page methods
 
-Type-based DI. Each type registered once. Injected into `Props`, `ServeHTTP`, `Middlewares`, `Init` methods by type matching.
+Discovered on both the value and pointer type; promoted methods are skipped.
 
-The matcher (in `args.go`) coerces between pointer and value forms and falls back to assignability. So a single `*AppContext` registration also satisfies parameters of any interface `*AppContext` implements. Generic types and interface types both work — see `generics_injection_test.go` for the tested matrix (basic injection, duplicate-type errors, slices/maps, type aliases, function types, nil handling, complex constraints, pointer semantics, method matching, interface injection).
+### Components
 
-To register two values of the same underlying type, define named types to disambiguate.
+Any method returning exactly one value that implements `Render(context.Context, io.Writer) error` is a
+component. In gsx, `component (p Index) Page(props indexProps)` generates
+`func (p Index) Page(props indexProps) gsx.Node`. Parameters are matched by type against the `Props`
+results, then the DI registry.
 
-### WithErrorHandler
-
-```go
-structpages.WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-    status := http.StatusInternalServerError
-    var se ErrorWithStatus
-    if errors.As(err, &se) {
-        status = se.Status
-    }
-    // render an HTML/HTMX error page with `status`
-})
-```
-
-Called when `Props` or an error-returning `ServeHTTP` returns a non-nil error (the response buffer is discarded first). This is the single place that turns errors into responses, so handlers should *return* errors rather than writing `w` themselves. Define a typed error carrying a status code and unwrap it here with `errors.As`; plain errors default to a logged 500. The writer passed in is still the buffered one — writing to it here is fine because no handler runs after. See examples.md §13.
-
-### WithMiddlewares
-
-```go
-structpages.WithMiddlewares(loggingMW, authMW)
-```
-
-Global middleware applied to all routes. Executed in order (first = outermost).
-
-### WithTargetSelector
-
-```go
-structpages.WithTargetSelector(func(r *http.Request, pn *PageNode) (RenderTarget, error) {
-    return structpages.HTMXRenderTarget(r, pn) // default
-})
-```
-
-Custom component selection logic. Default is `HTMXRenderTarget`.
-
-### WithWarnEmptyRoute
-
-```go
-structpages.WithWarnEmptyRoute(func(pn *PageNode) { /* custom warning */ })
-```
-
-Customize/suppress warnings for pages with no handler and no children.
-
-### WithMaxIDLength
-
-```go
-structpages.WithMaxIDLength(60) // default 40
-```
-
-Character budget for generated element ids (`ID`/`IDTarget`) before they degrade from the readable full-path form (`admin-users-user-list`) to the compact leaf-only form (`user-list`, plus a stable hash suffix when the leaf name is not unique). Affects id generation only, never routing.
-
-## Page Methods
+- `Page` is rendered for full loads.
+- Any other component is rendered when its id matches `HX-Target`.
+- With no matching component and no `Props`-issued `RenderComponent`, the request errors (a static
+  `HX-Target` that matches nothing falls back to `Page`).
 
 ### Props
 
 ```go
-func (p MyPage) Props(r *http.Request, [w http.ResponseWriter,] [sel RenderTarget,] [deps ...any]) (PropsType, error)
+func (p Index) Props(r *http.Request, w http.ResponseWriter, sel structpages.RenderTarget, s *store.Store) (indexProps, error)
 ```
 
-Parameters matched by type (order doesn't matter):
-- `*http.Request` — the request
-- `http.ResponseWriter` — optional, for setting headers/cookies
-- `RenderTarget` — which component will render (always non-nil; constructed by `targetSelector`)
-- `*PageNode` — route metadata for the current node
-- Any registered dependency
+Parameters are DI-matched in any order: `*http.Request`, `http.ResponseWriter`, `RenderTarget`,
+`*PageNode`/`PageNode`, and `WithArgs` values. Results: any number of values (passed to the component),
+optionally a trailing `error`.
 
-**Only the method literally named `Props` is auto-invoked.** Methods whose names *end* in `Props` (e.g. `UserListProps`, `PageProps`, `ContentProps`) are stored in `PageNode.Props` map but never auto-resolved by the framework — they are ordinary helper methods you can call yourself from inside `Props`. The earlier docs that suggested `PageProps`/`ContentProps` take priority were incorrect.
+The writer is **not** buffered. Headers and cookies are fine; a body write is sent immediately and is not
+undone by a later error. Return `ErrSkipPageRender` when `Props` wrote the whole response itself; return
+`RenderComponent(...)` to render something other than the selected component.
 
-### Page / Content / Custom Components
-
-Templ methods returning a component. `Page` is for full page, `Content` for body, custom names for partials.
-
-```go
-templ (p MyPage) Page(props MyProps) { ... }
-templ (p MyPage) Content(props MyProps) { ... }
-templ (p MyPage) UserList(users []User) { ... }  // partial with specific data type
-```
+Only `Props` is invoked. Other `*Props` methods are recorded in `PageNode.Props` but never called.
 
 ### ServeHTTP
 
-Four supported signatures:
+1. `ServeHTTP(w, r)` — `http.Handler`; direct writes.
+2. `ServeHTTP(w, r) error` — buffered.
+3. `ServeHTTP(w, r, deps...)` — DI, no result; direct writes.
+4. `ServeHTTP(w, r, deps...) error` — DI, buffered.
 
-1. `ServeHTTP(w, r)` — standard `http.Handler`. Direct write to `w`.
-2. `ServeHTTP(w, r) error` — buffered. On non-nil error, the buffer is discarded and the error handler runs.
-3. `ServeHTTP(w, r, deps...)` — DI form, no return value. Direct write to `w`.
-4. `ServeHTTP(w, r, deps...) error` — DI form, buffered (because of the return value).
-
-In the DI forms, `RenderTarget` is also injectable: the framework computes one via the configured `targetSelector` and adds it to the available args. This lets `ServeHTTP` decide which partial to render, e.g.:
-
-```go
-func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, target structpages.RenderTarget) error {
-    if target.Is(IndexPage.Table) { /* … */ }
-}
-```
-
-`ServeHTTP` takes precedence over the Props/Component flow — if defined, `Props` and component methods are not consulted.
-
-**Choosing a form, and the `http.Error` anti-pattern.** The buffered (error-returning) forms exist so that on error the framework can discard a partial response and render through `WithErrorHandler` instead. Therefore:
-
-- In signatures 2 and 4 (and in any `Props` method) **never write `w` directly** — no `http.Error`, no `w.WriteHeader`. Writing then `return err` discards the write when the buffer resets; writing then `return nil` bypasses the error handler. Return the error and let `WithErrorHandler` render it. For a specific status code, return a typed error (e.g. `ErrorWithStatus{Status, Title, Message}`) that the handler unwraps via `errors.As`.
-- For endpoints that serve JSON / non-HTML / streamed responses, use signature **3** (`ServeHTTP(w, r, deps...)`, no return). It is unbuffered, so writes go straight to the client and the HTML error handler is never invoked. Direct `w` writes are the correct tool there — you own the status code. Match the error body to the content type (JSON errors for a JSON API); avoid `http.Error`, whose `text/plain` body fits neither an API client nor an HTMX swap.
-
-See examples.md §13 for the full worked pattern.
+Buffered forms: on error the buffer is reset, then `RenderComponent` errors render their component and
+anything else goes to `WithErrorHandler`. `ErrSkipPageRender` has no special meaning here. In the DI forms
+`RenderTarget` is injectable. A page with `ServeHTTP` never runs `Props` or components. For streaming,
+`http.NewResponseController(w).Flush()` works through the buffered writer (it implements `FlushError` and
+`Unwrap`).
 
 ### Middlewares
 
 ```go
-func (p MyPages) Middlewares([deps ...any]) []MiddlewareFunc
+func (p adminPages) Middlewares(deps ...) []structpages.MiddlewareFunc
 ```
 
-Page-specific middleware. Also applies to all descendants.
+DI-matched parameters; the result type must be exactly `[]structpages.MiddlewareFunc`. Applies to the page
+and its descendants, after global middleware.
 
 ### Init
 
 ```go
-func (p MyPage) Init([deps ...any]) error    // value receiver works
-func (p *MyPage) Init([deps ...any]) error   // pointer receiver also works (use this if Init mutates)
+func (p *Index) Init(deps ...) error
 ```
 
-Called at Mount time for one-time setup. Either receiver kind is allowed; the framework iterates both struct and pointer types in `processMethods` and `prepareReceiver` adjusts addressability as needed. Pointer receiver is the usual choice since `Init` typically wants to store state on the page.
+Called once while parsing, with DI. A returned error aborts `Mount`/`Parse`. Use a pointer receiver to keep
+state on the page value.
 
-Return `error` to abort `Mount`.
-
-## RenderTarget Interface
+## RenderTarget
 
 ```go
 type RenderTarget interface {
     Is(method any) bool
 }
+type TargetSelector func(r *http.Request, pn *PageNode) (RenderTarget, error)
 ```
 
-`Is()` checks if target matches a component. Works with:
-- Page methods: `sel.Is(MyPage.UserList)` or `sel.Is(p.UserList)`
-- Standalone functions: `sel.Is(UserWidget)`
+`Is` accepts method expressions, bound methods and standalone functions. It matches a standalone function
+by its package-qualified id (the one `id` generates), and also by the bare or page-prefixed function id.
+For a function target, `Is` records the matched function; `RenderComponent(sel, args...)` needs that.
 
-**For function targets** (`functionRenderTarget`): `Is()` has the side effect of storing the matched function value. You **must** call `Is(fn)` before `RenderComponent(target, args...)` — otherwise `RenderComponent` returns "function target has no funcValue".
+### HTMXRenderTarget (default) and HTMXv4RenderTarget
 
-**For method targets** (`methodRenderTarget`): the method is captured at construction time, so `Is()` is recommended for the readable switch pattern but not strictly required for `RenderComponent` to work.
+- Not an HTMX request (`HX-Request` ≠ `true`) or no `HX-Target` → `Page`.
+- Otherwise the target is matched to a component: exact generated id first, then `page-prefix-component`,
+  then bare `component`, then the longest suffix match.
+- No component match → a function target, resolved lazily by `Is(fn)` in `Props`.
 
-### componentGetter (extension point for custom RenderTargets)
+`HTMXv4RenderTarget` additionally treats `HX-Request-Type: full` as a full page and reads the id from
+htmx 4's `tag#id` `HX-Target` (falling back to the tag, so a `Form` component matches `hx-target="form"`).
 
-If a custom `TargetSelector` returns a `RenderTarget` that *also* implements:
+### Custom selectors
 
-```go
-interface { Component() component }
-```
-
-then `RenderComponent(target)` (with no args) calls `Component()` directly to get the component to render. Useful for selectors that already know the data and want to bypass the args/method pipeline.
+A custom `RenderTarget` that also has `Component() <component>` can be returned as
+`RenderComponent(target)`; the framework calls `Component()`.
 
 ## RenderComponent
 
@@ -263,39 +239,17 @@ then `RenderComponent(target)` (with no args) calls `Component()` directly to ge
 func RenderComponent(targetOrMethod any, args ...any) error
 ```
 
-Returns a sentinel-typed error (`*errRenderComponent`) that instructs the framework to render a specific component. Detected in both the Props error path and the buffered-`ServeHTTP` error path.
+Returned as an error from `Props` or a `ServeHTTP` that returns `error`; other `Props` results are ignored.
 
-Patterns, split by whether they go through reflection:
+| First argument | Args | Resolution |
+|---|---|---|
+| component value (`p.List(items)`, `<Widget n={1}/>`) | none | rendered directly; compile-time checked |
+| custom target with `Component()` | none | `Component()` result rendered |
+| `RenderTarget` after `Is` matched | optional | method target: called on the current page; function target: the recorded function |
+| method expression `Index.List` / bound method | optional | owning mounted page found; missing params DI-filled |
+| other function | must match | called with `args` |
 
-**Direct (no reflection — preferred when applicable)**
-
-1. **Pre-built component**: `RenderComponent(myTemplComponent)` — render a templ component already constructed by the caller. No args allowed. Use this whenever you have (or can construct) the component value yourself; it's compile-time-checked end-to-end. The same-page idiom is `RenderComponent(p.X(args))` and the standalone-function idiom is `RenderComponent(MyWidget(args))`.
-2. **componentGetter**: `RenderComponent(customTarget)` where `customTarget` implements `Component() component`. No args. Calls `Component()` to get the component to render.
-
-**Reflective dispatch (framework looks up the method and applies DI)**
-
-3. **Method expression** (cross-page or same-page): `RenderComponent(MyPage.ItemList, items)` — framework finds the page that owns the method, looks up the component, calls it with `items`, filling any DI-injected parameters. Use when the method's params should be framework-injected; for plain data params, prefer direct construction with a zero-value receiver — `RenderComponent(MyPage{}.ItemList(items))` — since pages are stateless.
-4. **Bound method value**: `RenderComponent(p.EditSection, props)` — same as #3 with the receiver already bound. Equivalent to direct form #1 (`RenderComponent(p.EditSection(props))`), but goes through reflection; prefer the direct form when `p` is in scope.
-5. **Via target**: `RenderComponent(target, args...)` after `target.Is()` matched (required for function targets — `Is()` stores the function pointer). Works for method targets too, but if the receiver is in scope, `RenderComponent(p.X(args))` is clearer and faster.
-
-When returned from `Props`, the other return values are ignored.
-
-Argument-count and assignability are validated *before* the call (in `executeRenderOp`) — mismatches surface as readable errors instead of panics. Direct-form callers get the same checks from the Go compiler at build time.
-
-## HTMXRenderTarget (Default TargetSelector)
-
-1. Checks `HX-Request: true` header. If absent, returns `methodRenderTarget` for `Page`.
-2. Reads `HX-Target` header. If empty, returns `methodRenderTarget` for `Page`.
-3. Tries `matchComponentByTarget` (in `htmx.go`):
-   - **First pass — exact matches**: `pagePrefix-componentID` first, then bare `componentID`.
-   - **Second pass — suffix matches**, longest-wins, with three rules:
-     - `fullID` ends with `target`
-     - `target` ends with `fullID`
-     - `target` ends with `componentID` *only if* `target` also starts with `pagePrefix-` (this guard prevents `home-content` from matching component `Content` on page `IndexPage`)
-4. If a method matches, returns `methodRenderTarget` for that method.
-5. If no method matches, returns `functionRenderTarget` carrying the raw `HX-Target` for lazy evaluation in `Is()` against standalone function components.
-
-Non-HTMX requests always get `methodRenderTarget` for `Page` — if `Page` is not defined (Props-only page), `methodRenderTarget.Is()` returns false and `Props` must call `RenderComponent` itself.
+Argument count and types are checked before the call and reported as errors.
 
 ## ErrSkipPageRender
 
@@ -303,9 +257,9 @@ Non-HTMX requests always get `methodRenderTarget` for `Page` — if `Page` is no
 var ErrSkipPageRender = errors.New("skip page render")
 ```
 
-Return from `Props` to skip rendering (after writing a redirect, etc.). **This is checked only in the Props error path** (`struct_pages.go:325`). Returning `ErrSkipPageRender` from `ServeHTTP` does not have the same effect — it falls through to the error handler.
+Honoured only from `Props`: the request ends without rendering or calling the error handler.
 
-## PageNode
+## PageNode and MiddlewareFunc
 
 ```go
 type PageNode struct {
@@ -313,86 +267,45 @@ type PageNode struct {
     Value       reflect.Value
     Props       map[string]reflect.Method
     Components  map[string]reflect.Method
-    Middlewares  *reflect.Method
+    Middlewares *reflect.Method
     Parent      *PageNode
     Children    []*PageNode
 }
-```
+func (pn *PageNode) FullRoute() string
+func (pn *PageNode) All() iter.Seq[*PageNode]
 
-- `FullRoute() string` - complete route including parents
-- `All() iter.Seq[*PageNode]` - iterate this node and all descendants
-
-## MiddlewareFunc
-
-```go
 type MiddlewareFunc func(http.Handler, *PageNode) http.Handler
 ```
 
-Unlike standard Go middleware, receives `*PageNode` for route metadata access.
+`Method` is `"ALL"` when the tag has none. Middleware is invoked once per route at registration, so the
+outer function can inspect the node (e.g. collect a route table) and return the wrapped handler.
 
-## Ref Type
-
-```go
-type Ref string
-```
-
-Dynamic references for URLFor/ID/IDTarget:
-- URLFor: `Ref("PageName")` by name, `Ref("Parent.Field")` qualified path. **URLFor also accepts a plain string at the top level as sugar** — `URLFor(ctx, "Parent.Field")` is equivalent to `URLFor(ctx, Ref("Parent.Field"))`. Strings inside `[]any{...}` composition are still URL fragments.
-- ID: `Ref("PageName.MethodName")` qualified, `Ref("MethodName")` if unambiguous. ID/IDTarget do **not** accept the string-as-Ref sugar — plain strings to ID/IDTarget are returned as literal IDs/selectors (e.g. `IDTarget(ctx, "body")` returns `"body"`). Use `Ref(...)` explicitly when you mean dynamic lookup.
-
-## Mux Interface
-
-```go
-type Mux interface {
-    Handle(pattern string, handler http.Handler)
-}
-```
-
-Satisfied by `*http.ServeMux`.
-
-## Route Tag Format
+## Route tag
 
 ```
 route:"[METHOD] /path [Title]"
 ```
 
-- Method: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE, ALL (or omit for all)
-- Path: Go 1.22+ mux patterns. `{param}` for path params, `{param...}` for wildcards, `{$}` for exact match
-- Title: remaining text after path
+- Methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `ALL`; omitted means `ALL`.
+- Paths use Go 1.22 `ServeMux` patterns: `{name}`, `{name...}`, `{$}`.
+- Child routes are joined to the parent with `path.Join`, which removes trailing slashes; use `{path...}` for
+  prefix subtrees.
 
-**Prefix subtrees use `{path...}`, not trailing slashes.** `FullRoute()` uses `path.Join`, which strips trailing slashes when concatenating with parent paths — so `route:"/static/"` under `/admin` registers as `GET /admin/static` (exact match), not `GET /admin/static/` (prefix match). Use `route:"/static/{path...}"` and read `r.PathValue("path")` to capture the subpath. See SKILL.md "Mounting a module's static-asset subtree" and examples.md §12.
-
-## Buffered Response
-
-Error-returning `ServeHTTP` (and every `Props` method) uses a buffered writer. On a non-nil error the buffer is discarded and `WithErrorHandler` renders instead — so do **not** write `w` directly in these forms; return the error (typed, e.g. `ErrorWithStatus`, when a specific status is needed). The no-return `ServeHTTP(w, r, deps...)` form skips the structpages buffering wrapper — use it for one-shot JSON/API endpoints where you write directly and own the status code.
-
-For streaming (SSE, progress), flush with `http.NewResponseController(w)`: the buffered wrapper implements `FlushError()` and `Unwrap()`, so the controller drains the buffer to the client and reaches any underlying flusher. This works from *either* `ServeHTTP` form — and unlike grabbing the raw `w`, it is the only way to *guarantee* an unbuffered write through whatever middleware also wraps the writer. See examples.md §13.
-
-## Lint Tool
-
-`structpages-lint` is a static analyzer for `structpages` projects.
+## Lint
 
 ```shell
 go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
 structpages-lint ./...
 ```
 
-Diagnostic categories:
-
-| Category | What it flags |
+| Category | Flags |
 |---|---|
-| `urlfor` | `structpages.URLFor` chain/composition errors (unknown child type, fragment-before-step). |
-| `ref` | `structpages.Ref(...)` strings that don't resolve to a page tree node. |
-| `id`, `idtarget` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted. |
-| `params` | `URLFor` params that don't appear in the route pattern. |
-| `url-attr` | URL-bearing HTML attributes in `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, or `fmt.Sprint*` calls. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
-| `route-literal` | `.go` string literals whose value exactly equals a mounted route — resolve by page type via `URLFor` instead. Narrow: exact concrete-route match only (param/`{$}` routes, trailing-slash/query variants, and bare `/` never match); literals in `==`/`switch` comparisons and `Ref(...)` args are skipped; `_test.go` and generated files are skipped. |
+| `urlfor` | `URLFor` targets: unmounted or ambiguous type, unknown chain child, typed value after a fragment |
+| `ref` | `Ref` strings (including ones stored in variables or struct fields) that resolve to no node |
+| `params` | `URLFor` params that are not placeholders in the pattern |
+| `idfor` | `ID`/`IDTarget` method expressions whose receiver is not mounted, or whose method is missing on a chain leaf |
+| `route-literal` | `.go` string literals equal to a concrete mounted route (comparisons, `Ref` args, tests and generated files skipped) |
+| `url-attr` | hard-coded internal URLs in URL-bearing attributes of **`.templ`** files; `.gsx` is not scanned yet |
 
-Suppression syntax (place above the call/element, or on the same line):
-
-| Source | Preferred | Also supported |
-|---|---|---|
-| `.go` files | `//structpages:lint:ignore <category>[,…]` | — |
-| `.templ` files | `// structpages:lint:ignore <category>[,…]` (Go-style; stripped from HTML output) | `<!-- structpages:lint:ignore <category>[,…] -->` (renders into HTML, prefer only when intentional) |
-
-A bare directive with no category suppresses every category on the targeted line. Categories are comma-separated.
+Suppress with `//structpages:lint:ignore <category>[,<category>]` on the line or the line above; with no
+category it suppresses everything on that line.
