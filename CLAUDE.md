@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Structpages is a Go web framework library that provides struct-based routing. It integrates with Go's standard `http.ServeMux` and provides a declarative way to define routes using struct tags. The framework is designed to reduce boilerplate code when building web pages and components, with built-in support for the Templ templating engine.
+Structpages is a Go web framework library that provides struct-based routing. It integrates with Go's standard `http.ServeMux` and provides a declarative way to define routes using struct tags. The framework is designed to reduce boilerplate code when building web pages and components. It renders any value with `Render(context.Context, io.Writer) error`; the examples use gsx, and templ and `html/template` also work.
 
 **Status**: Beta (API settled; battle-tested in production by medium-to-large applications)
 
@@ -28,25 +28,20 @@ go test -v ./...
 ### Working with Examples
 ```bash
 # Navigate to an example directory
-cd examples/simple  # or examples/htmx or examples/todo
+cd examples/simple  # or examples/htmx, examples/todo, examples/blog, ...
 
-# Install dependencies
-go mod download
+# Generated .x.go files are committed, so this runs as is (typically on :8080)
+go run .
 
-# Generate Go code from Templ files (required before running)
-# Each example pins the templ CLI as a `tool` dep, so `go tool` resolves the
-# correct version automatically — no global install needed.
-go tool templ generate -include-version=false
-
-# Run the example server (typically on :8080)
-go run main.go
-
-# Watch mode for Templ files during development
-go tool templ generate -include-version=false --watch
+# After editing .gsx sources: regenerate and format. Each example pins the gsx
+# CLI as a `tool` dependency; the repo-root gsx.toml registers the
+# structpages url/id/target filters for every example.
+go tool gsx generate .
+go tool gsx fmt -w .
 ```
 
 ### Required Tools
-- Go 1.24 or later (for the `tool` directive in example go.mod files)
+- Go 1.26 or later for the examples (the library itself needs Go 1.24)
 
 ## Architecture Overview
 
@@ -64,7 +59,7 @@ go tool templ generate -include-version=false --watch
        team    `route:"POST /team Team"`
    }
    ```
-   Each leaf page handles requests via one of: a `Page()` templ method (most common), a `Props` method (Props-only pages), or a `ServeHTTP` method (form actions, redirects). Promoted (embedded) methods are skipped.
+   Each leaf page handles requests via one of: a `Page()` component method (most common), a `Props` method (Props-only pages), or a `ServeHTTP` method (form actions, redirects). Promoted (embedded) methods are skipped.
 
 3. **HTMX Support**: Built-in partial rendering via the default `HTMXRenderTarget` selector
    - `htmx.go`: `HTMXRenderTarget` and `matchComponentByTarget` (page-prefix + suffix matching)
@@ -80,9 +75,9 @@ go tool templ generate -include-version=false --watch
    - Apply globally via `WithMiddlewares` or per-page via a `Middlewares()` method (also applies to descendants)
 
 6. **Dependency Injection**: Type-based DI via `WithArgs(...)`
-   - `args.go`: `argRegistry` matches by type, with pointer/value coercion and assignability fallback
+   - `args.go`: `argRegistry` matches by type; a registered pointer fills a value param (not the reverse), with an assignability fallback
    - Each registered type appears once; use named types to disambiguate
-   - Generic types and interface-typed parameters are supported (see `generics_injection_test.go`)
+   - Generic types are supported; interface-typed params are not filled by a registered implementation (see `generics_injection_test.go`)
 
 ### Key Design Patterns
 
@@ -114,6 +109,6 @@ The workflow only auto-triggers on pushes to `main`. After pushing to `docs-site
 
 ## Claude Code Skill
 
-A library-consumer-facing skill ships with this repo at `skills/structpages/SKILL.md` (with `reference.md` and `examples.md`). It teaches users of the library — not contributors — patterns for `Props`/`RenderTarget`, HTMX partial rendering, `URLFor`/`ID`/`IDTarget`, middleware, and DI. A minimal `.claude-plugin/plugin.json` makes the repo installable as a Claude Code plugin.
+A library-consumer-facing skill ships with this repo at `skills/structpages/SKILL.md` (with `reference.md`, `examples.md` and `templ.md`). It teaches users of the library — not contributors — patterns for `Props`/`RenderTarget`, HTMX partial rendering, the gsx `url`/`id`/`target` filters over `URLFor`/`ID`/`IDTarget`, middleware, and DI. gsx is the primary path; `templ.md` covers templ projects. A minimal `.claude-plugin/plugin.json` makes the repo installable as a Claude Code plugin.
 
 When working on the library itself: read `skills/structpages/SKILL.md` for an authoritative summary of the public API and idioms (it is kept in sync with source), or symlink `skills/structpages/` into your `~/.claude/skills/` for auto-load while editing this repo.
