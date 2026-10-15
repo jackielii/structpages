@@ -110,20 +110,26 @@ structpages-lint ./...
 
 Categories:
 
-- `urlfor`, `ref`, `id`, `idtarget`, `params` — checks `structpages.URLFor` / `Ref` / `ID` / `IDTarget` call sites against the reconstructed page tree.
-- `url-attr` — scans `.templ` files for URL-bearing HTML attributes (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concatenations, or `fmt.Sprint*` calls — i.e. cases where you should have called `structpages.URLFor`. Allows `https://`, `mailto:`, `#`, protocol-relative `//`.
+- `urlfor`, `ref`, `idfor`, `params` — checks `structpages.URLFor` / `Ref` / `ID` / `IDTarget` call sites against the reconstructed page tree. In gsx projects this covers every `|> url` / `|> id` / `|> target`, which gsx lowers to those calls in the generated `.x.go`; findings point back at the `.gsx` line. `params` checks both literal `map[string]any` keys and the constant keys of the key/value form (`url("id", x)`).
+- `url-attr` — scans `.gsx` and `.templ` files for URL-bearing HTML attributes (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concatenations, `fmt.Sprint*` calls or gsx `` f`/path/@{x}` `` templates — i.e. cases where you should have called `structpages.URLFor`. Allows `https://`, `mailto:`, `#`, protocol-relative `//`.
 - `route-literal` — scans `.go` files for string literals whose value exactly equals a mounted route (e.g. `return "/admin/queues"`), where you should resolve the URL by page type via `structpages.URLFor` instead, so renames break the build rather than drifting. Narrow by design: only an exact concrete-route match counts (param/`{$}` routes, trailing-slash and query variants, and the bare `/` never match); literals in `==`/`switch` comparisons and `Ref(...)` arguments are skipped (they read a route, not generate a URL), as are `_test.go` and generated files.
 
-Suppress a single diagnostic with a comment. Prefer `//` in both file types — Go-style comments are stripped from the generated HTML; `<!-- … -->` HTML comments render into every response.
+Suppress a single diagnostic with a comment on the line or the line above. Prefer `//` in templates: Go-style comments never reach the HTML, while `<!-- … -->` HTML comments render into every response.
 
 ```go
-//structpages:lint:ignore url-attr           // in .go files
+//structpages:lint:ignore route-literal      // in .go files
+```
+
+```gsx
+// structpages:lint:ignore url-attr          // in .gsx files (bare, {/* … */}, or inside an attribute list)
 ```
 
 ```templ
 // structpages:lint:ignore url-attr          // in .templ files (preferred)
 <!-- structpages:lint:ignore url-attr -->    <!-- also works in .templ -->
 ```
+
+In `.gsx` a directive covers every category, including findings on `|> url` / `|> id` / `|> target` calls (gsx v0.4.0+, which maps attribute holes to their real line).
 
 ## Claude Code Skill
 

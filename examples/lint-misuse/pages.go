@@ -73,6 +73,11 @@ func urlSamples(ctx context.Context) {
 	// BAD: ref/name — no page named "Ghost"
 	_, _ = structpages.URLFor(ctx, structpages.Ref("Ghost"))
 
+	// BAD: ref/anchor — "Nope" names no page anywhere. Reported once, by
+	// the Ref-conversion check (which lists the available anchors); the
+	// URLFor call-site check must not add its own URL-context duplicate.
+	_, _ = structpages.URLFor(ctx, structpages.Ref("Nope.X"))
+
 	// OK: bare typed lookup
 	_, _ = structpages.URLFor(ctx, homePage{})
 
@@ -140,6 +145,32 @@ func urlSamples(ctx context.Context) {
 	_, _ = structpages.URLFor(ctx,
 		[]any{itemsRoot{}, itemDetail{}, "?tab={tab}"},
 		map[string]any{"slug": "x", "wrongTab": "summary"})
+
+	// OK: variadic key/value form — "slug" names the placeholder.
+	_, _ = structpages.URLFor(ctx, itemDetail{}, "slug", "x")
+
+	// BAD: params — variadic key "nope" is not a placeholder. URLFor
+	// would silently fall back to positional fill: /items/nope.
+	_, _ = structpages.URLFor(ctx, itemDetail{}, "nope", 1)
+
+	// BAD: params — variadic keys are checked against the fragment's
+	// placeholders too: "slug" is fine, "wrongTab" is not.
+	_, _ = structpages.URLFor(ctx,
+		[]any{itemsRoot{}, itemDetail{}, "?tab={tab}"},
+		"slug", "x", "wrongTab", "summary")
+
+	// OK (not checked): one arg per placeholder is positional, so the
+	// string is a value, not a key.
+	_, _ = structpages.URLFor(ctx, itemDetail{}, "nope")
+
+	// OK (not checked): an odd-length list is positional at runtime —
+	// URLFor fills {slug} with "slug" and ignores the rest rather than
+	// rejecting it — so there is nothing to predict.
+	_, _ = structpages.URLFor(ctx, itemDetail{}, "slug", "x", "extra")
+
+	// OK (not checked): a non-constant key leaves the shape undecidable.
+	key := "nope"
+	_, _ = structpages.URLFor(ctx, itemDetail{}, key, "x")
 
 	// BAD: ref/string — top-level string is sugar for Ref; the analyzer
 	// validates string args to URLFor the same way it validates Ref(...).

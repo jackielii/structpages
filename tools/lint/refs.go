@@ -36,18 +36,55 @@ func checkRefConversion(ctx *checkCtx, call *ast.CallExpr) {
 	// diagnostic when the ref is invalid in BOTH contexts — a real
 	// typo/rename that would fail at every consumer. Context-
 	// specific errors (e.g. URL-only callers feeding a depth-2
-	// anchor that ID accepts) are surfaced by the call-site check.
-	save := ctx.silent
-	ctx.silent = true
-	urlNode := resolveRef(ctx, call.Args[0].Pos(), s, false)
-	idNode := resolveRef(ctx, call.Args[0].Pos(), s, true)
-	ctx.silent = save
-	if urlNode != nil || idNode != nil {
+	// anchor that ID accepts) are surfaced by the call-site check,
+	// which defers to this one via refConversionReports.
+	if !refConversionReports(ctx, call.Args[0].Pos(), s) {
 		return
 	}
 	// Both failed: emit the ID-context error (it's more permissive
 	// and lists more candidate anchors, which is friendlier).
 	_ = resolveRef(ctx, call.Args[0].Pos(), s, true)
+}
+
+// resolveRefAtCallSite resolves the string argument of a Ref(...)
+// conversion passed straight to URLFor (isIDContext=false) or
+// ID/IDTarget (isIDContext=true). checkRefConversion has already
+// reported a ref that fails in every context — with the ID-context
+// wording, which lists the available anchors — so in that case this
+// stays silent rather than give one bad Ref two diagnostics at the
+// same position; otherwise it reports this context's failure.
+func resolveRefAtCallSite(ctx *checkCtx, pos token.Pos, ref string, isIDContext bool) *PageNode {
+	node, _ := probeRef(ctx, pos, ref, isIDContext)
+	if node != nil {
+		return node
+	}
+	if refConversionReports(ctx, pos, ref) {
+		return nil
+	}
+	return resolveRef(ctx, pos, ref, isIDContext)
+}
+
+// refConversionReports reports whether checkRefConversion emits a
+// diagnostic for ref: it does when ref resolves in neither context and
+// the ID-context resolution has something to say. (A simple name fails
+// silently in ID context — it may be a method name, which the ID check
+// validates — so a bare Ref("Name") is left to the call site.)
+func refConversionReports(ctx *checkCtx, pos token.Pos, ref string) bool {
+	if urlNode, _ := probeRef(ctx, pos, ref, false); urlNode != nil {
+		return false
+	}
+	idNode, idDiagnosed := probeRef(ctx, pos, ref, true)
+	return idNode == nil && idDiagnosed
+}
+
+// probeRef resolves ref without reporting, returning the node and
+// whether resolution would have emitted a diagnostic.
+func probeRef(ctx *checkCtx, pos token.Pos, ref string, isIDContext bool) (*PageNode, bool) {
+	save, before := ctx.silent, ctx.silenced
+	ctx.silent = true
+	node := resolveRef(ctx, pos, ref, isIDContext)
+	ctx.silent = save
+	return node, ctx.silenced > before
 }
 
 // resolveRef validates a Ref string against the page tree. It honours

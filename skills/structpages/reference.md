@@ -297,19 +297,42 @@ route:"[METHOD] /path [Title]"
 
 ## Lint
 
+`structpages-lint` checks every URL, id and `Ref` against the page tree it rebuilds from the `route` tags
+and `Mount` calls, so a renamed route, moved page or mistyped param key fails CI instead of becoming a 404
+or an error page. The compiler can't catch these: `Ref` strings, param keys and hard-coded `href`s are all
+just strings to it. The bigger the tree, the more this matters. Run it in CI next to `go test` and after
+any route, page or partial rename.
+
 ```shell
-go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
-structpages-lint ./...
+go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+go tool structpages-lint ./...            # exit 1 on any finding
+go tool structpages-lint -tags dev ./...  # include call sites behind build tags
 ```
+
+Run it from the module root (or pass the packages holding the `Mount` calls): it needs them to rebuild the
+tree, and exits 0 with a warning when there are none.
 
 | Category | Flags |
 |---|---|
 | `urlfor` | `URLFor` targets: unmounted or ambiguous type, unknown chain child, typed value after a fragment |
 | `ref` | `Ref` strings (including ones stored in variables or struct fields) that resolve to no node |
-| `params` | `URLFor` params that are not placeholders in the pattern |
+| `params` | `URLFor` param keys that are not placeholders in the pattern (fragment included): literal map keys, and constant keys of the key/value form, `url("itemId", 7)` |
 | `idfor` | `ID`/`IDTarget` method expressions whose receiver is not mounted, or whose method is missing on a chain leaf |
 | `route-literal` | `.go` string literals equal to a concrete mounted route (comparisons, `Ref` args, tests and generated files skipped) |
-| `url-attr` | hard-coded internal URLs in URL-bearing attributes of **`.templ`** files; `.gsx` is not scanned yet |
+| `url-attr` | hard-coded internal URLs in URL-bearing attributes (`href`, `action`, `formaction`, `hx-get`/`post`/`put`/`patch`/`delete`, `hx-push-url`/`hx-replace-url`) of `.gsx` and `.templ` files: literals, `+` concatenation, `fmt.Sprint*`, and gsx `` f`/items/@{id}` `` templates |
+
+gsx templates get two passes. gsx lowers `|> url`, `|> id` and `|> target` to real
+`URLFor`/`ID`/`IDTarget` calls in the generated `.x.go`, which the analyzer checks like hand-written Go
+(`urlfor`, `ref`, `params`, `idfor`). Findings point at the `.gsx` through gsx's `//line` directives.
+`url-attr` parses the `.gsx` itself. Keep the `.x.go` files generated before linting.
+
+The key/value check follows URLFor's own rules. With as many args as placeholders the call is positional,
+and so is an odd count. A non-constant key is skipped. Those calls aren't checked. An unknown key is
+reported even when no key matches: URLFor then falls back to positional fill, and `url("nope", 1)` against
+`/items/{id}` silently renders `/items/nope`.
 
 Suppress with `//structpages:lint:ignore <category>[,<category>]` on the line or the line above; with no
-category it suppresses everything on that line.
+category it suppresses everything on that line. In `.gsx` the directive is a gsx comment: bare `// …`,
+braced `{/* … */}`, or inside an attribute list. Avoid `<!-- … -->` there, because it renders into every
+response. It covers every category, including findings on a `|> url`/`|> id`/`|> target` call; that needs
+gsx v0.4.0 or later, whose `//line` directives put attribute holes on their real line.

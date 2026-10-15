@@ -4,6 +4,9 @@ import (
 	"go/ast"
 	"go/token"
 	"strings"
+
+	"github.com/jackielii/structpages/tools/lint/gsxscan"
+	"github.com/jackielii/structpages/tools/lint/internal/urlattr"
 )
 
 // directiveMap maps a token.Pos (line of a call expression) to the
@@ -13,6 +16,9 @@ type directiveMap struct {
 	fset *token.FileSet
 	// byLine indexes suppressions by (file token.Pos, line number).
 	byLine map[token.Pos]map[int]map[string]bool
+	// gsx caches the directives of each .gsx file a diagnostic has been
+	// mapped to (nil when the file failed to parse).
+	gsx map[string]*urlattr.Directives
 }
 
 // newDirectiveMap scans every comment in every file in files and
@@ -66,6 +72,13 @@ func (dm *directiveMap) suppressed(pos token.Pos, category string) bool {
 	if !p.IsValid() {
 		return false
 	}
+	// A diagnostic in generated gsx code is positioned in the .gsx
+	// source by the .x.go's //line directives, but the directive that
+	// should suppress it is a gsx comment, which codegen drops. Read
+	// it from the .gsx itself.
+	if strings.HasSuffix(p.Filename, ".gsx") {
+		return dm.gsxDirectives(p.Filename).Suppressed(p.Line, category)
+	}
 	// find the file base by matching the file name; token.Pos is
 	// monotonic per FileSet, so we walk byLine entries and pick the
 	// one whose file matches.
@@ -84,6 +97,24 @@ func (dm *directiveMap) suppressed(pos token.Pos, category string) bool {
 		return cats[category]
 	}
 	return false
+}
+
+// gsxDirectives returns the directives of the .gsx file filename,
+// parsing it on first use. A file that fails to parse suppresses
+// nothing; gsx generation would have failed on it first.
+func (dm *directiveMap) gsxDirectives(filename string) *urlattr.Directives {
+	if ds, ok := dm.gsx[filename]; ok {
+		return ds
+	}
+	ds, err := gsxscan.Directives(filename)
+	if err != nil {
+		ds = nil
+	}
+	if dm.gsx == nil {
+		dm.gsx = map[string]*urlattr.Directives{}
+	}
+	dm.gsx[filename] = ds
+	return ds
 }
 
 // parseDirective parses a single comment text and returns the set of
@@ -110,7 +141,7 @@ func parseDirective(text string) (map[string]bool, bool) {
 		cats[""] = true
 		return cats, true
 	}
-	for _, part := range strings.Split(rest, ",") {
+	for part := range strings.SplitSeq(rest, ",") {
 		p := strings.TrimSpace(part)
 		if p == "" {
 			continue

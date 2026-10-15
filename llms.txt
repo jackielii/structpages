@@ -29,7 +29,7 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 
 ## Tooling
 
-- `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `idfor`, `params`), `.go` string literals equal to a mounted route (`route-literal`), and URL-bearing HTML attributes in `.templ` files (`url-attr`; `.gsx` is not scanned yet). Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go, or `// structpages:lint:ignore <cat>` in templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint" sections have the full category list.
+- `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `idfor`, `params`), `.go` string literals equal to a mounted route (`route-literal`), and URL-bearing HTML attributes in `.gsx` and `.templ` files (`url-attr`). gsx `|> url`/`id`/`target` filters are checked through the generated `.x.go`. Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go, or `// structpages:lint:ignore <cat>` in gsx/templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint" sections have the full category list.
 
 ## Optional
 

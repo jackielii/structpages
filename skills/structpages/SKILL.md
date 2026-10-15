@@ -5,8 +5,9 @@ description: >
   Use when writing routes, pages, page groups, Props methods, handler methods (ServeHTTP), page components,
   partials, HTMX partial rendering and nested swap levels, URL and element-id generation (the gsx
   `url`/`id`/`target` filters, URLFor/ID/IDTarget), RenderTarget/RenderComponent patterns, middleware or
-  dependency injection with structpages. Also use when the user asks about structpages patterns, conventions,
-  vocabulary, or debugging structpages issues. Covers templ and html/template users too.
+  dependency injection with structpages, or running and reading structpages-lint. Also use when the user asks
+  about structpages patterns, conventions, vocabulary, or debugging structpages issues. Covers templ and
+  html/template users too.
 ---
 
 # structpages
@@ -15,7 +16,7 @@ structpages routes HTTP requests with struct tags on top of `http.ServeMux`. A p
 methods load data (`Props`), render (`Page`, `Content`, partials) or handle the request imperatively
 (`ServeHTTP`). HTMX partial rendering, type-safe URLs and element ids are built in.
 
-- [reference.md](reference.md) — exact API signatures and semantics, lint categories.
+- [reference.md](reference.md) — exact API signatures and semantics, `structpages-lint` categories.
 - [examples.md](examples.md) — larger worked patterns (two-pane pages, CRUD, error handling, static assets).
 - [templ.md](templ.md) — read only if the project renders with templ instead of gsx.
 
@@ -211,7 +212,7 @@ Go, with `params` a `map[string]any` that fills both path and query placeholders
   error. Outside a request use `sp.URLFor(...)` on the `*StructPages` returned by `Mount`/`Parse`; it
   cannot auto-fill request params.
 
-Never write an in-app URL as a literal; `structpages-lint` (reference.md §Lint) checks `URLFor`/`Ref`
+Never write an in-app URL as a literal; `structpages-lint` (§9) checks `URLFor`/`Ref`
 calls and route literals in CI, and examples.md §14 adds a boot-time check for URLs it cannot see.
 
 ## 4. HTMX partials: one reference, three sites
@@ -410,6 +411,30 @@ Parse the canonical root even when the test exercises one module, so URLs to sib
 `structpages.CurrentPage(ctx)` is nil under `PageContext`; it is set only while serving a `Props`/component
 page (not a `ServeHTTP` page).
 
+## 9. Lint: structpages-lint
+
+`structpages-lint` rebuilds the page tree from the `route` tags and `Mount` calls and checks every
+`URLFor`/`ID`/`IDTarget`/`Ref` call against it. That covers every `|> url`/`id`/`target` in `.gsx` too,
+since gsx lowers them to those calls. It also flags hard-coded internal URLs in `href`/`hx-*`/`action`
+attributes and route-shaped string literals in Go. The compiler can't see any of this, because routes,
+`Ref`s and param keys are strings to it. In a large app, where a route rename touches templates across many
+packages, the linter is what turns a wave of 404s into a CI failure.
+
+```shell
+go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+go tool structpages-lint ./...
+```
+
+- Run it in CI next to `go test`, from the module root so it finds the `Mount` calls. Pass `-tags` when
+  pages are mounted behind build tags.
+- Run it after renaming or moving a page, route, partial method or path param. Then fix what it reports;
+  don't hunt for call sites by grep.
+- Regenerate gsx (`go tool gsx generate .`) before linting: the analyzer reads the generated `.x.go`.
+- Treat findings as bugs. Suppress (`//structpages:lint:ignore <category>`) only for a URL that is
+  genuinely not a structpages route, e.g. a path served by another handler.
+
+reference.md §Lint lists the categories, the gsx specifics and the suppression rules.
+
 ## Key rules
 
 1. Read path params with `r.PathValue("itemId")`.
@@ -425,3 +450,5 @@ page (not a `ServeHTTP` page).
 8. Strict lookups: disambiguate repeated mounts with a `[]any` chain; `Ref` only across import cycles.
 9. Plain strings pass through `id`/`target` unchanged (`"body" |> target` is `body`).
 10. htmx 4 needs `WithTargetSelector(HTMXv4RenderTarget)`.
+11. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
+    them.

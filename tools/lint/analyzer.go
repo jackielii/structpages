@@ -33,6 +33,10 @@ type checkCtx struct {
 	// resolved node without re-reporting failures the Ref-conversion
 	// visitor has already surfaced.
 	silent bool
+	// silenced counts reports dropped because silent was set, so a
+	// caller can resolve quietly yet still learn whether resolution
+	// would have produced a diagnostic.
+	silenced int
 }
 
 func run(pass *analysis.Pass, tree *PageTree) {
@@ -84,6 +88,7 @@ func visitCall(ctx *checkCtx, call *ast.CallExpr) {
 // context is in silent mode.
 func (ctx *checkCtx) report(pos token.Pos, category, format string, args ...any) {
 	if ctx.silent {
+		ctx.silenced++
 		return
 	}
 	if ctx.dm.suppressed(pos, category) {
