@@ -15,8 +15,8 @@ import (
 //   - typed page lookup (bare typed value or `[]any{...}` chain)
 //   - chain step ordering rules (no Ref/predicate past index 0; no
 //     typed value after a string fragment)
-//   - param-map key vs route-placeholder check when a literal
-//     map[string]any is supplied
+//   - param key vs route-placeholder check when a literal
+//     map[string]any or a variadic key/value list is supplied
 func checkURLFor(ctx *checkCtx, call *ast.CallExpr) {
 	if len(call.Args) < 2 {
 		return
@@ -30,6 +30,9 @@ func checkURLFor(ctx *checkCtx, call *ast.CallExpr) {
 	node, frag := resolvePageArgAndFragment(ctx, pageArg)
 	if node != nil {
 		checkParamMap(ctx, node, frag, args)
+		if !call.Ellipsis.IsValid() {
+			checkParamPairs(ctx, node, frag, args)
+		}
 	}
 }
 
@@ -66,7 +69,7 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 	// feeding a depth-2 anchor) must be caught here.
 	if call, ok := expr.(*ast.CallExpr); ok && isRefConversion(ctx.pass.TypesInfo, call) {
 		if s, ok := stringConstantFromPass(ctx, call.Args[0]); ok {
-			return resolveRef(ctx, call.Args[0].Pos(), s, false)
+			return resolveRefAtCallSite(ctx, call.Args[0].Pos(), s, false)
 		}
 		return nil
 	}

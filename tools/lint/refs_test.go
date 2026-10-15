@@ -2,7 +2,10 @@ package lint
 
 import (
 	"go/token"
+	"strings"
 	"testing"
+
+	"golang.org/x/tools/go/analysis"
 )
 
 // buildNavTree returns a tree shaped like his-project's:
@@ -73,5 +76,48 @@ func TestResolveRefByQualified_topLevelStillWins(t *testing.T) {
 	ctx := &checkCtx{tree: buildNavTree(), silent: true}
 	if n := resolveRefByQualified(ctx, token.NoPos, "Wrapper.Section", "Wrapper.Section", false); n == nil || n.Name != "Section" {
 		t.Errorf("Wrapper.Section: got %v, want Section", n)
+	}
+}
+
+// TestResolveRefAtCallSite_oneDiagnosticPerRef pins that a Ref(...) passed
+// straight to URLFor or ID/IDTarget yields exactly one diagnostic between
+// checkRefConversion (which reports refs invalid in every context) and the
+// call-site check (which reports only context-specific failures).
+func TestResolveRefAtCallSite_oneDiagnosticPerRef(t *testing.T) {
+	cases := []struct {
+		ref        string
+		idContext  bool
+		wantSubstr string // "" = no diagnostic
+	}{
+		// Unknown anchor: invalid everywhere, the conversion check's
+		// ID-context wording (with the available anchors) wins.
+		{"Nope.X", false, `anchor "Nope" not found anywhere in the tree; available:`},
+		{"Nope.X", true, `anchor "Nope" not found anywhere in the tree; available:`},
+		// Simple name: ID context treats it as a method name, so the
+		// conversion check stays silent and the URL call site reports.
+		{"Ghost", false, `no page with this name`},
+		// Valid in ID context only (Leaf.Method), so URLFor reports.
+		{"Leaf.Method", false, `segment 1 ("Method") not found as child of "Leaf"`},
+		{"Leaf.Method", true, ""},
+		{"Section.Leaf", false, ""},
+	}
+	for _, tc := range cases {
+		var got []string
+		ctx := &checkCtx{
+			tree: buildNavTree(),
+			pass: &analysis.Pass{Report: func(d analysis.Diagnostic) { got = append(got, d.Message) }},
+		}
+		if refConversionReports(ctx, token.NoPos, tc.ref) {
+			resolveRef(ctx, token.NoPos, tc.ref, true) // what checkRefConversion emits
+		}
+		resolveRefAtCallSite(ctx, token.NoPos, tc.ref, tc.idContext)
+
+		switch {
+		case tc.wantSubstr == "" && len(got) != 0:
+			t.Errorf("Ref(%q) id=%v: want no diagnostic, got %q", tc.ref, tc.idContext, got)
+		case tc.wantSubstr != "" && (len(got) != 1 || !strings.Contains(got[0], tc.wantSubstr)):
+			t.Errorf("Ref(%q) id=%v: want one diagnostic containing %q, got %q",
+				tc.ref, tc.idContext, tc.wantSubstr, got)
+		}
 	}
 }

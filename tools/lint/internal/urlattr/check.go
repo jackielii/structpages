@@ -1,4 +1,4 @@
-package templscan
+package urlattr
 
 import (
 	"fmt"
@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-// isInternalPath reports whether s looks like a literal internal app
+// IsInternalPath reports whether s looks like a literal internal app
 // URL: starts with "/" but not "//" (which would be a
 // protocol-relative URL).
-func isInternalPath(s string) bool {
+func IsInternalPath(s string) bool {
 	if !strings.HasPrefix(s, "/") {
 		return false
 	}
@@ -22,11 +22,11 @@ func isInternalPath(s string) bool {
 	return true
 }
 
-// literalDiagnostic formats the "hard-coded internal URL" message.
-func literalDiagnostic(attrName, literal string) string {
+// LiteralMessage formats the "hard-coded internal URL" message.
+func LiteralMessage(attrName, literal string) string {
 	return fmt.Sprintf(
 		"[%s] %s value %q is a hard-coded internal URL; use structpages.URLFor instead",
-		categoryURLAttr, attrName, literal,
+		Category, attrName, literal,
 	)
 }
 
@@ -34,7 +34,7 @@ func literalDiagnostic(attrName, literal string) string {
 func concatDiagnostic(attrName, src string) string {
 	return fmt.Sprintf(
 		"[%s] %s value `%s` builds an internal URL by string concatenation; use structpages.URLFor instead",
-		categoryURLAttr, attrName, strings.TrimSpace(src),
+		Category, attrName, strings.TrimSpace(src),
 	)
 }
 
@@ -42,24 +42,34 @@ func concatDiagnostic(attrName, src string) string {
 func sprintfDiagnostic(attrName, src string) string {
 	return fmt.Sprintf(
 		"[%s] %s value `%s` builds an internal URL via fmt.Sprint*; use structpages.URLFor instead",
-		categoryURLAttr, attrName, strings.TrimSpace(src),
+		Category, attrName, strings.TrimSpace(src),
 	)
 }
 
-// finding is one rule hit inside a parsed Go expression, with the
-// position taken from the snippet's own fset (1-indexed line/col,
-// where line 1 is the snippet's first line).
-type finding struct {
-	pos     token.Position
-	message string
+// InterpolationMessage formats the message for an interpolated string
+// template (e.g. gsx's f`/items/@{id}`) whose leading literal text is
+// an internal path.
+func InterpolationMessage(attrName, src string) string {
+	return fmt.Sprintf(
+		"[%s] %s value `%s` builds an internal URL by string interpolation; use structpages.URLFor instead",
+		Category, attrName, strings.TrimSpace(src),
+	)
 }
 
-// checkGoExpr parses src as a Go expression and returns one finding
+// Finding is one rule hit inside a parsed Go expression, with the
+// position taken from the snippet's own fset (1-indexed line/col,
+// where line 1 is the snippet's first line).
+type Finding struct {
+	Pos     token.Position
+	Message string
+}
+
+// CheckGoExpr parses src as a Go expression and returns one finding
 // per bad-URL shape discovered. attrName is used in the message.
 //
 // Recognised shapes:
 //
-//   - basic STRING literal that satisfies isInternalPath
+//   - basic STRING literal that satisfies IsInternalPath
 //   - *ast.BinaryExpr with Op == token.ADD where either operand
 //     transitively contains such a literal — flagged once at the
 //     outermost concat node
@@ -67,18 +77,18 @@ type finding struct {
 //     Sprintln and whose first arg is such a literal
 //
 // Parse errors return nil findings.
-func checkGoExpr(attrName, src string) []finding {
+func CheckGoExpr(attrName, src string) []Finding {
 	fset := token.NewFileSet()
 	expr, err := parser.ParseExprFrom(fset, "", src, 0)
 	if err != nil {
 		return nil
 	}
-	var out []finding
+	var out []Finding
 	walkExpr(attrName, fset, src, expr, &out)
 	return out
 }
 
-func walkExpr(attrName string, fset *token.FileSet, src string, e ast.Expr, out *[]finding) {
+func walkExpr(attrName string, fset *token.FileSet, src string, e ast.Expr, out *[]Finding) {
 	switch x := e.(type) {
 	case *ast.BasicLit:
 		if x.Kind != token.STRING {
@@ -88,10 +98,10 @@ func walkExpr(attrName string, fset *token.FileSet, src string, e ast.Expr, out 
 		if err != nil {
 			return
 		}
-		if isInternalPath(s) {
-			*out = append(*out, finding{
-				pos:     fset.Position(x.Pos()),
-				message: literalDiagnostic(attrName, s),
+		if IsInternalPath(s) {
+			*out = append(*out, Finding{
+				Pos:     fset.Position(x.Pos()),
+				Message: LiteralMessage(attrName, s),
 			})
 		}
 	case *ast.BinaryExpr:
@@ -99,9 +109,9 @@ func walkExpr(attrName string, fset *token.FileSet, src string, e ast.Expr, out 
 			return
 		}
 		if containsInternalLit(x) {
-			*out = append(*out, finding{
-				pos:     fset.Position(x.Pos()),
-				message: concatDiagnostic(attrName, exprText(fset, src, x)),
+			*out = append(*out, Finding{
+				Pos:     fset.Position(x.Pos()),
+				Message: concatDiagnostic(attrName, exprText(fset, src, x)),
 			})
 		}
 	case *ast.CallExpr:
@@ -119,18 +129,18 @@ func walkExpr(attrName string, fset *token.FileSet, src string, e ast.Expr, out 
 		if err != nil {
 			return
 		}
-		if !isInternalPath(s) {
+		if !IsInternalPath(s) {
 			return
 		}
-		*out = append(*out, finding{
-			pos:     fset.Position(x.Pos()),
-			message: sprintfDiagnostic(attrName, exprText(fset, src, x)),
+		*out = append(*out, Finding{
+			Pos:     fset.Position(x.Pos()),
+			Message: sprintfDiagnostic(attrName, exprText(fset, src, x)),
 		})
 	}
 }
 
 // containsInternalLit reports whether the expression tree under e
-// contains any STRING literal that satisfies isInternalPath.
+// contains any STRING literal that satisfies IsInternalPath.
 func containsInternalLit(e ast.Expr) bool {
 	found := false
 	ast.Inspect(e, func(n ast.Node) bool {
@@ -145,7 +155,7 @@ func containsInternalLit(e ast.Expr) bool {
 		if err != nil {
 			return true
 		}
-		if isInternalPath(s) {
+		if IsInternalPath(s) {
 			found = true
 			return false
 		}

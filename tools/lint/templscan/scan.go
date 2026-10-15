@@ -6,21 +6,15 @@ package templscan
 import (
 	"fmt"
 	"go/token"
-	"strings"
 
 	parser "github.com/a-h/templ/parser/v2"
 	"github.com/a-h/templ/parser/v2/visitor"
+	"github.com/jackielii/structpages/tools/lint/internal/urlattr"
 )
 
 // Diagnostic is a single finding to report. Line/Col are 1-indexed
 // positions in the .templ source file.
-type Diagnostic struct {
-	Filename string
-	Line     int
-	Col      int
-	Category string
-	Message  string
-}
+type Diagnostic = urlattr.Diagnostic
 
 // SuppressLookup lets callers seed extra suppressions from outside
 // the file (e.g. a project-wide ignore list). Currently unused;
@@ -38,15 +32,15 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 			Filename: filename,
 			Line:     1,
 			Col:      1,
-			Category: categoryURLAttr,
-			Message:  "[" + categoryURLAttr + "] templ parse error: " + err.Error(),
+			Category: urlattr.Category,
+			Message:  "[" + urlattr.Category + "] templ parse error: " + err.Error(),
 		}}, nil
 	}
 
 	var diags []Diagnostic
-	ds := newDirectiveSet()
+	ds := urlattr.NewDirectives()
 	emit := func(d Diagnostic) {
-		if ds.suppressed(d.Line, d.Category) {
+		if ds.Suppressed(d.Line, d.Category) {
 			return
 		}
 		diags = append(diags, d)
@@ -54,11 +48,11 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 
 	v := visitor.New()
 	v.HTMLComment = func(n *parser.HTMLComment) error {
-		cats, ok := parseDirective(n.Contents)
+		cats, ok := urlattr.ParseDirective(n.Contents)
 		if !ok {
 			return nil
 		}
-		ds.add(commentLine(n), cats)
+		ds.Add(commentLine(n), cats)
 		return nil
 	}
 	v.GoComment = func(n *parser.GoComment) error {
@@ -67,11 +61,11 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		// comment starts on plus the following line, matching
 		// the // form's semantics. Authors who want to suppress
 		// a block should put the directive on its own line.
-		cats, ok := parseDirective(n.Contents)
+		cats, ok := urlattr.ParseDirective(n.Contents)
 		if !ok {
 			return nil
 		}
-		ds.add(goCommentLine(n), cats)
+		ds.Add(goCommentLine(n), cats)
 		return nil
 	}
 	v.ConstantAttribute = func(n *parser.ConstantAttribute) error {
@@ -79,16 +73,16 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		if !ok {
 			return nil
 		}
-		if !urlAttrs[strings.ToLower(key.Name)] {
+		if !urlattr.IsURLAttr(key.Name) {
 			return nil
 		}
-		if isInternalPath(n.Value) {
+		if urlattr.IsInternalPath(n.Value) {
 			emit(Diagnostic{
 				Filename: filename,
 				Line:     int(n.ValueRange.From.Line) + 1,
 				Col:      int(n.ValueRange.From.Col) + 1,
-				Category: categoryURLAttr,
-				Message:  literalDiagnostic(key.Name, n.Value),
+				Category: urlattr.Category,
+				Message:  urlattr.LiteralMessage(key.Name, n.Value),
 			})
 		}
 		return nil
@@ -98,16 +92,16 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		if !ok {
 			return nil
 		}
-		if !urlAttrs[strings.ToLower(key.Name)] {
+		if !urlattr.IsURLAttr(key.Name) {
 			return nil
 		}
-		for _, f := range checkGoExpr(key.Name, n.Expression.Value) {
+		for _, f := range urlattr.CheckGoExpr(key.Name, n.Expression.Value) {
 			emit(Diagnostic{
 				Filename: filename,
-				Line:     mapLine(n.Expression.Range, f.pos),
-				Col:      mapCol(n.Expression.Range, f.pos),
-				Category: categoryURLAttr,
-				Message:  f.message,
+				Line:     mapLine(n.Expression.Range, f.Pos),
+				Col:      mapCol(n.Expression.Range, f.Pos),
+				Category: urlattr.Category,
+				Message:  f.Message,
 			})
 		}
 		return nil
@@ -137,22 +131,4 @@ func mapCol(r parser.Range, p token.Position) int {
 		return int(r.From.Col) + p.Column
 	}
 	return p.Column
-}
-
-const categoryURLAttr = "url-attr"
-
-// urlAttrs is the set of HTML attribute names whose values should
-// flow through structpages.URLFor rather than being hand-built.
-// Compare names case-insensitively.
-var urlAttrs = map[string]bool{
-	"href":           true,
-	"action":         true,
-	"formaction":     true,
-	"hx-get":         true,
-	"hx-post":        true,
-	"hx-put":         true,
-	"hx-patch":       true,
-	"hx-delete":      true,
-	"hx-push-url":    true,
-	"hx-replace-url": true,
 }

@@ -1,6 +1,7 @@
 // structpages-lint validates structpages.URLFor / ID / IDTarget / Ref
 // call sites against the page tree reconstructed from struct tags, and
-// flags route string literals that should be resolved through URLFor.
+// flags route string literals that should be resolved through URLFor —
+// in Go code and in the URL attributes of .templ and .gsx templates.
 //
 // Usage:
 //
@@ -17,6 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/jackielii/structpages/tools/lint"
+	"github.com/jackielii/structpages/tools/lint/gsxscan"
 	"github.com/jackielii/structpages/tools/lint/templscan"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/packages"
@@ -83,6 +85,7 @@ func main() {
 	for _, pkg := range pkgs {
 		runPass(analyzer, pkg, emit)
 		runTemplScan(pkg, emit)
+		runGSXScan(pkg, emit)
 	}
 	if emitted > 0 {
 		os.Exit(1)
@@ -90,22 +93,38 @@ func main() {
 }
 
 // runTemplScan finds every .templ file in pkg's directory and emits
-// diagnostics from templscan.Scan via emit. Each package is scanned
-// once even though packages.Load may surface it multiple times
-// (e.g. `pkg` and `pkg.test`); dedup happens in emit.
+// diagnostics from templscan.Scan via emit.
 func runTemplScan(pkg *packages.Package, emit func(string)) {
+	scanTemplates(pkg, "*.templ", "templscan",
+		func(name string) ([]templscan.Diagnostic, error) { return templscan.Scan(name, nil) }, emit)
+}
+
+// runGSXScan finds every .gsx file in pkg's directory and emits
+// diagnostics from gsxscan.Scan via emit.
+func runGSXScan(pkg *packages.Package, emit func(string)) {
+	scanTemplates(pkg, "*.gsx", "gsxscan", gsxscan.Scan, emit)
+}
+
+// scanTemplates runs scan over every file matching glob in pkg's
+// directory. Each package is scanned once even though packages.Load
+// may surface it multiple times (e.g. `pkg` and `pkg.test`); dedup
+// happens in emit. templscan.Diagnostic and gsxscan.Diagnostic are the
+// same type.
+func scanTemplates(pkg *packages.Package, glob, scanner string,
+	scan func(string) ([]templscan.Diagnostic, error), emit func(string),
+) {
 	if len(pkg.GoFiles) == 0 {
 		return
 	}
 	dir := filepath.Dir(pkg.GoFiles[0])
-	matches, err := filepath.Glob(filepath.Join(dir, "*.templ"))
+	matches, err := filepath.Glob(filepath.Join(dir, glob))
 	if err != nil {
 		return
 	}
 	for _, m := range matches {
-		diags, err := templscan.Scan(m, nil)
+		diags, err := scan(m)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "templscan %s: %v\n", m, err)
+			fmt.Fprintf(os.Stderr, "%s %s: %v\n", scanner, m, err)
 			continue
 		}
 		for _, d := range diags {

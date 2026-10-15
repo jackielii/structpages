@@ -219,7 +219,7 @@ func checkIDRef(ctx *checkCtx, call *ast.CallExpr, fnName string) {
 			ctx.report(pos, "idfor", "%s: malformed qualified Ref %q", fnName, ref)
 			return
 		}
-		node := resolveRef(ctx, pos, ref, true)
+		node := resolveRefAtCallSite(ctx, pos, ref, true)
 		if node == nil {
 			return
 		}

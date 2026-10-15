@@ -114,4 +114,4 @@ This keeps the module self-contained: `/admin` and `/admin/static/*` register to
 
 ## Never write an in-app URL as a string literal
 
-Resolve URLs by page type — `structpages.URLFor(ctx, somePage{})` — so a moved route breaks the build (or the boot) instead of silently dangling. The [`structpages-lint`](./lint.md) `route-literal` check flags `.go` string literals that exactly equal a mounted route, and `url-attr` flags hard-coded paths in `.templ` URL attributes.
+Resolve URLs by page type — `structpages.URLFor(ctx, somePage{})` — so a moved route breaks the build (or the boot) instead of silently dangling. The [`structpages-lint`](./lint.md) `route-literal` check flags `.go` string literals that exactly equal a mounted route, and `url-attr` flags hard-coded paths in `.gsx` and `.templ` URL attributes.

@@ -61,6 +61,75 @@ func checkParamMap(ctx *checkCtx, node *PageNode, fragment string, args []ast.Ex
 	}
 }
 
+// checkParamPairs validates the variadic key/value form
+// `URLFor(ctx, page, "id", x, "tab", y)` — what gsx's
+// `{ page{} |> url("id", x) }` lowers to. Constant string keys at even
+// positions are checked against the pattern's placeholders, including
+// those contributed by the chain's trailing fragment.
+//
+// It mirrors how URLFor (formatPathSegments) decides the args are
+// pairs at all, so positional calls are never misread as keys:
+//
+//   - as many args as placeholders: positional, not checked
+//   - an odd count: positional, not checked. URLFor does not reject an
+//     odd-length key/value list; it fills placeholders positionally and
+//     ignores the rest, so there is no runtime error to predict.
+//   - an even count whose even-position args are all plain strings:
+//     pairs when at least one key names a placeholder. When none does,
+//     URLFor silently falls back to positional fill — url("nope", 1)
+//     against /toggle/{id} renders /toggle/nope — which is exactly the
+//     mistake an unknown key signals, so unknown keys are reported
+//     either way.
+//
+// A key that isn't a constant, or whose static type isn't string (a
+// named string type fails URLFor's args[i].(string) and so makes the
+// call positional), leaves the shape undecidable: skipped silently.
+func checkParamPairs(ctx *checkCtx, node *PageNode, fragment string, args []ast.Expr) {
+	if len(args) < 2 || len(args)%2 != 0 {
+		return
+	}
+	pattern := node.FullRoute + fragment
+	segments := parsePatternSegments(pattern)
+	if len(args) == len(segments) {
+		return
+	}
+	keys := make([]string, 0, len(args)/2)
+	for i := 0; i < len(args); i += 2 {
+		key, ok := plainStringConstant(ctx, args[i])
+		if !ok {
+			return
+		}
+		keys = append(keys, key)
+	}
+	want := map[string]bool{}
+	for _, s := range segments {
+		want[s] = true
+	}
+	for i, k := range keys {
+		if !want[k] {
+			ctx.report(args[2*i].Pos(), "params",
+				"URLFor: param %q does not appear in pattern %q (known: %s)",
+				k, pattern, strings.Join(mapKeys(want), ", "))
+		}
+	}
+}
+
+// plainStringConstant is stringConstantFromPass restricted to
+// expressions whose dynamic type, once boxed in an `any`, is exactly
+// string: untyped string constants and constants of type string, but
+// not of a named string type.
+func plainStringConstant(ctx *checkCtx, expr ast.Expr) (string, bool) {
+	s, ok := stringConstantFromPass(ctx, expr)
+	if !ok {
+		return "", false
+	}
+	b, ok := types.Default(ctx.pass.TypesInfo.TypeOf(expr)).(*types.Basic)
+	if !ok || b.Kind() != types.String {
+		return "", false
+	}
+	return s, true
+}
+
 // isStringAnyMap reports whether expr's type is map[string]any (or an
 // alias of it).
 func isStringAnyMap(info *types.Info, expr ast.Expr) bool {

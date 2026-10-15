@@ -8,8 +8,8 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/gsxhq/gsx v0.0.0-20260731122215-3a228b11a323 h1:UBJQpgfxm0Z+wKlwkr6W49RlY68wp7+UJbf0Fa0uU7k=
-github.com/gsxhq/gsx v0.0.0-20260731122215-3a228b11a323/go.mod h1:/jf9pgYLIm/iWTHKFDaSvcSXGL9uj8xZlO+nAP7ZeCU=
+github.com/gsxhq/gsx v0.4.0 h1:Bsh6lj08mWUKy2wG45/dZD868QfsqESKIcl3p3Cm2GQ=
+github.com/gsxhq/gsx v0.4.0/go.mod h1:Y/aqMfryGz1lNUQFuJ582GAAmUGfXCBRCH1SDHaTzis=
 github.com/jackielii/ctxkey v1.0.1 h1:CcgbR+fQbrzZJWxI/7Ec4EhzUbmTU1sfI1gV7MAgjIg=
 github.com/jackielii/ctxkey v1.0.1/go.mod h1:fo4HOwrvSnc3n8o5qZ5L+FVcSyQn+d67CCnlEbH24uc=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
@@ -26,6 +26,8 @@ golang.org/x/exp/typeparams v0.0.0-20260611194520-c48552f49976 h1:GTD/WuaexTazIG
 golang.org/x/exp/typeparams v0.0.0-20260611194520-c48552f49976/go.mod h1:PqrXSW65cXDZH0k4IeUbhmg/bcAZDbzNz3byBpKCsXo=
 golang.org/x/mod v0.37.0 h1:vF1DjpVEshcIqoEaauuHebaLk1O1forxjxBaVn884JQ=
 golang.org/x/mod v0.37.0/go.mod h1:m8S8VeM9r4dzDwjrKO0a1sZP3YjeMamRRlD+fmR2Q/0=
+golang.org/x/net v0.56.0 h1:Rw8j/hFzGvJUZwNBXnAtf5sVDVt+65SK2C7IxCxZt5o=
+golang.org/x/net v0.56.0/go.mod h1:D3Ku6r+V6JROoZK144D2XfMHFcMq/0zSfLelVTCFKec=
 golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
 golang.org/x/sync v0.21.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=

@@ -8,18 +8,14 @@ import (
 
 	_gsxctx "context"
 	_gsxrt "github.com/gsxhq/gsx"
+	_gsxf0 "github.com/jackielii/structpages"
 	_gsxio "io"
 )
 
 //line pages.gsx:8:1
-// BadLinks mirrors the templ original — it deliberately uses hard-coded
-// internal URLs as targets for the structpages-lint [url-attr] rule.
-// In gsx the component uses inline params just like the templ version.
-//
-// NOTE: the [url-attr] rule is implemented on templ's parser and does
-// NOT scan .gsx files yet, so nothing in this file is currently flagged
-// (see the pinned snapshot in lint_test.go). These targets are kept for
-// the future gsxscan port of [url-attr].
+// BadLinks deliberately hard-codes internal URLs as targets for the
+// structpages-lint [url-attr] rule (gsxscan): each URL attribute below
+// except the external one is flagged.
 //
 // NOTE ON gsx AUTO-ESCAPING: gsx escapes URL-context attributes
 // (href, hx-get, action, …) by context. That means a dynamically-
@@ -27,37 +23,95 @@ import (
 // XSS via URL sinks. However, the [url-attr] lint rule catches a
 // different problem — routing-correctness: hard-coded path strings that
 // bypass structpages.URLFor break when routes are renamed. That class of
-// bug is orthogonal to XSS escaping, so gsx's auto-escaping would not
-// make such findings go away once [url-attr] learns to scan .gsx.
+// bug is orthogonal to XSS escaping, so gsx's auto-escaping does not
+// make these findings go away.
 
-//line pages.gsx:25:1
+//line pages.gsx:20:1
 func BadLinks(id int, name string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:26:2
+//line pages.gsx:21:2
 		_gsxgw.S("<a href=\"/login\">Hard-coded internal</a>")
-//line pages.gsx:27:2
+//line pages.gsx:22:2
 		_gsxgw.S("<a href=\"")
-		_gsxgw.URL(string("/" + "admin"))
+		_gsxgw.URL(string( /*line pages.gsx:22:11*/ "/" + "admin"))
 		_gsxgw.S("\">Expression literal</a>")
-//line pages.gsx:28:2
+//line pages.gsx:23:2
 		_gsxgw.S("<a href=\"")
-		_gsxgw.URL(string("/items/" + strconv.Itoa(id)))
+		_gsxgw.URL(string( /*line pages.gsx:23:11*/ "/items/" + strconv.Itoa(id)))
 		_gsxgw.S("\">Concat</a>")
-//line pages.gsx:29:2
+//line pages.gsx:24:2
 		_gsxgw.S("<a href=\"")
-		_gsxgw.URL(string(fmt.Sprintf("/users/%s", name)))
+		_gsxgw.URL(string( /*line pages.gsx:24:11*/ fmt.Sprintf("/users/%s", name)))
 		_gsxgw.S("\">Sprintf</a>")
-//line pages.gsx:30:2
+//line pages.gsx:25:2
 		_gsxgw.S("<a hx-get=\"")
-		_gsxgw.AttrValue(string("/api/items"))
+		_gsxgw.AttrValue(string( /*line pages.gsx:25:13*/ "/api/items"))
 		_gsxgw.S("\">Bad hx-get</a>")
-//line pages.gsx:31:2
+//line pages.gsx:26:2
 		_gsxgw.S("<form action=\"")
-		_gsxgw.URL(string("/submit"))
+		_gsxgw.URL(string( /*line pages.gsx:26:16*/ "/submit"))
 		_gsxgw.S("\">Bad action</form>")
-//line pages.gsx:32:2
+//line pages.gsx:27:2
 		_gsxgw.S("<a href=\"https://example.com/external\">External (allowed)</a>")
+		return _gsxgw.Err()
+	})
+}
+
+//line pages.gsx:30:1
+// ParamLinks exercises the [params] check on the variadic key/value
+// form that `|> url(key, value)` lowers to:
+// structpages.URLFor(ctx, itemDetail{}, "nope", 1).
+
+//line pages.gsx:33:1
+func ParamLinks(slug string) _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:34:2
+		_gsxgw.S("<a")
+		_gsxv0, _gsxerr := /*line pages.gsx:34:27*/ _gsxf0.URLFor(ctx, ( /*line pages.gsx:34:11*/ itemDetail{}) /*line pages.gsx:34:31*/, "slug", slug)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" href=\"")
+		_gsxgw.URL(string(_gsxv0))
+		_gsxgw.S("\">OK: slug is a placeholder</a>")
+//line pages.gsx:35:2
+		_gsxgw.S("<a")
+		_gsxv1, _gsxerr := /*line pages.gsx:35:27*/ _gsxf0.URLFor(ctx, ( /*line pages.gsx:35:11*/ itemDetail{}) /*line pages.gsx:35:31*/, "nope", 1)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" href=\"")
+		_gsxgw.URL(string(_gsxv1))
+		_gsxgw.S("\">BAD: nope is not a placeholder</a>")
+//line pages.gsx:39:2
+		_gsxgw.S("<a")
+		_gsxv2, _gsxerr := /*line pages.gsx:39:27*/ _gsxf0.URLFor(ctx, ( /*line pages.gsx:39:11*/ itemDetail{}) /*line pages.gsx:39:31*/, "alsoNope", 1)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" href=\"")
+		_gsxgw.URL(string(_gsxv2))
+		_gsxgw.S("\">suppressed</a>")
+//line pages.gsx:40:2
+		_gsxgw.S("<a")
+		_gsxv3, _gsxerr := /*line pages.gsx:42:25*/ _gsxf0.URLFor(ctx, ( /*line pages.gsx:42:9*/ itemDetail{}) /*line pages.gsx:42:29*/, "stillNope", 1)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" href=\"")
+		_gsxgw.URL(string(_gsxv3))
+		_gsxgw.S("\">suppressed from the attribute list</a>")
+//line pages.gsx:46:2
+		_gsxgw.S("<a")
+		_gsxv4, _gsxerr := /*line pages.gsx:46:27*/ _gsxf0.URLFor(ctx, ( /*line pages.gsx:46:11*/ itemDetail{}) /*line pages.gsx:46:31*/, "unsuppressed", 1)
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" href=\"")
+		_gsxgw.URL(string(_gsxv4))
+		_gsxgw.S("\">BAD: no directive</a>")
 		return _gsxgw.Err()
 	})
 }
