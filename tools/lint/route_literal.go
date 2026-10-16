@@ -21,6 +21,8 @@ import (
 //     non-URL literal (path joins, defaults);
 //   - structpages.Ref("/route") arguments are skipped — that's a sanctioned
 //     route-string API the urlfor/ref checks already validate;
+//   - the route argument of a Mount/Parse call (or of a helper that
+//     forwards to one) is skipped: it defines the route;
 //   - literals in a comparison or switch-case are skipped — those read/match
 //     a route (e.g. `switch node.Route { case "/foundations": }`) rather than
 //     generate a URL, so URLFor does not apply;
@@ -102,6 +104,7 @@ func isNavigable(method string) bool {
 // route-literal check must not flag, because they are not URL-generation
 // sites:
 //   - arguments to structpages.Ref(...) — the sanctioned route-string API;
+//   - route arguments of tree-building calls — the route's definition;
 //   - operands of an == / != comparison — a route match, not a URL;
 //   - values in a switch-case — likewise a route match (often `switch
 //     node.Route { case "/x": }`).
@@ -115,6 +118,10 @@ func skippableLiterals(ctx *checkCtx, f *ast.File) map[token.Pos]bool {
 	}
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch x := n.(type) {
+		case *ast.BasicLit:
+			if ctx.tree.routeArgs[posKey(ctx.pass.Fset, x.Pos())] {
+				mark(x)
+			}
 		case *ast.CallExpr:
 			if isRefConversion(info, x) {
 				mark(x.Args[0])

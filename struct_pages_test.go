@@ -656,7 +656,7 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 	// Create a dummy RenderTarget
 	dummyMethod := reflect.Method{Name: "Page"}
 	compSel := newMethodRenderTarget("Page", &dummyMethod)
-	_, err := sp.execProps(pn, req, nil, compSel)
+	_, err := sp.execProps(nil, pn, req, nil, compSel)
 	if err == nil {
 		t.Error("Expected error from execProps")
 	}
@@ -1619,7 +1619,7 @@ func TestPropsOnlyPage(t *testing.T) {
 		if capturedError == nil {
 			t.Error("expected error when Props returns nil without RenderComponent")
 		}
-		expectedErr := "no component found and Props did not use RenderComponent"
+		expectedErr := "has no Page component, and Props returned no error"
 		if capturedError != nil && !strings.Contains(capturedError.Error(), expectedErr) {
 			t.Errorf("expected '%s' error, got: %v", expectedErr, capturedError)
 		}

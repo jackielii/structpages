@@ -1,0 +1,48 @@
+package tapp
+
+import "github.com/jackielii/structpages"
+
+templ (p ace) Page() {
+	<main>
+		<section id={ structpages.ID(ctx, []any{Root{}, detail.Content}) }>chain</section>
+		<div hx-target={ structpages.IDTarget(ctx, detail.Content) }>method expression</div>
+		<div hx-target:inherited={ structpages.IDTarget(ctx, p.d.Content) }>bound value, htmx 4</div>
+		<div data-hx-target={ structpages.IDTarget(ctx, detail.Content) }>data- prefix</div>
+		<hx-partial hx-target={ structpages.IDTarget(ctx, detail.Content) }>out-of-band</hx-partial>
+		<div data-region={ structpages.IDTarget(ctx, detail.Content) }>other attribute</div>
+		<div id={ structpages.IDTarget(ctx, detail.Content) }>IDTarget as id</div>
+		<div id={ structpages.ID(ctx, toast) }>standalone</div>
+		<div id={ structpages.ID(ctx, ace.Content) }>own component</div>
+		// structpages:lint:ignore region
+		<div id={ structpages.ID(ctx, detail.Content) }>suppressed</div>
+		if p.d == (detail{}) {
+			<div id={ structpages.ID(ctx, detail.Content) }>in control flow</div>
+		}
+	</main>
+}
+
+templ (p ace) Content() {
+	<p>ace</p>
+}
+
+templ (p detail) Page() {
+	<div id={ structpages.ID(ctx, detail.Content) }>
+		@p.Content()
+	</div>
+}
+
+templ (p detail) Content() {
+	<p>detail</p>
+}
+
+templ (p handled) Page() {
+	<div id={ structpages.ID(ctx, detail.Content) }>handled in Props</div>
+}
+
+templ (w widget) Body() {
+	<div id={ structpages.ID(ctx, detail.Content) }>shared component</div>
+}
+
+templ toast() {
+	<p>toast</p>
+}

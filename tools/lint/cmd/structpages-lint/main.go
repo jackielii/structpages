@@ -1,7 +1,10 @@
-// structpages-lint validates structpages.URLFor / ID / IDTarget / Ref
-// call sites against the page tree reconstructed from struct tags, and
-// flags route string literals that should be resolved through URLFor —
-// in Go code and in the URL attributes of .templ and .gsx templates.
+// structpages-lint validates structpages.URLFor / ID / IDTarget / Ref /
+// RenderTarget.Is call sites against the page tree reconstructed from
+// struct tags, flags route string literals that should be resolved
+// through URLFor — in Go code and in the URL attributes of .templ and
+// .gsx templates — flags Mount calls that serve htmx templates without
+// a target selector, and flags pages whose .gsx regions carry another
+// page's component id.
 //
 // Usage:
 //

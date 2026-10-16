@@ -38,7 +38,7 @@ func TestLintMisuse(t *testing.T) {
 		`pages.go:LINE:COL: [urlfor] URLFor chain: parent Items has no child of type homePage; available: Index (itemsIndex), Detail (itemDetail)`,
 		`pages.go:LINE:COL: [urlfor] URLFor: typed value at slice position 2 follows a string fragment; chain steps must all come before any string fragment`,
 		`pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/items/{slug}" (known: slug)`,
-		`pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: receiver type unmountedPage is not mounted as a page`,
+		`pages.go:LINE:COL: [idfor] IDTarget: method value unmountedPage.Title: receiver type unmountedPage is not mounted as a page`,
 		`pages.go:LINE:COL: [ref] Ref "Detail.Index": segment 1 ("Index") not found as child of "Detail"; available:`,
 		`pages.go:LINE:COL: [idfor] IDTarget: method "Nope" not found on chain leaf "Detail"; available: Page, Stats`,
 		`pages.go:LINE:COL: [params] URLFor: param "wrongTab" does not appear in pattern "/items/{slug}?tab={tab}" (known: slug, tab)`,
@@ -47,12 +47,17 @@ func TestLintMisuse(t *testing.T) {
 		`pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index`,
 		`pages.go:LINE:COL: [params] URLFor: param "wrong" does not appear in pattern "/items/{slug}" (known: slug)`,
 		`pages.go:LINE:COL: [urlfor] URLFor chain: parent Items has no child of type homePage; available: Index (itemsIndex), Detail (itemDetail)`,
-		`pages.go:LINE:COL: [idfor] IDTarget: method expression unmountedPage.Title: receiver type unmountedPage is not mounted as a page`,
+		`pages.go:LINE:COL: [idfor] IDTarget: method value unmountedPage.Title: receiver type unmountedPage is not mounted as a page`,
 		`pages.go:LINE:COL: [ref] Ref "Items.Nope": segment 1 ("Nope") not found as child of "Items"; available: Detail, Index`,
 		`pages.go:LINE:COL: [urlfor] Within: no page mounted for type unmountedPage`,
 		`pages.go:LINE:COL: [urlfor] Within: chain element 1 is a string fragment; Within takes page steps only`,
 		`pages.gsx:LINE:COL: [params] URLFor: param "nope" does not appear in pattern "/items/{slug}" (known: slug)`,
 		`pages.gsx:LINE:COL: [params] URLFor: param "unsuppressed" does not appear in pattern "/items/{slug}" (known: slug)`,
+		"pages.go:LINE:COL: [selector] Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
+			"(hx-get at pages.gsx:25:5); structpages has no default target selector since v0.9.0, " +
+			"so htmx partial requests render the full Page. Pass " +
+			"structpages.WithTargetSelector(structpages.HTMXRenderTarget) for htmx 1/2, or " +
+			"structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) for htmx 4",
 		`pages.gsx:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead`,
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/\" + \"admin\"` builds an internal URL by string concatenation; use structpages.URLFor instead",
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/items/\" + strconv.Itoa(id)` builds an internal URL by string concatenation; use structpages.URLFor instead",

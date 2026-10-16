@@ -8,28 +8,6 @@ import (
 	"testing"
 )
 
-func TestKebabToPascal(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"", ""},
-		{"content", "Content"},
-		{"todo-list", "TodoList"},
-		{"user-profile-settings", "UserProfileSettings"},
-		{"html-content", "HtmlContent"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := kebabToPascal(tt.input)
-			if result != tt.expected {
-				t.Errorf("kebabToPascal(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestMatchComponentByTarget(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -487,7 +465,7 @@ func TestHTMXPageConfig(t *testing.T) {
 	}
 }
 
-// Test that HTMXRenderTarget returns functionRenderTarget for non-matching components
+// Test that HTMXRenderTarget returns htmxUnmatchedTarget for non-matching components
 func TestHTMXRenderTarget_FunctionTarget(t *testing.T) {
 	pn := &PageNode{
 		Name:  "Index",
@@ -507,9 +485,9 @@ func TestHTMXRenderTarget_FunctionTarget(t *testing.T) {
 		return
 	}
 
-	// Should return functionRenderTarget for non-matching component
-	if _, ok := target.(*functionRenderTarget); !ok {
-		t.Errorf("HTMXRenderTarget() should return functionRenderTarget for non-matching component, got %T", target)
+	// Should return htmxUnmatchedTarget for non-matching component
+	if _, ok := target.(*htmxUnmatchedTarget); !ok {
+		t.Errorf("HTMXRenderTarget() should return htmxUnmatchedTarget for non-matching component, got %T", target)
 	}
 }
 
@@ -519,7 +497,7 @@ func TestHTMXv4RenderTarget(t *testing.T) {
 		headers  map[string]string
 		pageNode *PageNode
 		// expected: methodRenderTarget name; "" means expect Page (or fallback).
-		// expectFunction: true if a functionRenderTarget is expected.
+		// expectFunction: true if a htmxUnmatchedTarget is expected.
 		expected       string
 		expectFunction bool
 	}{
@@ -563,7 +541,7 @@ func TestHTMXv4RenderTarget(t *testing.T) {
 			expected: "Form",
 		},
 		{
-			name: "v4 tag-only target without matching component returns functionRenderTarget",
+			name: "v4 tag-only target without matching component returns htmxUnmatchedTarget",
 			headers: map[string]string{
 				"HX-Request": "true",
 				"HX-Target":  "div",
@@ -588,7 +566,7 @@ func TestHTMXv4RenderTarget(t *testing.T) {
 			expected: "Page",
 		},
 		{
-			name: "v4 unknown id returns functionRenderTarget",
+			name: "v4 unknown id returns htmxUnmatchedTarget",
 			headers: map[string]string{
 				"HX-Request": "true",
 				"HX-Target":  "span#nonexistent",
@@ -637,8 +615,8 @@ func TestHTMXv4RenderTarget(t *testing.T) {
 				t.Fatalf("HTMXv4RenderTarget: %v", err)
 			}
 			if tt.expectFunction {
-				if _, ok := target.(*functionRenderTarget); !ok {
-					t.Errorf("expected functionRenderTarget, got %T", target)
+				if _, ok := target.(*htmxUnmatchedTarget); !ok {
+					t.Errorf("expected htmxUnmatchedTarget, got %T", target)
 				}
 				return
 			}
@@ -653,14 +631,13 @@ func TestHTMXv4RenderTarget(t *testing.T) {
 	}
 }
 
-func TestHTMXRenderTarget_Default(t *testing.T) {
-	// Test that HTMXRenderTarget is the default target selector
-	sp, _ := Mount(nil, struct{}{}, "/", "Test")
-	if sp.targetSelector == nil {
-		t.Error("Expected target selector to be set")
+func TestDefaultSelector_isNotHTMX(t *testing.T) {
+	// Without WithTargetSelector there is no htmx default: an htmx partial
+	// request still wants Page.
+	sp, err := Mount(http.NewServeMux(), struct{}{}, "/", "Test")
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// Verify it behaves like HTMXRenderTarget
 	pn := &PageNode{
 		Title: "Test",
 		Components: map[string]reflect.Method{
@@ -672,18 +649,15 @@ func TestHTMXRenderTarget_Default(t *testing.T) {
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", "content")
 
-	target, err := sp.targetSelector(req, pn)
+	target, err := sp.selectTarget(req, pn)
 	if err != nil {
-		t.Errorf("target selector error: %v", err)
+		t.Fatalf("target selector error: %v", err)
 	}
-
-	// Extract component name
 	mrt, ok := target.(*methodRenderTarget)
 	if !ok {
-		t.Errorf("expected methodRenderTarget, got %T", target)
-		return
+		t.Fatalf("expected methodRenderTarget, got %T", target)
 	}
-	if mrt.name != "Content" {
-		t.Errorf("expected default selector to return Content, got %q", mrt.name)
+	if mrt.name != "Page" {
+		t.Errorf("default selector chose %q, want Page", mrt.name)
 	}
 }

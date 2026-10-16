@@ -14,7 +14,8 @@ description: >
 
 structpages routes HTTP requests with struct tags on top of `http.ServeMux`. A page is a struct; its
 methods load data (`Props`), render (`Page`, `Content`, partials) or handle the request imperatively
-(`ServeHTTP`). HTMX partial rendering, type-safe URLs and element ids are built in.
+(`ServeHTTP`). Type-safe URLs and element ids are built in; HTMX partial rendering is opt-in with
+`WithTargetSelector` (§4).
 
 - [reference.md](reference.md) — exact API signatures and semantics, `structpages-lint` categories.
 - [examples.md](examples.md) — larger worked patterns (two-pane pages, CRUD, error handling, static assets).
@@ -64,7 +65,7 @@ already accept `(T, error)` and hoist the error out of `Render`. Full rules in �
 | **component** | a standalone `component Foo(...)`: mount-independent, package-prefixed id |
 | **page component** | a method component `component (p Page) Foo(...)`: mount-aware, includes `Page` and `Content`. Composed inside another page component, or returned alone as a partial |
 | **partial** | a page component (or component) rendered alone as an HTMX response; a role, not a kind |
-| **Props method** | `Props(...)`: loads data through DI and returns the **props struct** handed to the page component |
+| **Props method** | `Props(...)`: loads data through DI and returns the **props** (one or more values) handed by type to the page component that renders |
 | **handler method** | `ServeHTTP(...)`: mutate, redirect, serve JSON, or render via `RenderComponent` |
 | **Middlewares method** | `Middlewares(...)`: middleware for the page and its descendants |
 
@@ -73,10 +74,18 @@ naming convention for a page's main region, not a framework concept.
 
 ## Request lifecycle
 
-Route match → middleware → **TargetSelector** builds a `RenderTarget` from the request (default
-`HTMXRenderTarget`) → **Props** (with the `RenderTarget` injectable) → render the selected page component
-(`Page` for a full load, the component whose id matches `HX-Target` for a partial). A `Props` that returns
-`RenderComponent(...)` renders that instead. A page with `ServeHTTP` skips Props and components entirely.
+**The request says what it wants. `Props` is the normal page flow; returning an error breaks it.**
+
+Route match → middleware → **TargetSelector** reads the request into a `RenderTarget` (what it wants) →
+**Props** (the `RenderTarget` injectable) → if Props returns `(results…, nil)` or there is no Props, the
+framework asks `target.Is(m)` for each of the page's components and renders the one it `Is`, else `Page`;
+a target that `Is` several is an error. Props breaks the flow by returning an error:
+`RenderComponent(c, more...)` renders those instead, `ErrSkipPageRender` means Props already responded,
+anything else goes to the error handler. A page with `ServeHTTP` skips Props and component selection.
+
+**There is no default selector.** Without `WithTargetSelector`, every request wants `Page`, so an htmx
+partial request silently gets the full page. Full model: docs/rendering.md
+(https://jackielii.github.io/structpages/rendering).
 
 ## 1. Routes
 
@@ -134,7 +143,10 @@ component (p itemPage) Content(props itemProps) {
 ```
 
 `Props` parameters are matched by type (`*http.Request`, `http.ResponseWriter`, `RenderTarget`,
-`*PageNode`, anything registered with `WithArgs`). Its non-error results are passed to the component.
+`*PageNode`, request args, anything registered with `WithArgs`; §7). Its non-error results fill the
+rendered component's parameters by type, each result used at most once, so one `Props` returning several
+values serves several components, each declaring only what it needs. Components can also take the
+per-request values, request args and `WithArgs` values.
 Only the method named exactly `Props` is invoked; `UserListProps`-style helpers are ordinary methods you
 call yourself. A page can also omit `Props`, or have only `Props` and pick what to render with
 `RenderComponent`.
@@ -221,7 +233,18 @@ One method or function reference drives three sites that must agree:
 
 1. **Composition** — wrap the region: `<div id={Index.UserList |> id}>…</div>`.
 2. **Trigger** — `hx-get={Index{} |> url}` (the page's own route) with `hx-target={Index.UserList |> target}`.
-3. **Server** — `HX-Target` is matched back to the component; `Props` branches with `sel.Is(p.UserList)`.
+3. **Server** — the htmx target selector matches `HX-Target` back to the component; `Props` asks
+   `t.Is(p.UserList)`, loads only that data, and the framework renders `UserList` with it.
+
+Opt in at `Mount`, picking the selector for the htmx version:
+
+```go
+structpages.WithTargetSelector(structpages.HTMXRenderTarget)   // htmx 1.x/2.x: HX-Target is a bare id
+structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) // htmx 4: HX-Target is tag#id; HX-Request-Type: full wants Page
+```
+
+Both match `HX-Target` against the served page's components by generated id, by name with or without the
+page prefix, or by suffix (`load-more` → `EventListLoadMore`).
 
 ```gsx
 component (p Index) Content(props indexProps) {
@@ -236,15 +259,15 @@ component (p Index) Content(props indexProps) {
     </div>
 }
 
-func (p Index) Props(r *http.Request, s *store.Store, sel structpages.RenderTarget) (indexProps, error) {
-    if sel.Is(p.UserList) {
+component (p Index) UserList(pane userPaneProps) { … }
+
+func (p Index) Props(r *http.Request, s *store.Store, t structpages.RenderTarget) (indexProps, userPaneProps, error) {
+    if t.Is(p.UserList) {
         pane, err := p.userPane(r, s)
-        if err != nil {
-            return indexProps{}, err
-        }
-        return indexProps{}, structpages.RenderComponent(p.UserList(pane))
+        return indexProps{}, pane, err // renders UserList(pane)
     }
-    return p.fullProps(r, s)
+    props, err := p.fullProps(r, s)
+    return props, userPaneProps{}, err // renders Page, or Content when HX-Target names it
 }
 ```
 
@@ -265,8 +288,11 @@ and errors; disambiguate
 with a chain (`[]any{adminRoot{}, dashboard.Header}`), `structpages.Ref("AdminDash.Header")`, or make the
 slot a standalone component.
 
-**htmx 4.** `HTMXRenderTarget` reads htmx 1/2 headers. With htmx 4 (`HX-Target: tag#id`,
-`HX-Request-Type`), mount with `structpages.WithTargetSelector(structpages.HTMXv4RenderTarget)`.
+**Regions shared across pages.** `ID(ctx, X)` and `Is(X)` are symmetric: a request targeting an element
+with id `ID(ctx, X)` has a target that `Is(X)`, for the served page's components, standalone components,
+and **other pages' components** (exact generated id only). A page whose markup reuses another page's region
+recognises it with `t.Is(other.Content)` and renders with `RenderComponent`; if it doesn't, `Page` renders
+— a whole document swapped into the region. Test partial responses for `<html`.
 
 ### JavaScript and interpolated attributes
 
@@ -286,39 +312,51 @@ value in with `gsx.RawJS`.
 
 ## 5. RenderTarget and RenderComponent
 
-For pages with several independently updated regions:
+`Props` returns `(results…, nil)` for the normal flow: the component the target `Is` renders (else
+`Page`), its parameters filled by type from the results. `Is` has no side effects; asking it and then
+returning no error still renders what the request wants. For pages with several independently updated
+regions:
 
-- **Partials get partial data**, not the page props struct. Each branch builds just its region's data and
-  returns the constructed component; the props value returned alongside is ignored.
-- **The page props struct composes per-region structs** (`indexProps{UserPane, GroupPane}`) so full render
-  and partial render share one component signature.
+- **Partials get partial data**, not the page props struct. Return one value per region (distinct types)
+  and zero values for what the request doesn't want; each component declares only its share.
 - **The default branch loads full props**, never empty props: browser navigation, boosted swaps and
   unrecognised targets all need the whole page.
+- **Break the flow with `RenderComponent`** to render something other than what the request wants: an
+  empty state, an inline failure notice (for a status, set `Content-Type` then call `w.WriteHeader(...)` first), a standalone
+  component, another page's component, or several regions.
 
 ```go
-func (p Index) Props(r *http.Request, s *store.Store, sel structpages.RenderTarget) (indexProps, error) {
+func (p Index) Props(r *http.Request, s *store.Store, t structpages.RenderTarget) (usersPane, groupsPane, error) {
     switch {
-    case sel.Is(p.UserList):
-        pane, err := p.userPane(r, s)
-        if err != nil {
-            return indexProps{}, err
-        }
-        return indexProps{}, structpages.RenderComponent(p.UserList(pane))
-    case sel.Is(StatsWidget): // standalone component
+    case t.Is(p.UserList):
+        users, err := p.users(r, s)
+        return users, groupsPane{}, err // renders UserList(users usersPane)
+    case t.Is(StatsWidget): // standalone component: not one of the page's, so Props renders it
         stats, err := loadStats(r.Context(), s)
         if err != nil {
-            return indexProps{}, err
+            return usersPane{}, groupsPane{}, err
         }
-        return indexProps{}, structpages.RenderComponent(StatsWidget(stats))
+        return usersPane{}, groupsPane{}, structpages.RenderComponent(StatsWidget(stats))
     default:
-        return p.fullProps(r, s)
+        users, err := p.users(r, s)
+        if err != nil {
+            return usersPane{}, groupsPane{}, err
+        }
+        groups, err := p.groups(r, s)
+        return users, groups, err // renders Page(users usersPane, groups groupsPane)
     }
 }
 ```
 
-`RenderComponent` takes one constructed component — `RenderComponent(p.UserList(pane))`,
+`RenderComponent(c, more...)` takes constructed components — `RenderComponent(p.UserList(pane))`,
 `RenderComponent(<StatsWidget stats={stats}/>)`, `RenderComponent(other{}.Row(row))` — so the compiler
-checks its arguments. Pages are stateless, so a zero-value receiver builds another page's component.
+checks their arguments, and renders them in order as one response. Pages are stateless, so a zero-value
+receiver builds another page's component. Several regions in one response: htmx 4 wraps each extra one in
+`<hx-partial hx-target={p.Count |> target}>` (element literals work in a `.gsx` Props; in `.go` put the
+wrapper in a component); htmx 2 marks the extra component's root `hx-swap-oob="true"`.
+
+A custom `TargetSelector` may return any `RenderTarget`; the framework only calls `Is`, so a custom target
+selects components like the built-in ones. `Is` must have no side effects.
 
 ### Nested swap levels
 
@@ -374,15 +412,33 @@ sp, err := structpages.Mount(mux, pages{}, "/", "App",
 )
 ```
 
-Registered values are matched by type into `Props`, `ServeHTTP`, `Middlewares`, `Init` and DI-injected
-components. Each type may be registered once (use named types to register two values of one type).
+Registered values are matched by type into `Props`, `ServeHTTP`, `Middlewares`, `Init` and components. Each type may be registered once (use named types to register two values of one type).
 A registered pointer also fills a value parameter, but a registered value does not fill a pointer
 parameter, so register services as pointers. An interface parameter takes the one registration that
 implements it, so a `Props` can declare a narrow interface and a test can call it with a fake; two
-implementations of a `Props`/`ServeHTTP` parameter fail `Mount` (`Parse` doesn't check). Register a
-pointer to an interface variable (`var s Store = pg; WithArgs(&s)`) to pick one. A missing dependency
-fails the request, not `Mount`.
+implementations of a `Props`/`ServeHTTP`/component parameter fail `Mount` (`Parse` doesn't check; a
+component's parameters count Props' results as provided). Register a pointer to an interface variable
+(`var s Store = pg; WithArgs(&s)`) to pick one. A missing dependency fails the request, not `Mount`.
 `*PageNode` is always injectable. Application services go here, not in globals.
+
+**Request args** are per-request values (current user, tenant, session): providers
+`func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`, run lazily, at most once
+per request, the first time a parameter of type `T` needs one. Register mount-wide with
+`structpages.WithRequestArgs(currentUser)`, or for a subtree with a page method `RequestArgs() []any` (which
+may take `WithArgs` parameters); the nearest page's provider shadows outer ones of the same type. A
+provider's error stops the request like a `Props` error. Fill order for any parameter: Props' results
+(components only) → `w`, `r`, `RenderTarget`, `*PageNode` → request args → `WithArgs`.
+
+```go
+func currentUser(r *http.Request) (*User, error) { … }
+
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
+    structpages.WithArgs(appStore),
+    structpages.WithRequestArgs(currentUser),
+)
+
+func (p accountPage) Props(u *User, s *store.Store) (accountProps, error) { … }
+```
 
 ## 8. Testing renders with a bare context
 
@@ -411,7 +467,9 @@ page (not a `ServeHTTP` page).
 `structpages-lint` rebuilds the page tree from the `route` tags and `Mount` calls and checks every
 `URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call against it. That covers every `|> url`/`id`/`target` in `.gsx` too,
 since gsx lowers them to those calls. It also flags hard-coded internal URLs in `href`/`hx-*`/`action`
-attributes and route-shaped string literals in Go. The compiler can't see any of this, because routes,
+attributes and route-shaped string literals in Go, `RenderTarget.Is` arguments that aren't a mounted
+method or a function (`t.Is(p.Content())` calls instead of naming), and a `Mount` with no
+`WithTargetSelector` whose pages' templates use htmx (`selector`). The compiler can't see any of this, because routes,
 `Ref`s and param keys are strings to it. In a large app, where a route rename touches templates across many
 packages, the linter is what turns a wave of 404s into a CI failure.
 
@@ -437,13 +495,17 @@ reference.md §Lint lists the categories, the gsx specifics and the suppression 
    in Go) from page types and method references.
 3. No `must()`, no `urlFor`/`idFor` wrappers, no `gsx.RawJS` around generated values: holes and filters
    take `(T, error)` directly.
-4. Partials take only their region's data; the default `Props` branch returns full props.
-5. Prefer constructed components in `RenderComponent`; method expressions only for DI-injected parameters.
-6. `RenderComponent` is returned as an error; other return values are then ignored.
+4. Partials take only their region's data (one `Props` result per region, filled by type); the default
+   `Props` branch returns full props.
+5. Return `(results…, nil)` to render what the request wants; return `RenderComponent(c, more...)` with
+   constructed components to render anything else. Its other return values are then ignored.
+6. `Is` has no side effects; recognising a target and returning no error still renders the component the
+   target `Is`, or `Page`.
 7. Don't write the body in `Props` or a buffered `ServeHTTP`; return errors. `ErrSkipPageRender` only from
    `Props`.
 8. Strict lookups: disambiguate repeated mounts with a `[]any` chain; `Ref` only across import cycles.
 9. Plain strings pass through `id`/`target` unchanged (`"body" |> target` is `body`).
-10. htmx 4 needs `WithTargetSelector(HTMXv4RenderTarget)`.
+10. htmx apps must opt in: `WithTargetSelector(HTMXRenderTarget)` (htmx 1/2) or
+    `WithTargetSelector(HTMXv4RenderTarget)` (htmx 4). Without it every request renders `Page`.
 11. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
     them.

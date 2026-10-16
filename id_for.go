@@ -327,11 +327,7 @@ func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
 	for node := range p.root.All() {
 		nodeType := node.Value.Type()
 		if info.isBound {
-			nodeTypeName := nodeType.Name()
-			if nodeType.Kind() == reflect.Pointer {
-				nodeTypeName = nodeType.Elem().Name()
-			}
-			if nodeTypeName != info.receiverTypeName {
+			if !sameTypeName(nodeType, info.receiverTypeName) {
 				continue
 			}
 			if _, found := nodeType.MethodByName(info.methodName); !found {
@@ -354,11 +350,7 @@ func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 	}
 	nodeType := pn.Value.Type()
 	if info.isBound {
-		nodeTypeName := nodeType.Name()
-		if nodeType.Kind() == reflect.Pointer {
-			nodeTypeName = nodeType.Elem().Name()
-		}
-		if nodeTypeName != info.receiverTypeName {
+		if !sameTypeName(nodeType, info.receiverTypeName) {
 			return false
 		}
 	} else if pointerType(nodeType) != pointerType(info.receiverType) {

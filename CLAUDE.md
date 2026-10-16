@@ -61,9 +61,12 @@ go tool gsx fmt -w .
    ```
    Each leaf page handles requests via one of: a `Page()` component method (most common), a `Props` method (Props-only pages), or a `ServeHTTP` method (form actions, redirects). Promoted (embedded) methods are skipped.
 
-3. **HTMX Support**: Built-in partial rendering via the default `HTMXRenderTarget` selector
-   - `htmx.go`: `HTMXRenderTarget` and `matchComponentByTarget` (page-prefix + suffix matching)
-   - `render_target.go`: `RenderTarget` interface, `methodRenderTarget`, `functionRenderTarget`, `TargetSelector` type
+3. **Render flow and HTMX Support**: "The request says what it wants; Props is the normal page flow; returning an error breaks it." `docs/rendering.md` is the authoritative description
+   - `struct_pages.go`: per request, the `TargetSelector` yields a `RenderTarget`, then `Props` runs; on `(results…, nil)` (or no Props) `selectComponent` asks `target.Is(m)` for each of the page's components (`PageNode.componentExprs`) and renders the one it `Is`, else `Page`; several is an error. `RenderComponent(c, more...)`, `ErrSkipPageRender` and other errors break the flow. Custom `RenderTarget`s take part fully; `Is` must have no side effects
+   - No default selector: without `WithTargetSelector` every request wants `Page` (`pageTarget`). htmx apps opt in with `HTMXRenderTarget` (htmx 1/2) or `HTMXv4RenderTarget` (htmx 4)
+   - `htmx.go`: `HTMXRenderTarget`, `HTMXv4RenderTarget`, `matchComponentByTarget` (page-prefix + suffix matching for the served page's components), and `htmxUnmatchedTarget`, which answers `Is` for standalone functions and other pages' components by exact generated id (regions shared across pages)
+   - `render_target.go`: `RenderTarget` interface, `methodRenderTarget`, `TargetSelector` type
+   - `struct_pages_render_component.go`: variadic `RenderComponent`, rendered in order into one buffered response
    - `id_for.go`: `ID` (raw HTML id) and `IDTarget` (`#`-prefixed CSS selector) for HTMX `hx-target`
 
 4. **URL Generation**: Type-safe URL generation via `URLFor`
@@ -74,14 +77,17 @@ go tool gsx fmt -w .
    - `MiddlewareFunc = func(http.Handler, *PageNode) http.Handler` — middleware receives the `PageNode`
    - Apply globally via `WithMiddlewares` or per-page via a `Middlewares()` method (also applies to descendants)
 
-6. **Dependency Injection**: Type-based DI via `WithArgs(...)`
+6. **Dependency Injection**: Type-based DI via `WithArgs(...)` (fixed at Mount) and request args (per request)
    - `args.go`: `argRegistry` matches by type; a registered pointer fills a value param (not the reverse); an interface param takes a registered `*Iface` first, else the one registration implementing it, and two are an error
    - Each registered type appears once; use named types to disambiguate
-   - `Mount` checks every `Props`/extended `ServeHTTP` param for ambiguity up front (`checkInjection`); `Parse` skips it. A missing dependency stays a request-time error, since pages may be mounted in configurations that don't register their services
+   - `request_args.go`: `WithRequestArgs(providers...)` and the page method `RequestArgs() []any` (may take `WithArgs` params). Providers are `func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`, run lazily once per request; nearest page first, shadowing outer levels
+   - Parameter fill order: Props' results (components only, each used once) → `w`, `r`, `RenderTarget`, `*PageNode` → request args → `WithArgs`. Within the first two an exact type wins, then the first assignable value in that order (`availableArgs`). Props gets `w`/`r`/target as their dynamic types (`requestValues`); components get them only for params of exactly `http.ResponseWriter`/`*http.Request`/`RenderTarget` (`declaredRequestValues`), so an `io.Writer` param still comes from Props or the registry
+   - `htmxUnmatchedTarget.Is` uses `parseContext.componentOwner` (an id → page/method index) and never matches the served page's own type; `matchComponentByTarget` skips its loose passes when the id is exactly another page's component id
+   - `Mount` checks every `Props`/extended `ServeHTTP`/component param for ambiguity up front (`checkInjection`; Props' results count as provided for components); `Parse` skips it. A missing dependency stays a request-time error, since pages may be mounted in configurations that don't register their services
 
 ### Key Design Patterns
 
-- **Page Interface**: A page struct typically implements `Page()` (full render) and optionally `Content()` (HTMX partial body), plus arbitrary partial methods. Pages can also be Props-only (Props returns `RenderComponent(...)`) or ServeHTTP-only.
+- **Page Interface**: A page struct typically implements `Page()` (full render) and optionally `Content()` (HTMX partial body), plus arbitrary partial methods. One `Props` can return several values, each component taking its share by type. Pages can also be Props-only (Props returns `RenderComponent(...)`) or ServeHTTP-only.
 - **Nested Routing**: Structs can contain other structs to create nested route hierarchies. Children register before parents to avoid mux conflicts.
 - **Context Passing**: Uses `ctxkey` for safe context value passing (`pcCtx`, `urlParamsCtx`, `currentPageCtx`)
 - **Error Handling**: Built-in error page support via `WithErrorHandler`. Return `ErrSkipPageRender` from `Props` to skip rendering after a redirect.

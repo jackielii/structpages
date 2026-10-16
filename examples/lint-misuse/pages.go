@@ -51,6 +51,8 @@ func (unmountedPage) Title() string { return "title" }
 
 func main() {
 	mux := http.NewServeMux()
+	// BAD: selector — pages.gsx uses htmx, but Mount chooses no target
+	// selector, so htmx partial requests would render the full Page.
 	if _, err := structpages.Mount(mux, &root{}, "/", "lint-misuse demo"); err != nil {
 		panic(err)
 	}

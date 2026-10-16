@@ -824,20 +824,6 @@ func BenchmarkStringConversion(b *testing.B) {
 			_ = camelToKebab("HTMLParser")
 		}
 	})
-
-	b.Run("kebabToPascal_Short", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = kebabToPascal("user-list")
-		}
-	})
-
-	b.Run("kebabToPascal_Long", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = kebabToPascal("very-long-component-method-name")
-		}
-	})
 }
 
 // ============================================================================

@@ -70,12 +70,14 @@ func (post) Page(props postProps) tpl     { return tpl{page: "post", entry: "lay
 func (post) Comments(props postProps) tpl { return tpl{page: "post", entry: "post/comments-list", data: props.Comments} }
 ```
 
-Partials work as with gsx: each method returning a `tpl` is a component that `HX-Target` can select.
+Partials work as with gsx: each method returning a `tpl` is a component that `HX-Target` can select, once the mount has an htmx target selector (this example serves htmx 4, so `HTMXv4RenderTarget`).
 
 Templates have no render `ctx`, so give them URLs through a template function. The example binds one to the mounted `*StructPages` once, at parse time, resolving pages by `Ref`:
 
 ```go
-sp, err := structpages.Mount(mux, index{}, "/", "Index")
+sp, err := structpages.Mount(mux, index{}, "/", "Index",
+    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
+)
 if err != nil {
     log.Fatalf("mount: %v", err)
 }

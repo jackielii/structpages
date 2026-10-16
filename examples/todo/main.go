@@ -67,6 +67,8 @@ func main() {
 	addTodo("Deploy to production")
 
 	sp, err := structpages.Mount(nil, index{}, "/", "index",
+		// htmx 2.x: route HX-Target to the page's partials.
+		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithErrorHandler(errorHandler),
 	)
 	if err != nil {

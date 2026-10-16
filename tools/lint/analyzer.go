@@ -15,8 +15,9 @@ import (
 func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "structpageslint",
-		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref calls against the page tree, " +
-			"and flags route string literals that should use URLFor",
+		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref / RenderTarget.Is calls against the page tree, " +
+			"flags route string literals that should use URLFor, Mount calls serving htmx templates " +
+			"without a target selector, and pages rendering regions with another page's component id",
 		Run: func(pass *analysis.Pass) (any, error) {
 			run(pass, tree)
 			return nil, nil
@@ -50,6 +51,8 @@ type checkCtx struct {
 	// IDTarget or Within), so shared page-resolution diagnostics name
 	// the call they came from.
 	callee string
+	// srcs caches generated source files read by checkCtx.source.
+	srcs map[string][]byte
 }
 
 func run(pass *analysis.Pass, tree *PageTree) {
@@ -67,6 +70,7 @@ func run(pass *analysis.Pass, tree *PageTree) {
 	}
 	checkRouteLiterals(ctx)
 	checkRefLiterals(ctx)
+	checkSelectors(ctx)
 }
 
 // inSomeTree runs check against each candidate tree in turn and
@@ -110,8 +114,37 @@ func (ctx *checkCtx) inSomeTree(check func()) {
 
 // visitCall identifies what kind of structpages call this is and
 // checks it against the trees that can serve it.
+//
+// The region check is the exception: it reports a bug that occurs in
+// any tree that mounts both pages involved, so it looks for one such
+// tree rather than for one tree that passes (see checkRegion).
 func visitCall(ctx *checkCtx, call *ast.CallExpr) {
 	ctx.inSomeTree(func() { checkCall(ctx, call) })
+	if fn, args, ok := structpagesCall(ctx.pass.TypesInfo, call); ok && (fn.Name() == "ID" || fn.Name() == "IDTarget") {
+		checkRegion(ctx, call, args, fn.Name())
+	}
+}
+
+// structpagesCall resolves call as a call of a structpages function or
+// method and returns it with its arguments from the page argument on:
+// the package functions take ctx first; the *StructPages methods
+// (sp.URLFor(page, ...), sp.ID(v), sp.IDTarget(v)) don't.
+func structpagesCall(info *types.Info, call *ast.CallExpr) (*types.Func, []ast.Expr, bool) {
+	if info == nil {
+		return nil, nil, false
+	}
+	fn := calleeFunc(info, call)
+	if fn == nil || fn.Pkg() == nil || fn.Pkg().Path() != structpagesPkg {
+		return nil, nil, false
+	}
+	args := call.Args
+	if sig, ok := fn.Type().(*types.Signature); !ok || sig.Recv() == nil {
+		if len(args) == 0 {
+			return nil, nil, false
+		}
+		args = args[1:]
+	}
+	return fn, args, true
 }
 
 // checkCall invokes the per-family check for call.
@@ -127,19 +160,9 @@ func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 		checkRefConversion(ctx, call)
 		return
 	}
-	fn := calleeFunc(info, call)
-	if fn == nil || fn.Pkg() == nil || fn.Pkg().Path() != structpagesPkg {
+	fn, args, ok := structpagesCall(info, call)
+	if !ok {
 		return
-	}
-	// The package functions take ctx first; the *StructPages methods
-	// (sp.URLFor(page, ...), sp.ID(v), sp.IDTarget(v)) don't. args
-	// starts at the page argument either way.
-	args := call.Args
-	if sig, ok := fn.Type().(*types.Signature); !ok || sig.Recv() == nil {
-		if len(args) == 0 {
-			return
-		}
-		args = args[1:]
 	}
 	ctx.callee = fn.Name()
 	switch fn.Name() {
@@ -149,6 +172,10 @@ func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 		checkIDOrIDTarget(ctx, args, fn.Name())
 	case "Within":
 		checkWithin(ctx, args)
+	case "Is":
+		if isRenderTargetMethod(fn) {
+			checkRenderTargetIs(ctx, args)
+		}
 	}
 }
 

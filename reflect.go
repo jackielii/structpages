@@ -301,3 +301,20 @@ func formatMethod(method *reflect.Method) string {
 	}
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
 }
+
+// sameTypeName reports whether t's name is name, ignoring type arguments:
+// a bound method value of a generic type names its receiver "T[...]",
+// while reflect names it "T[int]".
+func sameTypeName(t reflect.Type, name string) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return genericBase(t.Name()) == genericBase(name)
+}
+
+func genericBase(name string) string {
+	if i := strings.IndexByte(name, '['); i >= 0 {
+		return name[:i]
+	}
+	return name
+}

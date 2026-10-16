@@ -15,8 +15,8 @@ func Parse(page any, route, title string, options ...Option) (*StructPages, erro
 
 `Parse` builds the same tree without registering anything; use it in tests and tooling. It applies
 `WithArgs`, `WithURLPrefix`, `WithTargetSelector` and `WithMaxIDLength`, so its ids match `Mount`'s;
-middleware and error-handler options are inert. Unlike `Mount`, it doesn't check `Props` and
-`ServeHTTP` parameters for ambiguous dependencies.
+middleware and error-handler options are inert. Unlike `Mount`, it doesn't resolve request args or check
+`Props`, `ServeHTTP` and component parameters for ambiguous dependencies.
 
 ```go
 type Mux interface {
@@ -145,10 +145,11 @@ component.
 
 | Option | Effect |
 |---|---|
-| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. An interface parameter takes a registered pointer to that interface, else the one registration implementing it. A `Props`/`ServeHTTP` parameter two registrations could fill fails `Mount`; one nothing provides fails the request. |
+| `WithArgs(args ...any)` | DI registry, fixed at `Mount`. Each type once; duplicates fail `Mount`. An interface parameter takes a registered pointer to that interface, else the one registration implementing it. A `Props`/`ServeHTTP`/component interface parameter that two registrations (or two request args at one level) implement fails `Mount`; one nothing provides fails the request. |
+| `WithRequestArgs(providers ...any)` | Per-request DI, mount-wide. Each provider is `func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`; runs lazily, at most once per request, when a parameter of type `T` needs it. Matched like `WithArgs`. Another shape, or two providers of one type, fail `Mount`. A provider's error counts as the error of the method that needed it. |
 | `WithErrorHandler(func(http.ResponseWriter, *http.Request, error))` | Renders every error from `Props`, `ServeHTTP`, component lookup and render. Default: plain 500. |
 | `WithMiddlewares(mw ...MiddlewareFunc)` | Global middleware, first is outermost, runs before page `Middlewares`. |
-| `WithTargetSelector(TargetSelector)` | Chooses the `RenderTarget`. Default `HTMXRenderTarget`; use `HTMXv4RenderTarget` for htmx 4. |
+| `WithTargetSelector(TargetSelector)` | Reads what each request wants into a `RenderTarget`. **No default**: without it every request wants `Page`. htmx apps pass `HTMXRenderTarget` (htmx 1/2) or `HTMXv4RenderTarget` (htmx 4). |
 | `WithURLPrefix(prefix string)` | Prefix added to generated URLs when served behind `StripPrefix` or a proxy. Routing unchanged. |
 | `WithMaxIDLength(n int)` | Id budget before the compact form. Ids only, never routes. |
 | `WithWarnEmptyRoute(func(*PageNode))` | Called for pages with no handler and no children (skipped). `nil` prints a default warning; a no-op func silences it. |
@@ -161,27 +162,38 @@ Discovered on both the value and pointer type; promoted methods are skipped.
 
 Any method returning exactly one value that implements `Render(context.Context, io.Writer) error` is a
 component. In gsx, `component (p Index) Page(props indexProps)` generates
-`func (p Index) Page(props indexProps) gsx.Node`. Parameters are matched by type against the `Props`
-results, then the DI registry.
+`func (p Index) Page(props indexProps) gsx.Node`. Parameters are filled by type from, in order: `Props`'
+results (each used at most once), the per-request values (`http.ResponseWriter`, `*http.Request`,
+`RenderTarget`, `*PageNode`), request args, then `WithArgs`. So one `Props` returning several values serves
+several components, each declaring only what it needs.
 
-- `Page` is rendered for full loads.
-- Any other component is rendered when its id matches `HX-Target`.
-- With no matching component and no `Props`-issued `RenderComponent`, the request errors (a static
-  `HX-Target` that matches nothing falls back to `Page`).
+Which component renders, when `Props` returns no error (or there is no `Props`): the framework asks
+`target.Is(m)` for each of the page's components and renders the one it `Is`; if it `Is` none, `Page`; if it
+`Is` several, the request errors. With an htmx selector, the target `Is` the component `HX-Target` names,
+and an `HX-Target` matching none of the page's components renders `Page`. A page with no `Page` component
+whose target `Is` none must return `RenderComponent` from `Props`, or the request errors.
 
 ### Props
 
 ```go
-func (p Index) Props(r *http.Request, w http.ResponseWriter, sel structpages.RenderTarget, s *store.Store) (indexProps, error)
+func (p Index) Props(r *http.Request, w http.ResponseWriter, t structpages.RenderTarget, s *store.Store) (indexProps, error)
 ```
 
 Parameters are DI-matched in any order: `*http.Request`, `http.ResponseWriter`, `RenderTarget`,
-`*PageNode`/`PageNode`, and `WithArgs` values. Results: any number of values (passed to the component),
-optionally a trailing `error`.
+`*PageNode`/`PageNode`, request args, and `WithArgs` values. Results: any number of values (filling the
+rendered component's parameters by type), optionally a trailing `error`.
 
-The writer is **not** buffered. Headers and cookies are fine; a body write is sent immediately and is not
-undone by a later error. Return `ErrSkipPageRender` when `Props` wrote the whole response itself; return
-`RenderComponent(...)` to render something other than the selected component.
+| `Props` returns | Result |
+|---|---|
+| `(results…, nil)` | normal flow: the component the target `Is`, else `Page`, rendered with `results` |
+| `RenderComponent(c, more...)` | render `c`, then `more`, in order, as one response |
+| `ErrSkipPageRender` | `Props` already responded (e.g. wrote a redirect); nothing renders |
+| any other error | `WithErrorHandler` |
+
+Calling `t.Is(...)` changes nothing; recognising a target and returning no error is still the normal flow.
+
+The writer is **not** buffered. Headers and cookies are fine (set `Content-Type`, then `w.WriteHeader(status)`, before returning
+`RenderComponent` to send a status: the framework can't set the header after the status); a body write is sent immediately and is not undone by a later error.
 
 Only `Props` is invoked. Other `*Props` methods are recorded in `PageNode.Props` but never called.
 
@@ -192,7 +204,7 @@ Only `Props` is invoked. Other `*Props` methods are recorded in `PageNode.Props`
 3. `ServeHTTP(w, r, deps...)` — DI, no result; direct writes.
 4. `ServeHTTP(w, r, deps...) error` — DI, buffered.
 
-Buffered forms: on error the buffer is reset, then `RenderComponent` errors render their component and
+Buffered forms: on error the buffer is reset, then `RenderComponent` errors render their components and
 anything else goes to `WithErrorHandler`. `ErrSkipPageRender` has no special meaning here. In the DI forms
 `RenderTarget` is injectable. A page with `ServeHTTP` never runs `Props` or components. For streaming,
 `http.NewResponseController(w).Flush()` works through the buffered writer (it implements `FlushError` and
@@ -216,50 +228,72 @@ func (p *Index) Init(deps ...) error
 Called once while parsing, with DI. A returned error aborts `Mount`/`Parse`. Use a pointer receiver to keep
 state on the page value.
 
+### RequestArgs
+
+```go
+func (p channelRoutes) RequestArgs(deps ...) []any
+```
+
+Request-arg providers (same shapes as `WithRequestArgs`) for the page and its descendants. Called once at
+`Mount`, DI-matched from `WithArgs`, so providers can close over services. Nearest first: the page's own,
+then each ancestor's, then `WithRequestArgs`; a nearer provider shadows an outer one of the same type.
+
 ## RenderTarget
 
 ```go
 type RenderTarget interface {
-    Is(method any) bool
+    Is(component any) bool
 }
 type TargetSelector func(r *http.Request, pn *PageNode) (RenderTarget, error)
 ```
 
-`Is` accepts method expressions, bound methods and standalone functions. It matches a standalone function
-by its package-qualified id (the one `id` generates), and also by the bare or page-prefixed function id.
-For a function target, `Is` records that it matched; a request whose target no `Is` call matched falls back
-to `Page`.
+`Is` reports whether the request wants `component`: a method expression, a bound method or a standalone
+function. It has no side effects. The framework calls it for each of the page's components to pick the one
+to render; `Props` can call it to load only what the request wants.
 
-### HTMXRenderTarget (default) and HTMXv4RenderTarget
+**`ID`/`Is` symmetry:** a request targeting an element with id `ID(ctx, X)` has a target that `Is(X)`, for
+the served page's components, standalone functions, and other pages' components.
+
+### HTMXRenderTarget and HTMXv4RenderTarget
+
+Opt-in selectors (`WithTargetSelector`).
 
 - Not an HTMX request (`HX-Request` ≠ `true`) or no `HX-Target` → `Page`.
-- Otherwise the target is matched to a component: an exact generated id, or a `page-prefix-component` or
-  bare `component` match (checked together, so don't rely on precedence between them), then the longest
-  suffix match.
-- No component match → a function target, resolved lazily by `Is(fn)` in `Props`.
+- Otherwise `HX-Target` is matched to one of the served page's components: an exact generated id, or a
+  `page-prefix-component` or bare `component` match (checked together, so don't rely on precedence between
+  them), then the longest suffix match. The target `Is` that component.
+- No component match → the target `Is` none of the page's components (so `Page` renders unless `Props`
+  breaks the flow), but answers `Is(fn)` for a standalone function by its package-qualified id (also the
+  bare or page-prefixed function id), and `Is(Other.Method)` for another page's component by its exact
+  generated id only. `Props` recognises such a shared region and renders it with `RenderComponent`.
 
 `HTMXv4RenderTarget` additionally treats `HX-Request-Type: full` as a full page and reads the id from
 htmx 4's `tag#id` `HX-Target` (falling back to the tag, so a `Form` component matches `hx-target="form"`).
 
 ### Custom selectors
 
-A custom `TargetSelector` should delegate to `HTMXRenderTarget` (or `HTMXv4RenderTarget`) and return
-its result. Only the built-in targets render a selected component on their own, so with a target of
-your own type `Props` must return `RenderComponent` for every request it serves.
+A custom `TargetSelector` may return any `RenderTarget`; the framework only calls `Is`, so a custom target
+selects the page's component it `Is` like the built-in ones (`Page` if none). Typically it handles its own
+case and delegates the rest to `HTMXRenderTarget`/`HTMXv4RenderTarget`. `Props` can type-assert the target
+to read what it carries.
 
 ## RenderComponent
 
 ```go
-func RenderComponent(comp interface{ Render(context.Context, io.Writer) error }) error
+func RenderComponent(comp interface{ Render(context.Context, io.Writer) error },
+    more ...interface{ Render(context.Context, io.Writer) error }) error
 ```
 
-Returned as an error from `Props` or a `ServeHTTP` that returns `error`; other `Props` results are ignored.
+Returned as an error from `Props` or a `ServeHTTP` that returns `error`, it breaks the normal flow: `comp`
+then each of `more` render in order, buffered, as one response; other `Props` results are ignored. Use it
+for any override: a different component, an inline failure notice, a standalone or other page's component,
+or several regions (htmx 4: wrap extras in `<hx-partial hx-target={X |> target}>`; htmx 2: `hx-swap-oob` on
+the extra component's root).
 
-`comp` is a constructed component: a page partial called with its arguments (`p.List(items)`,
+Each argument is a constructed component: a page partial called with its arguments (`p.List(items)`,
 `Index{}.List(items)` for another page), a gsx element literal (`<Widget n={1}/>`), or any value with
 `Render(ctx, w)`. The compiler checks its arguments.
 
-Argument count and types are checked before the call and reported as errors.
 
 ## ErrSkipPageRender
 
@@ -330,7 +364,8 @@ concrete page passed to it, through chains of helpers and across packages.
 | `urlfor` | `URLFor` targets: unmounted or ambiguous type, unknown chain child, typed value after a fragment |
 | `ref` | `Ref` strings (including ones stored in variables or struct fields) that resolve to no node |
 | `params` | `URLFor` param keys that are not placeholders in the pattern (fragment included): literal map keys, and constant keys of the key/value form, `url("itemId", 7)` |
-| `idfor` | `ID`/`IDTarget` method expressions whose receiver is not mounted, or whose method is missing on a chain leaf |
+| `idfor` | `ID`/`IDTarget` method expressions whose receiver is not mounted, or whose method is missing on a chain leaf; `RenderTarget.Is` arguments whose receiver is not mounted, or that aren't a function at all (`t.Is(p.Content())` calls instead of naming; a `Ref`/string never matches) |
+| `selector` | a `Mount` with no `WithTargetSelector` whose pages' `.gsx`/`.templ` templates use htmx (`hx-get`…`hx-select`, `<hx-partial>`). Flagged only when every option is a direct `structpages` call (inline or a literal slice); a variable or `opts...` spread isn't. `_test.go` skipped |
 | `route-literal` | `.go` string literals equal to a concrete mounted route (comparisons, `Ref` args, tests and generated files skipped) |
 | `url-attr` | hard-coded internal URLs in URL-bearing attributes (`href`, `action`, `formaction`, `hx-get`/`post`/`put`/`patch`/`delete`, `hx-push-url`/`hx-replace-url`) of `.gsx` and `.templ` files: literals, `+` concatenation, `fmt.Sprint*`, and gsx `` f`/items/@{id}` `` templates |
 

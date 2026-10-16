@@ -1,7 +1,9 @@
 package lint
 
 import (
+	"fmt"
 	"go/ast"
+	"go/token"
 	"go/types"
 
 	"golang.org/x/tools/go/packages"
@@ -17,6 +19,14 @@ type mountCall struct {
 	Call    *ast.CallExpr
 	PageArg ast.Expr // the page value
 	Route   string   // the route prefix
+	// RouteArg is the call's route argument, nil when the route is a
+	// constant inside the helper called.
+	RouteArg ast.Expr
+	// mount is the position key (see posKey) of the structpages.Mount
+	// call that serves this tree: Call itself when it is a Mount, the
+	// Mount inside the helper it calls otherwise. Empty when the tree
+	// is built by Parse, which serves nothing.
+	mount string
 }
 
 // treeBuilder describes how a function builds a page tree from its
@@ -28,6 +38,12 @@ type treeBuilder struct {
 	// routeConst is the route the function passes on itself, when
 	// route is -1.
 	routeConst string
+	// mountsHere marks structpages.Mount itself: a call to it is the
+	// Mount that serves the tree.
+	mountsHere bool
+	// mount is the position key of the structpages.Mount call a helper
+	// reaches, or "" when it reaches Parse.
+	mount string
 }
 
 // treeBuilders maps a function's full name (types.Func.FullName) to how
@@ -51,7 +67,7 @@ type treeBuilders map[string]treeBuilder
 // builder, since no call site can tell where its tree is mounted.
 func findTreeBuilders(pkgs []*packages.Package) treeBuilders {
 	builders := treeBuilders{
-		structpagesPkg + ".Mount": {page: 1, route: 2},
+		structpagesPkg + ".Mount": {page: 1, route: 2, mountsHere: true},
 		structpagesPkg + ".Parse": {page: 0, route: 1},
 	}
 	for changed := true; changed; {
@@ -132,7 +148,8 @@ func forwardedBuilder(
 				return true
 			}
 		}
-		found, ok = treeBuilder{page: page, route: route, routeConst: routeConst}, true
+		found = treeBuilder{page: page, route: route, routeConst: routeConst, mount: reachedMount(pkg, call, b)}
+		ok = true
 		return false
 	})
 	return found, ok
@@ -146,10 +163,33 @@ func builderFor(info *types.Info, call *ast.CallExpr, builders treeBuilders) (tr
 		return treeBuilder{}, false
 	}
 	b, ok := builders[fn.Origin().FullName()]
-	if !ok || call.Ellipsis.IsValid() || len(call.Args) <= max(b.page, b.route) {
+	if !ok || len(call.Args) <= max(b.page, b.route) {
+		return treeBuilder{}, false
+	}
+	// A spread (f(a, b, opts...)) fills only the variadic parameter,
+	// which is never the page (an interface) or the route (a string):
+	// Mount(mux, p, "/", "App", opts...) still names both. Reject the
+	// call only if the spread sits where one of them is expected.
+	if call.Ellipsis.IsValid() && len(call.Args)-1 <= max(b.page, b.route) {
 		return treeBuilder{}, false
 	}
 	return b, true
+}
+
+// reachedMount returns the position key of the structpages.Mount call
+// that a call to builder b ends in: the call itself when b is Mount.
+func reachedMount(pkg *packages.Package, call *ast.CallExpr, b treeBuilder) string {
+	if b.mountsHere {
+		return posKey(pkg.Fset, call.Pos())
+	}
+	return b.mount
+}
+
+// posKey renders pos as "file:line:col", the key that identifies a call
+// across the package variants packages.Load reports it under.
+func posKey(fset *token.FileSet, pos token.Pos) string {
+	p := fset.Position(pos)
+	return fmt.Sprintf("%s:%d:%d", p.Filename, p.Line, p.Column)
 }
 
 // callRoute returns the route prefix call mounts its tree at, when it
@@ -183,11 +223,17 @@ func findMounts(pkg *packages.Package, builders treeBuilders) []mountCall {
 			if !routed {
 				return true
 			}
+			var routeArg ast.Expr
+			if b.route >= 0 {
+				routeArg = call.Args[b.route]
+			}
 			calls = append(calls, mountCall{
-				Pkg:     pkg,
-				Call:    call,
-				PageArg: call.Args[b.page],
-				Route:   route,
+				RouteArg: routeArg,
+				Pkg:      pkg,
+				Call:     call,
+				PageArg:  call.Args[b.page],
+				Route:    route,
+				mount:    reachedMount(pkg, call, b),
 			})
 			return true
 		})

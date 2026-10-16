@@ -23,6 +23,8 @@ func PrintRoutes(sb *strings.Builder) structpages.MiddlewareFunc {
 func main() {
 	var routes strings.Builder
 	sp, err := structpages.Mount(nil, &dashboard{}, "/", "Dashboard",
+		// htmx 2.x: route HX-Target to the page's partials.
+		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithErrorHandler(errorHandler),
 		structpages.WithMiddlewares(PrintRoutes(&routes)),
 	)

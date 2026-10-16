@@ -8,6 +8,8 @@ sidebar_position: 9
 
 The error-returning forms of `ServeHTTP` run against a *buffered* response writer. On a non-nil error the buffer is discarded and the error goes to the `WithErrorHandler` callback, which renders a clean error page even if the handler had already written partial output. Props errors go to the same callback, but Props gets the *unbuffered* writer: setting headers or cookies is fine, while anything written to the body is sent as is and the error page is appended to it. Everything in this guide follows from that.
 
+Two errors are flow signals rather than failures: `RenderComponent(...)` renders the components it carries instead of what the request wanted, and, from Props, `ErrSkipPageRender` means Props already responded. Neither reaches the error handler from Props. An error from a [request arg](./dependency-injection.md#request-args) provider counts as an error of the method that needed the value. The whole flow is in [How a Request Is Rendered](./rendering.md).
+
 ## The rules
 
 1. **Never call `http.Error` (or write `w`) in an error-returning handler or in Props.** In an error-returning `ServeHTTP`, a write followed by `return err` is discarded; in Props it has already been sent, and the error page is appended to it. A write followed by `return nil` bypasses the error handler either way. Just return the error.
@@ -158,6 +160,27 @@ This works from *either* `ServeHTTP` form — the buffered wrapper implements `F
 ## Which form to use
 
 Pick the `ServeHTTP` signature by what the handler does; the four signatures and when each fits are in [Page Response Patterns](./supported-flows.md#servehttp-signatures). On the error side: HTML handlers and redirects return errors, JSON handlers write their own error bodies, and streams send an `event: error` frame. Props follows the HTML rule, but isn't buffered, so never write the body there.
+
+## A notice instead of an error page
+
+When a partial's data fails to load, an error page swapped into a small region is rarely what you want. Props can break the flow with an inline notice instead. To send a status with it, set the `Content-Type` and the status first: the status goes out before the body, so the framework can't set the header after it.
+
+```go
+func (p dashboard) Props(w http.ResponseWriter, t structpages.RenderTarget, s *Store) (Stats, []Note, error) {
+    if t.Is(p.Notes) {
+        notes, err := s.Notes()
+        if err != nil {
+            w.Header().Set("Content-Type", "text/html; charset=utf-8")
+            w.WriteHeader(http.StatusServiceUnavailable)
+            return Stats{}, nil, structpages.RenderComponent(p.NotesUnavailable(err))
+        }
+        return Stats{}, notes, nil
+    }
+    …
+}
+```
+
+With htmx 2, error statuses aren't swapped unless its `responseHandling` config says so; send 200 for an inline notice there. Return the error instead when it should be treated as a failure: logged, and rendered by the global handler.
 
 ## ErrSkipPageRender
 

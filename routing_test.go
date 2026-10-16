@@ -384,7 +384,7 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 		t.Errorf("expected error for invalid component method")
 	} else {
 		lastError := capturedErrors[len(capturedErrors)-1]
-		if !contains(lastError.Error(), "does not have a Page component method") {
+		if !contains(lastError.Error(), "has no function value") {
 			t.Errorf("unexpected error: %v", lastError.Error())
 		}
 	}

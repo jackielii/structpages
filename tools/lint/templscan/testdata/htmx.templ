@@ -1,0 +1,8 @@
+package fixture
+
+templ Page(u string) {
+	<a href="#top" hx-on:click="x()">top</a>
+	if u != "" {
+		<button data-hx-get={ u }>go</button>
+	}
+}
