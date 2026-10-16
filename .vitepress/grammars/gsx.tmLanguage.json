@@ -1,0 +1,926 @@
+{
+  "scopeName": "source.gsx",
+  "name": "gsx",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#component"
+    },
+    {
+      "include": "#embedded-f-literal"
+    },
+    {
+      "include": "#embedded-js-literal"
+    },
+    {
+      "include": "#embedded-css-literal"
+    },
+    {
+      "include": "#fragment"
+    },
+    {
+      "include": "#component-tag"
+    },
+    {
+      "include": "#element-tag"
+    },
+    {
+      "include": "source.go"
+    }
+  ],
+  "injections": {
+    "L:meta.embedded.block.js.gsx, L:meta.embedded.block.css.gsx": {
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        }
+      ]
+    },
+    "L:source.gsx -string -comment -meta.embedded.block.js.gsx -meta.embedded.block.css.gsx": {
+      "patterns": [
+        {
+          "include": "#fragment"
+        },
+        {
+          "include": "#component-tag"
+        },
+        {
+          "include": "#element-tag"
+        }
+      ]
+    }
+  },
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.gsx",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.gsx",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.block.html.gsx",
+          "begin": "<!--",
+          "end": "-->"
+        }
+      ]
+    },
+    "content-comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.gsx",
+          "match": "^[ \\t]*//.*$"
+        },
+        {
+          "name": "comment.block.html.gsx",
+          "begin": "<!--",
+          "end": "-->"
+        }
+      ]
+    },
+    "component": {
+      "name": "meta.component.gsx",
+      "begin": "^(component)\\s+(?:\\(([^)]*)\\)\\s+)?([A-Za-z_][A-Za-z0-9_]*)(\\[[^\\]]*\\])?\\s*\\(([^{]*)\\)\\s*(\\{)\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.component.gsx"
+        },
+        "2": {
+          "name": "meta.embedded.line.go.gsx",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        "3": {
+          "name": "entity.name.function.gsx"
+        },
+        "4": {
+          "name": "meta.embedded.line.go.gsx",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        "5": {
+          "name": "meta.embedded.line.go.gsx",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        "6": {
+          "name": "punctuation.section.block.begin.gsx"
+        }
+      },
+      "end": "^(\\})\\s*$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.block.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#markup"
+        }
+      ]
+    },
+    "markup": {
+      "patterns": [
+        {
+          "include": "#content-comments"
+        },
+        {
+          "include": "#go-block"
+        },
+        {
+          "include": "#script-element"
+        },
+        {
+          "include": "#style-element"
+        },
+        {
+          "include": "#doctype"
+        },
+        {
+          "include": "#processing-instruction-marker"
+        },
+        {
+          "include": "#processing-instruction-start"
+        },
+        {
+          "include": "#processing-instruction-end"
+        },
+        {
+          "include": "#fragment"
+        },
+        {
+          "include": "#component-tag"
+        },
+        {
+          "include": "#element-tag"
+        },
+        {
+          "include": "#control-flow"
+        },
+        {
+          "include": "#control-flow-switch"
+        },
+        {
+          "include": "#interp"
+        }
+      ]
+    },
+    "go-block": {
+      "name": "meta.embedded.block.go.gsx",
+      "begin": "\\{\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "\\}\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "source.go",
+      "patterns": [
+        {
+          "include": "#embedded-f-literal"
+        },
+        {
+          "include": "#embedded-js-literal"
+        },
+        {
+          "include": "#embedded-css-literal"
+        },
+        {
+          "include": "#fragment"
+        },
+        {
+          "include": "#component-tag"
+        },
+        {
+          "include": "#element-tag"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "interp": {
+      "name": "meta.embedded.block.go.gsx",
+      "begin": "(@?\\{)",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "source.go",
+      "patterns": [
+        {
+          "include": "#embedded-f-literal"
+        },
+        {
+          "include": "#embedded-js-literal"
+        },
+        {
+          "include": "#embedded-css-literal"
+        },
+        {
+          "include": "#fragment"
+        },
+        {
+          "include": "#component-tag"
+        },
+        {
+          "include": "#element-tag"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "control-flow": {
+      "begin": "(\\{)\\s*(if|for)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        },
+        "2": {
+          "name": "keyword.control.go"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#control-body"
+        },
+        {
+          "name": "keyword.control.go",
+          "match": "\\belse\\b"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "control-body": {
+      "begin": "(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#markup"
+        }
+      ]
+    },
+    "control-flow-switch": {
+      "begin": "(\\{)\\s*(switch)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        },
+        "2": {
+          "name": "keyword.control.go"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#switch-body"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "switch-body": {
+      "begin": "(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#switch-case"
+        }
+      ]
+    },
+    "switch-case": {
+      "begin": "^\\s*(case|default)\\b([^:]*)(:)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.go"
+        },
+        "2": {
+          "name": "meta.embedded.line.go.gsx",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        "3": {
+          "name": "punctuation.separator.gsx"
+        }
+      },
+      "end": "(?=^\\s*(?:case|default)\\b|\\})",
+      "patterns": [
+        {
+          "include": "#markup"
+        }
+      ]
+    },
+    "doctype": {
+      "name": "meta.tag.doctype.gsx",
+      "match": "(?i)(<!)(DOCTYPE)([^>]*)(>)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "keyword.other.doctype.gsx"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      }
+    },
+    "processing-instruction-marker": {
+      "name": "meta.tag.processing-instruction.marker.gsx",
+      "begin": "(<\\?)(marker)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.processing-instruction.gsx"
+        }
+      },
+      "end": "(>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute"
+        }
+      ]
+    },
+    "processing-instruction-start": {
+      "name": "meta.tag.processing-instruction.start.gsx",
+      "begin": "(<\\?)(start)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.processing-instruction.gsx"
+        }
+      },
+      "end": "(>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute"
+        }
+      ]
+    },
+    "processing-instruction-end": {
+      "name": "meta.tag.processing-instruction.end.gsx",
+      "match": "(<\\?)(end)\\b\\s*(>)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.processing-instruction.gsx"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      }
+    },
+    "fragment": {
+      "name": "meta.tag.fragment.gsx",
+      "match": "(</?>)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      }
+    },
+    "component-tag": {
+      "name": "meta.tag.component.gsx",
+      "begin": "(</?)((?:[a-z][a-zA-Z0-9]*\\.)?[A-Z][A-Za-z0-9.]*)(\\[[^\\]]+\\])?",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.type.component.gsx"
+        },
+        "3": {
+          "name": "meta.embedded.line.go.gsx",
+          "patterns": [
+            {
+              "include": "source.go"
+            }
+          ]
+        }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute"
+        }
+      ]
+    },
+    "element-tag": {
+      "name": "meta.tag.element.gsx",
+      "begin": "(</?)([a-z][a-z0-9-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.gsx"
+        }
+      },
+      "end": "(/?>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#attribute"
+        }
+      ]
+    },
+    "attribute": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#go-block"
+        },
+        {
+          "include": "#embedded-js-attribute"
+        },
+        {
+          "include": "#embedded-css-attribute"
+        },
+        {
+          "include": "#embedded-f-attribute"
+        },
+        {
+          "name": "meta.attribute.class-value.gsx",
+          "begin": "(class)\\s*=\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.other.attribute-name.class.gsx"
+            },
+            "2": {
+              "name": "punctuation.section.embedded.begin.gsx"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.end.gsx"
+            }
+          },
+          "contentName": "meta.embedded.block.go.gsx",
+          "patterns": [
+            {
+              "include": "#embedded-f-literal"
+            },
+            {
+              "include": "#composable-arm-body"
+            },
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        {
+          "name": "meta.attribute.style-value.gsx",
+          "begin": "(style)\\s*=\\s*(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.other.attribute-name.gsx"
+            },
+            "2": {
+              "name": "punctuation.section.embedded.begin.gsx"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.end.gsx"
+            }
+          },
+          "contentName": "meta.embedded.block.go.gsx",
+          "patterns": [
+            {
+              "include": "#embedded-f-literal"
+            },
+            {
+              "include": "#embedded-css-literal"
+            },
+            {
+              "include": "#composable-arm-body"
+            },
+            {
+              "include": "source.go"
+            }
+          ]
+        },
+        {
+          "include": "#interp"
+        },
+        {
+          "name": "string.quoted.double.gsx",
+          "begin": "\"",
+          "end": "\""
+        },
+        {
+          "name": "string.quoted.other.backtick.gsx",
+          "begin": "`",
+          "end": "`"
+        },
+        {
+          "name": "keyword.operator.assignment.gsx",
+          "match": "="
+        },
+        {
+          "name": "entity.other.attribute-name.gsx",
+          "match": "[^\\s\"'<>/={}`\\p{Cc}]+"
+        }
+      ]
+    },
+    "composable-arm-body": {
+      "begin": "(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#embedded-f-literal"
+        },
+        {
+          "include": "#embedded-css-literal"
+        },
+        {
+          "include": "#composable-arm-body"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "embedded-go-hole": {
+      "name": "meta.embedded.block.go.gsx",
+      "begin": "@\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "source.go",
+      "patterns": [
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "embedded-f-literal": {
+      "name": "meta.embedded.block.fstring.gsx",
+      "begin": "(?<![A-Za-z0-9_.])(f)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "2": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "(?<!\\\\)(?:\\\\\\\\)*\\K\\2",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.gsx"
+        }
+      },
+      "contentName": "string.interpolated.gsx",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        }
+      ]
+    },
+    "embedded-js-literal": {
+      "name": "meta.embedded.block.js.gsx",
+      "begin": "(?<![A-Za-z0-9_.])(js)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "2": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "(?<!\\\\)(?:\\\\\\\\)*\\K\\2",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.gsx"
+        }
+      },
+      "contentName": "source.js",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "embedded-css-literal": {
+      "name": "meta.embedded.block.css.gsx",
+      "begin": "(?<![A-Za-z0-9_.])(css)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "2": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "(?<!\\\\)(?:\\\\\\\\)*\\K\\2",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.gsx"
+        }
+      },
+      "contentName": "source.css",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "embedded-f-attribute": {
+      "name": "meta.embedded.block.fstring.gsx",
+      "begin": "([^\\s\"'<>/={}`\\p{Cc}]+)(\\s*=\\s*)(\\{?)(f)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.other.attribute-name.gsx"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.gsx"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        },
+        "4": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "5": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "((?<!\\\\)(?:\\\\\\\\)*\\K\\5)(\\})?",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.gsx"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "string.interpolated.gsx",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        }
+      ]
+    },
+    "embedded-js-attribute": {
+      "name": "meta.embedded.block.js.gsx",
+      "begin": "([^\\s\"'<>/={}`\\p{Cc}]+)(\\s*=\\s*)(\\{?)(js)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.other.attribute-name.gsx"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.gsx"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        },
+        "4": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "5": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "((?<!\\\\)(?:\\\\\\\\)*\\K\\5)(\\})?",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.gsx"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "source.js",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "embedded-css-attribute": {
+      "name": "meta.embedded.block.css.gsx",
+      "begin": "([^\\s\"'<>/={}`\\p{Cc}]+)(\\s*=\\s*)(\\{?)(css)([`\"])",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.other.attribute-name.gsx"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.gsx"
+        },
+        "3": {
+          "name": "punctuation.section.embedded.begin.gsx"
+        },
+        "4": {
+          "name": "support.type.embedded-language.gsx"
+        },
+        "5": {
+          "name": "punctuation.definition.string.begin.gsx"
+        }
+      },
+      "end": "((?<!\\\\)(?:\\\\\\\\)*\\K\\5)(\\})?",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.gsx"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.end.gsx"
+        }
+      },
+      "contentName": "source.css",
+      "patterns": [
+        {
+          "include": "#embedded-go-hole"
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    "script-element": {
+      "begin": "(<)(script)\\b([^>]*)(>)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.gsx"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "end": "(</)(script)\\s*(>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.gsx"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "contentName": "meta.embedded.block.js.gsx",
+      "patterns": [
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "style-element": {
+      "begin": "(<)(style)\\b([^>]*)(>)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.gsx"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "end": "(</)(style)\\s*(>)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.gsx"
+        },
+        "2": {
+          "name": "entity.name.tag.gsx"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.gsx"
+        }
+      },
+      "contentName": "meta.embedded.block.css.gsx",
+      "patterns": [
+        {
+          "include": "source.css"
+        }
+      ]
+    }
+  }
+}

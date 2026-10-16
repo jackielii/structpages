@@ -1,0 +1,14 @@
+/* Go blue, as on the previous site. */
+:root {
+  --vp-c-brand-1: #007d9c;
+  --vp-c-brand-2: #00a0c6;
+  --vp-c-brand-3: #00add8;
+  --vp-c-brand-soft: rgba(0, 173, 216, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #45c9e7;
+  --vp-c-brand-2: #29c0e3;
+  --vp-c-brand-3: #16b6dd;
+  --vp-c-brand-soft: rgba(41, 192, 227, 0.16);
+}
