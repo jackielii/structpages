@@ -200,3 +200,69 @@ func TestRenderingExamples_customSelector(t *testing.T) {
 		}
 	}
 }
+
+// exRetargetNavigation is the docs' middleware: a boosted request whose
+// target is none of the served page's components is navigation from
+// another page's region, so the whole page goes to body.
+func exRetargetNavigation(next http.Handler, pn *PageNode) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("HX-Boosted") == "true" &&
+			r.Header.Get("HX-Request-Type") == "partial" &&
+			!exWantsOwnComponent(r, pn) {
+			w.Header().Set("HX-Retarget", "body")
+			w.Header().Set("HX-Reswap", "innerMorph")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// exWantsOwnComponent reports whether the request's target is one of pn's
+// components other than Page.
+func exWantsOwnComponent(r *http.Request, pn *PageNode) bool {
+	t, err := HTMXv4RenderTarget(r, pn)
+	if err != nil {
+		return false
+	}
+	for name, m := range pn.Components {
+		if name != "Page" && t.Is(m.Func.Interface()) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRenderingExamples_retargetNavigation(t *testing.T) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, exRoot{}, "/", "App", WithArgs(&exStore{}),
+		WithTargetSelector(HTMXv4RenderTarget), WithMiddlewares(exRetargetNavigation))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes, err := sp.ID(exDashboard.Notes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, target, reqType, boosted string
+		retarget                       bool
+	}{
+		{"boosted link from another page's region", "div#report-region", "partial", "true", true},
+		{"boosted link targeting this page's own region", "ul#" + notes, "partial", "true", false},
+		{"boosted link to body", "body", "full", "true", false},
+		{"region reload, not boosted", "div#report-region", "partial", "", false},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/dashboard", http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", c.target)
+		req.Header.Set("HX-Request-Type", c.reqType)
+		if c.boosted != "" {
+			req.Header.Set("HX-Boosted", c.boosted)
+		}
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if got := rec.Header().Get("HX-Retarget") == "body"; got != c.retarget {
+			t.Errorf("%s: retargeted = %v, want %v", c.name, got, c.retarget)
+		}
+	}
+}

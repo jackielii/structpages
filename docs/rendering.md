@@ -93,7 +93,7 @@ func (p dashboard) Props(t structpages.RenderTarget, store *Store) (Stats, []Not
 | `HX-Target` = `Notes`' id | `Notes` | loads only the notes | `Notes(notes)` |
 | `HX-Target` = `ui.StatsWidget`'s id | none of the page's components; `Is(ui.StatsWidget)` is true | `RenderComponent(ui.StatsWidget(s))` | the widget |
 | `HX-Target` = `report.Detail.Summary`'s id | none of the page's components; `Is(report.Detail.Summary)` is true | `RenderComponent(…Summary(sum))` | the report's summary |
-| `HX-Target` = an id nobody on this page owns | none | loads everything | `Page(s, notes)`: a whole document [lands in that region](#regions-shared-across-pages) |
+| `HX-Target` = an id that isn't one of this page's components, and `Props` doesn't recognise it | none | loads everything | `Page(s, notes)`: a whole document lands in that region (see [When the target belongs to another page](#when-the-target-belongs-to-another-page)) |
 
 Things to notice:
 
@@ -101,6 +101,59 @@ Things to notice:
 - **Each component takes its share of the results by type.** `Notes` takes only `[]Note`, so the `Stats{}` that `Props` returns for it is never used.
 - **A target that isn't one of the page's components needs `RenderComponent`.** The framework can only render the page's own components; for a standalone function or another page's component, `Props` builds it.
 - **`t.Is(p.Notes)` and `t.Is(dashboard.Notes)` are the same question.** A bound method value and a method expression name the same component.
+
+### When the target belongs to another page
+
+The last row of the table is the one to watch. It happens in two ways, and they have different fixes.
+
+**1. A link inside another page's region navigates here.** Page A has a region with `hx-target:inherited`, and a boosted link inside it goes to the dashboard. The request arrives with `HX-Target` set to A's region. The user meant to navigate, so the right content is the dashboard's `Page`, but htmx will put it into A's region. No `Props` can fix that: the dashboard never had A's region.
+
+- **Fix the markup:** a navigation link must not inherit a region's target. Put `hx-target:inherited` on the region's own controls (tabs, filters, pagination), not on a container that also holds navigation links, or give the link `hx-target="body"`.
+- **Safety net, as middleware:** a boosted request is navigation. When its target is none of the served page's components, send the page to `body`. The middleware runs before `Props`, so it sets the response headers on the writer:
+
+```go
+// retargetNavigation: a boosted request whose target isn't one of this
+// page's components came from another page's region. Swap the page into
+// body instead. htmx 4; for htmx 2, drop the HX-Request-Type check and use
+// HTMXRenderTarget.
+func retargetNavigation(next http.Handler, pn *structpages.PageNode) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Header.Get("HX-Boosted") == "true" &&
+            r.Header.Get("HX-Request-Type") == "partial" &&
+            !wantsOwnComponent(r, pn) {
+            w.Header().Set("HX-Retarget", "body")
+            w.Header().Set("HX-Reswap", "innerMorph") // or innerHTML
+        }
+        next.ServeHTTP(w, r)
+    })
+}
+
+// wantsOwnComponent reports whether the request targets one of pn's
+// components other than Page, asking the selector the mount uses.
+func wantsOwnComponent(r *http.Request, pn *structpages.PageNode) bool {
+    t, err := structpages.HTMXv4RenderTarget(r, pn)
+    if err != nil {
+        return false
+    }
+    for name, m := range pn.Components {
+        if name != "Page" && t.Is(m.Func.Interface()) {
+            return true
+        }
+    }
+    return false
+}
+
+structpages.WithMiddlewares(retargetNavigation)
+```
+
+  It only touches boosted requests, so region reloads and other partial requests are unaffected. If a page's `Props` recognises another page's region on a boosted request and renders it with `RenderComponent`, it can undo the retarget with `w.Header().Del("HX-Retarget")`.
+
+**2. The page reuses another page's region id.** The dashboard renders a region with `report.Detail.Summary`'s id, and a reload inside it targets that id. The page does own this region in practice; it borrowed the id.
+
+- **Fix the page:** give the region the page's own id (`id={p.Summary |> id}`), so it's one of the page's components and the normal flow renders it with no `Is` at all.
+- **Or, when the reuse is deliberate,** recognise it in `Props` with `t.Is(report.Detail.Summary)` and return `RenderComponent`, as the example above does.
+
+**Seeing it happen.** Neither case is an error, so the error handler never sees them. To find them during development, log from the same middleware when a partial request isn't boosted and `wantsOwnComponent` is false. Add the page's name and the `HX-Target`, and you can tell which page's markup to fix. In tests, check that partial responses don't contain `<html`. On the client, an htmx listener can flag a response starting with `<html>` or `<body>` that is about to land in a target other than `body`.
 
 ### Recognised, but not rendered
 
@@ -300,9 +353,7 @@ func (p aceSection) Props(t structpages.RenderTarget, s *Store) (aceProps, error
 Another page's component matches only by its exact generated id, the one `ID` and the `id` filter produce. If `Props` doesn't act on it, the normal flow applies, and `Page` renders.
 
 ::: warning A whole document in a region
-When an htmx request targets a region the served page doesn't have, and `Props` doesn't decide, `Page` renders. That's the normal flow. If `Page` is a whole document (`<html>`, a layout), htmx swaps it *inside* the region. The server can't tell this mistake apart from a page whose `Page` is meant to be a fragment, so catch it where the facts are:
-- on the client, an htmx listener can warn when a response starting with `<html>` or `<body>` is about to land in a target other than `body`;
-- in tests, check that partial responses don't contain `<html`.
+When an htmx request targets a region the served page doesn't have, and `Props` doesn't decide, `Page` renders. That's the normal flow, but if `Page` is a whole document, htmx swaps it *inside* the region. [When the target belongs to another page](#when-the-target-belongs-to-another-page) covers the two ways this happens and how to fix and catch each.
 :::
 
 ## Where parameter values come from
