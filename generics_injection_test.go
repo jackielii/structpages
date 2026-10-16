@@ -622,31 +622,19 @@ func TestGenerics_MethodMatching(t *testing.T) {
 	}
 }
 
-// Test interface injection limitations with generics
+// TestGenerics_InterfaceInjection pins that a generic interface parameter
+// takes the registered implementation, as a non-generic one does.
 func TestGenerics_InterfaceInjection(t *testing.T) {
-	// This test documents a known limitation: when you store an interface type
-	// in the argRegistry, Go's reflection shows the concrete type, not the interface.
-	// This means Props methods need to accept the concrete type, not the interface.
-
-	t.Run("interface stored as concrete type", func(t *testing.T) {
-		var repo repository[string] = &memoryRepository[string]{
-			items: make(map[string]string),
-		}
-
-		// Even though repo is declared as an interface, reflect.TypeOf shows concrete type
-		concreteType := reflect.TypeOf(repo).String()
-		if !strings.Contains(concreteType, "memoryRepository") {
-			t.Errorf("Expected concrete type memoryRepository, got %s", concreteType)
-		}
-
-		// This is why interface injection doesn't work as expected with generics
-		t.Log("Interface variables show concrete type in reflection:", concreteType)
-	})
-
-	// Workaround: use concrete types in Props methods
-	t.Run("workaround using concrete types", func(t *testing.T) {
-		// Instead of accepting repository[T], accept *memoryRepository[T]
-		// This is what we did in the productList.Props method
-		t.Log("Workaround: Props methods should accept concrete types, not interface types")
-	})
+	repo := &memoryRepository[string]{items: make(map[string]string)}
+	args := argRegistry{}
+	if err := args.addArg(repo); err != nil {
+		t.Fatalf("addArg: %v", err)
+	}
+	got, ok := lookupArg(t, args, reflect.TypeFor[repository[string]]())
+	if !ok {
+		t.Fatal("repository[string] parameter not filled by the registered *memoryRepository[string]")
+	}
+	if got.Interface() != repo {
+		t.Errorf("filled with %v, want the registered repository", got.Interface())
+	}
 }

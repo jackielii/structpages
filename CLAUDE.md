@@ -75,9 +75,9 @@ go tool gsx fmt -w .
    - Apply globally via `WithMiddlewares` or per-page via a `Middlewares()` method (also applies to descendants)
 
 6. **Dependency Injection**: Type-based DI via `WithArgs(...)`
-   - `args.go`: `argRegistry` matches by type; a registered pointer fills a value param (not the reverse), with an assignability fallback
+   - `args.go`: `argRegistry` matches by type; a registered pointer fills a value param (not the reverse); an interface param takes the one registration implementing it, and two are an error
    - Each registered type appears once; use named types to disambiguate
-   - Generic types are supported; interface-typed params are not filled by a registered implementation (see `generics_injection_test.go`)
+   - `Mount` checks every `Props`/extended `ServeHTTP` param for ambiguity up front (`checkInjection`); `Parse` skips it. A missing dependency stays a request-time error, since pages may be mounted in configurations that don't register their services
 
 ### Key Design Patterns
 

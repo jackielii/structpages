@@ -250,7 +250,7 @@ func Test_parseContext_getArg(t *testing.T) {
 					t.Fatalf("Failed to add arg: %v", err)
 				}
 			}
-			got, ok := args.getArg(tt.in)
+			got, ok := lookupArg(t, args, tt.in)
 			if !ok {
 				t.Errorf("getArg() did not find type %v", tt.in)
 				return

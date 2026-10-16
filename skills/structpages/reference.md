@@ -14,8 +14,9 @@ func Parse(page any, route, title string, options ...Option) (*StructPages, erro
 `http.DefaultServeMux`). `route` is the base path (usually `"/"`), `title` the root page title.
 
 `Parse` builds the same tree without registering anything; use it in tests and tooling. It applies
-`WithArgs`, `WithURLPrefix` and `WithTargetSelector`; middleware and error-handler options are inert. It
-currently ignores `WithMaxIDLength`, so ids generated under `Parse` use the default budget of 40.
+`WithArgs`, `WithURLPrefix`, `WithTargetSelector` and `WithMaxIDLength`, so its ids match `Mount`'s;
+middleware and error-handler options are inert. Unlike `Mount`, it doesn't check `Props` and
+`ServeHTTP` parameters for ambiguous dependencies.
 
 ```go
 type Mux interface {
@@ -144,7 +145,7 @@ component.
 
 | Option | Effect |
 |---|---|
-| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. |
+| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. An interface parameter takes the one registration implementing it. A parameter two registrations could fill fails `Mount`; one nothing provides fails the request. |
 | `WithErrorHandler(func(http.ResponseWriter, *http.Request, error))` | Renders every error from `Props`, `ServeHTTP`, component lookup and render. Default: plain 500. |
 | `WithMiddlewares(mw ...MiddlewareFunc)` | Global middleware, first is outermost, runs before page `Middlewares`. |
 | `WithTargetSelector(TargetSelector)` | Chooses the `RenderTarget`. Default `HTMXRenderTarget`; use `HTMXv4RenderTarget` for htmx 4. |

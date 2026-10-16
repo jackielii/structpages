@@ -63,10 +63,26 @@ Each `WithArgs` value is registered under its type, and a parameter takes the re
   ```
 
 - **Pointers fill values, not the reverse.** A registered `*AppContext` also fills a parameter of type `AppContext`. A registered `AppContext` value can't fill an `*AppContext` parameter, so register the pointer.
-- **Declare the type you registered, not an interface.** A concrete registration doesn't fill an interface-typed parameter: registering `*PostgresStore` doesn't satisfy a `Store` interface parameter. (The request-scoped values in the table do fill their interface types: the writer arrives as `http.ResponseWriter`.)
+- **An interface parameter takes the one registration that implements it.** A method can declare just what it needs, so a unit test can call it with a fake:
+
+  ```go
+  type userLister interface {
+      ListUsers(ctx context.Context) ([]User, error)
+  }
+
+  // Mount registers *PostgresStore, which implements userLister.
+  func (p usersPage) Props(r *http.Request, users userLister) (UsersProps, error) { … }
+
+  // In a test, call Props directly with a fake.
+  props, err := usersPage{}.Props(req, fakeUsers{})
+  ```
+
+  If two registrations implement the interface, `Mount` fails and names both: declare the concrete type, or narrow the interface. A registration of the parameter's exact type, and the per-request values in the table, are always used first.
 - **Generic types work** — type parameters, slices and maps as dependencies, aliases, function types and complex constraints. Anywhere these docs say "type", read it as "any reflect-distinguishable type".
 
-A parameter that matches nothing fails the call with `method X requires argument of type T, but not found`.
+`Mount` checks every `Props` and `ServeHTTP` parameter for ambiguity up front, so two registrations implementing one interface parameter fail at startup with the page and both types named, not on the first request to that page. `Parse` skips the check.
+
+A parameter that matches nothing fails the request with `method X requires argument of type T, but not found`. That isn't checked at `Mount`, so a page can stay mounted in a configuration, or a test, that doesn't register its dependencies.
 
 ## Init
 

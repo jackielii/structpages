@@ -129,12 +129,12 @@ func TestArgRegistry_getArg(t *testing.T) {
 			wantFound:  true,
 		},
 		{
-			name: "implementation not assignable to interface",
+			name: "registered implementation fills an interface parameter",
 			registry: argRegistry{
 				reflect.TypeOf(implVal): reflect.ValueOf(implVal),
 			},
 			lookupType: reflect.TypeOf((*testInterface)(nil)).Elem(),
-			wantFound:  false,
+			wantFound:  true,
 		},
 		{
 			name:       "empty registry returns not found",
@@ -175,7 +175,7 @@ func TestArgRegistry_getArg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotValue, gotFound := tt.registry.getArg(tt.lookupType)
+			gotValue, gotFound := lookupArg(t, tt.registry, tt.lookupType)
 			if gotFound != tt.wantFound {
 				t.Errorf("argRegistry.getArg() found = %v, want %v", gotFound, tt.wantFound)
 				return
@@ -257,7 +257,7 @@ func TestArgRegistry_getArg_coverageGaps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, gotFound := tt.registry.getArg(tt.lookupType)
+			_, gotFound := lookupArg(t, tt.registry, tt.lookupType)
 			if gotFound != tt.wantFound {
 				t.Errorf("argRegistry.getArg() found = %v, want %v", gotFound, tt.wantFound)
 			}
@@ -316,12 +316,12 @@ func TestArgRegistry_getArg_edgeCases(t *testing.T) {
 			wantFound:  false,
 		},
 		{
-			name: "interface assignability - value types not directly assignable",
+			name: "registered wider interface fills a narrower interface parameter",
 			registry: argRegistry{
 				reflect.TypeOf((*derivedInterface)(nil)).Elem(): reflect.ValueOf(fullImpl{}),
 			},
 			lookupType: reflect.TypeOf((*baseInterface)(nil)).Elem(),
-			wantFound:  false,
+			wantFound:  true,
 		},
 		{
 			name: "type stored with exact match in loop",
@@ -347,7 +347,7 @@ func TestArgRegistry_getArg_edgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, gotFound := tt.registry.getArg(tt.lookupType)
+			_, gotFound := lookupArg(t, tt.registry, tt.lookupType)
 			if gotFound != tt.wantFound {
 				t.Errorf("argRegistry.getArg() found = %v, want %v", gotFound, tt.wantFound)
 			}
@@ -387,13 +387,13 @@ func TestArgRegistry_integration(t *testing.T) {
 	}
 
 	// Verify retrieval
-	if v, ok := registry.getArg(reflect.TypeOf(s1)); !ok || v.Interface().(*testStruct).Value != "first" {
+	if v, ok := lookupArg(t, registry, reflect.TypeOf(s1)); !ok || v.Interface().(*testStruct).Value != "first" {
 		t.Error("Failed to retrieve pointer type")
 	}
 
 	// When we ask for testStruct, getArg will find *testStruct first and dereference it
 	// This is the designed behavior - it prefers finding compatible types through conversion
-	if v, ok := registry.getArg(reflect.TypeOf(s2)); ok {
+	if v, ok := lookupArg(t, registry, reflect.TypeOf(s2)); ok {
 		// Check if value is correct
 		if v.CanInterface() && v.Type() == reflect.TypeOf(s2) {
 			val := v.Interface().(testStruct)
@@ -408,9 +408,9 @@ func TestArgRegistry_integration(t *testing.T) {
 		t.Error("Failed to retrieve non-pointer type")
 	}
 
-	// Test that interface retrieval fails because we didn't store interface type
-	if _, ok := registry.getArg(reflect.TypeOf((*testInterface)(nil)).Elem()); ok {
-		t.Error("Should not retrieve interface type when implementation was stored")
+	// An interface parameter takes the registered implementation
+	if _, ok := lookupArg(t, registry, reflect.TypeOf((*testInterface)(nil)).Elem()); !ok {
+		t.Error("Should retrieve the registered implementation for its interface type")
 	}
 }
 
@@ -427,7 +427,7 @@ func TestArgRegistry_assignability(t *testing.T) {
 
 	// Try to retrieve as pointer to interface - should trigger pt.AssignableTo(t) path
 	ptrType := reflect.TypeOf((*customInterface)(nil))
-	if v, ok := registry.getArg(ptrType); ok {
+	if v, ok := lookupArg(t, registry, ptrType); ok {
 		t.Logf("Successfully retrieved pointer to interface: %v", v.Type())
 	}
 
@@ -440,7 +440,7 @@ func TestArgRegistry_assignability(t *testing.T) {
 
 	// Try to retrieve as interface - should trigger st.AssignableTo(t) path
 	ifaceType := reflect.TypeOf((*customInterface)(nil)).Elem()
-	if v, ok := registry2.getArg(ifaceType); ok {
+	if v, ok := lookupArg(t, registry2, ifaceType); ok {
 		t.Logf("Successfully retrieved as interface: %v", v.Type())
 	}
 }
@@ -454,7 +454,7 @@ func TestArgRegistry_getArg_unaddressable(t *testing.T) {
 
 	// Try to get a pointer to int - should fail because value is not addressable
 	ptrType := reflect.TypeOf((*int)(nil))
-	_, ok := registry.getArg(ptrType)
+	_, ok := lookupArg(t, registry, ptrType)
 	if ok {
 		t.Error("Expected not to find pointer type for unaddressable value")
 	}
@@ -469,7 +469,7 @@ func TestArgRegistry_getArg_extendedAssignability(t *testing.T) {
 	registry[reflect.TypeOf(ch)] = reflect.ValueOf(ch)
 
 	// Exact match should work
-	v, ok := registry.getArg(reflect.TypeOf(ch))
+	v, ok := lookupArg(t, registry, reflect.TypeOf(ch))
 	if !ok {
 		t.Error("Expected to find channel type")
 	}
@@ -489,7 +489,7 @@ func TestArgRegistry_getArg_needsPtr(t *testing.T) {
 
 	// Now look up a pointer type - this should trigger needsPtr = true and v.Addr()
 	ptrType := reflect.TypeOf(&testStruct{})
-	v, ok := registry.getArg(ptrType)
+	v, ok := lookupArg(t, registry, ptrType)
 	if !ok {
 		t.Fatal("Expected to find value")
 	}
@@ -531,7 +531,7 @@ func TestArgRegistry_getArg_assignabilityLoop(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, found := registry.getArg(tt.lookupType)
+			_, found := lookupArg(t, registry, tt.lookupType)
 			if found != tt.wantFound {
 				t.Errorf("getArg() found = %v, want %v", found, tt.wantFound)
 			}
@@ -566,7 +566,7 @@ func TestArgRegistry_getArg_assignabilityPaths(t *testing.T) {
 		// Since we're looking for a pointer (but needsPtr=false because it's already a pointer type)
 		// This should trigger line 64: return v, true
 		ifacePtrType := reflect.TypeOf((*simpleInterface)(nil))
-		v, ok := registry.getArg(ifacePtrType)
+		v, ok := lookupArg(t, registry, ifacePtrType)
 
 		// This test demonstrates that the current logic doesn't find matches
 		// when looking for interface pointers from concrete implementations
@@ -587,7 +587,7 @@ func TestArgRegistry_getArg_assignabilityPaths(t *testing.T) {
 		// st = simpleInterface, the loop will check if simpleInterface is assignable to simpleImpl
 		// Since needsElem=false, this should trigger line 70: return v, true
 		ifaceType := reflect.TypeOf((*simpleInterface)(nil)).Elem()
-		v, ok := registry.getArg(ifaceType)
+		v, ok := lookupArg(t, registry, ifaceType)
 
 		if ok {
 			t.Logf("Found value of type %v", v.Type())
@@ -610,7 +610,7 @@ func TestArgRegistry_getArg_assignabilityPaths(t *testing.T) {
 		// The loop will find the string type and check if *string is assignable to string
 		// Since needsPtr=true but the value is not addressable, it will continue
 		stringPtrType := reflect.TypeOf((*string)(nil))
-		_, ok := registry.getArg(stringPtrType)
+		_, ok := lookupArg(t, registry, stringPtrType)
 		if ok {
 			t.Error("Should not find pointer type for unaddressable value")
 		}
@@ -627,7 +627,7 @@ func TestArgRegistry_getArg_assignabilityPaths(t *testing.T) {
 		registry[reflect.TypeOf((*simpleInterface)(nil))] = reflect.ValueOf(&super).Elem()
 
 		// Look up by pointer to SubType
-		v, ok := registry.getArg(reflect.TypeOf(subPtr))
+		v, ok := lookupArg(t, registry, reflect.TypeOf(subPtr))
 		if ok {
 			t.Logf("Line 64 path: found %v", v.Type())
 		}
@@ -637,7 +637,7 @@ func TestArgRegistry_getArg_assignabilityPaths(t *testing.T) {
 		var superVal simpleInterface = simpleImpl{data: "val"}
 		registry2[reflect.TypeOf((*simpleInterface)(nil)).Elem()] = reflect.ValueOf(superVal)
 
-		v2, ok2 := registry2.getArg(reflect.TypeOf(simpleImpl{}))
+		v2, ok2 := lookupArg(t, registry2, reflect.TypeOf(simpleImpl{}))
 		if ok2 {
 			t.Logf("Line 70 path: found %v", v2.Type())
 		}
@@ -668,7 +668,7 @@ func TestArgRegistry_getArg_assignability(t *testing.T) {
 		// *simpleImpl is assignable to simpleInterface, but the stored value
 		// is not addressable, so it should skip and return not found
 		ptrType := reflect.TypeOf(&simpleImpl{})
-		_, ok := registry.getArg(ptrType)
+		_, ok := lookupArg(t, registry, ptrType)
 		if ok {
 			t.Error("Should not find pointer when stored value is not addressable")
 		}
@@ -685,7 +685,7 @@ func TestArgRegistry_getArg_assignability(t *testing.T) {
 
 		// Look up the same interface type - should find via exact match
 		ifaceType := reflect.TypeOf((*simpleInterface)(nil)).Elem()
-		_, ok := registry.getArg(ifaceType)
+		_, ok := lookupArg(t, registry, ifaceType)
 		if !ok {
 			t.Error("Should find interface type")
 		}
@@ -699,7 +699,7 @@ func TestArgRegistry_getArg_assignability(t *testing.T) {
 
 		// Now try to find by interface - this won't work because
 		// interface is not assignable to *simpleImpl
-		v2, ok2 := registry2.getArg(ifaceType)
+		v2, ok2 := lookupArg(t, registry2, ifaceType)
 		if ok2 {
 			// If found, verify it implements the interface
 			if _, implements := v2.Interface().(simpleInterface); !implements {
@@ -725,7 +725,7 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		// Look up pointer to same type - this goes through assignability loop
 		// because exact match fails, then it checks assignability
 		ptrType := reflect.TypeOf(&simpleImpl{})
-		v, ok := registry.getArg(ptrType)
+		v, ok := lookupArg(t, registry, ptrType)
 		if !ok {
 			t.Error("Expected to find pointer via assignability")
 		} else if v.Kind() != reflect.Pointer {
@@ -748,7 +748,7 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		// The loop will find baseType first, check pt.AssignableTo(t) = true
 		// But v.CanAddr() = false, so it continues
 		ptrType := reflect.TypeOf(&baseType{})
-		_, ok := registry.getArg(ptrType)
+		_, ok := lookupArg(t, registry, ptrType)
 		if ok {
 			t.Error("Should not find pointer when only non-addressable value exists")
 		}
@@ -783,7 +783,7 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		// Actually, we need to find a case where a non-pointer type is assignable to something
 		// This is rare in Go, but let's try with type aliases
 		ifaceType := reflect.TypeOf((*simpleInterface)(nil)).Elem()
-		v, ok := registry2.getArg(ifaceType)
+		v, ok := lookupArg(t, registry2, ifaceType)
 		if ok {
 			t.Logf("Found: %v", v.Type())
 			if v.Kind() == reflect.Pointer {
@@ -812,4 +812,15 @@ func TestArgRegistry_getArg_remainingPaths(t *testing.T) {
 		// that may not occur in typical usage.
 		t.Log("Remaining uncovered paths are theoretical edge cases in Go's type system")
 	})
+}
+
+// lookupArg calls getArg and fails the test on an ambiguity error, for
+// lookups that expect a single answer or none.
+func lookupArg(t *testing.T, args argRegistry, typ reflect.Type) (reflect.Value, bool) {
+	t.Helper()
+	v, ok, err := args.getArg(typ)
+	if err != nil {
+		t.Fatalf("getArg(%s): %v", typ, err)
+	}
+	return v, ok
 }
