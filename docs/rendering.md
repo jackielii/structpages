@@ -157,7 +157,56 @@ structpages.WithMiddlewares(retargetNavigation)
 - **Fix the page:** give the region the page's own id (`id={p.Summary |> id}`), so it's one of the page's components and the normal flow renders it with no `Is` at all.
 - **Or, when the reuse is deliberate,** recognise it in `Props` with `t.Is(report.Detail.Summary)` and return `RenderComponent`, as the example above does.
 
-**Seeing it happen.** Neither case is an error, so the error handler never sees them. To find them during development, log from the same middleware when a partial request isn't boosted and `wantsOwnComponent` is false. Add the page's name and the `HX-Target`, and you can tell which page's markup to fix. In tests, check that partial responses don't contain `<html`. On the client, an htmx listener can flag a response starting with `<html>` or `<body>` that is about to land in a target other than `body`.
+**Seeing it happen.** Neither case is an error, so the error handler never sees them. But case 2 has an exact signature: the request isn't navigation, and its target is another page's generated component id. Fragment pages answering fixed ids (`#notifications-panel`) never produce it. A development middleware can report it, naming the served page and the region's owner:
+
+```go
+// borrowedRegions reports a partial request that targets another page's
+// component: a region the served page renders with a borrowed id.
+func borrowedRegions(report func(served, owner *structpages.PageNode, component string)) structpages.MiddlewareFunc {
+    var (
+        once   sync.Once
+        owners map[string]componentOwner // component id → its page
+    )
+    return func(next http.Handler, pn *structpages.PageNode) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            once.Do(func() { owners = componentOwners(r.Context(), pn) })
+            key := r.Header.Get("HX-Target")
+            if _, id, ok := strings.Cut(key, "#"); ok { // htmx 4 sends tag#id
+                key = id
+            }
+            if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
+                if o, ok := owners[key]; ok && o.page != pn {
+                    report(pn, o.page, o.component)
+                }
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+
+type componentOwner struct {
+    page      *structpages.PageNode
+    component string
+}
+
+func componentOwners(ctx context.Context, pn *structpages.PageNode) map[string]componentOwner {
+    root := pn
+    for root.Parent != nil {
+        root = root.Parent
+    }
+    owners := map[string]componentOwner{}
+    for n := range root.All() {
+        for name, m := range n.Components {
+            if id, err := structpages.ID(ctx, m.Func.Interface()); err == nil {
+                owners[id] = componentOwner{page: n, component: name}
+            }
+        }
+    }
+    return owners
+}
+```
+
+It runs before `Props`, so it also reports a borrowed region that `Props` handles on purpose with `Is`; allow-list those. The [linter's `region` check](./lint.md) catches the same mistake when the code is written, for ids it can see in the templates. In tests, send each region's own requests (its reload, its links) and check that the responses don't contain `<html`. On the client, an htmx listener can flag a response starting with `<html>` or `<body>` that is about to land in a target other than `body`.
 
 ### Recognised, but not rendered
 

@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"testing"
 
@@ -11,13 +12,13 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// renderDiags loads testdata/render and returns its idfor and selector
-// diagnostics as "file:line: message", deduplicated across the package
-// variants packages.Load reports.
-func renderDiags(t *testing.T) []string {
+// moduleDiags loads the testdata module in dir and returns its
+// diagnostics in the given categories as "file:line: message",
+// deduplicated across the package variants packages.Load reports.
+func moduleDiags(t *testing.T, dir string, categories ...string) []string {
 	t.Helper()
 	cfg := &packages.Config{
-		Dir: "testdata/render",
+		Dir: dir,
 		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
 			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
 			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
@@ -47,8 +48,8 @@ func renderDiags(t *testing.T) []string {
 			Pkg:       pkg.Types,
 			TypesInfo: pkg.TypesInfo,
 			Report: func(d analysis.Diagnostic) {
-				if d.Category != "idfor" && d.Category != selectorCategory {
-					return // the mount prefixes also trip route-literal
+				if !slices.Contains(categories, d.Category) {
+					return
 				}
 				pos := pkg.Fset.Position(d.Pos)
 				seen[fmt.Sprintf("%s:%d: %s", filepath.Base(pos.Filename), pos.Line, d.Message)] = true
@@ -69,7 +70,8 @@ func renderDiags(t *testing.T) []string {
 
 // TestRender_Integration covers RenderTarget.Is arguments (idfor) and
 // Mount calls serving htmx templates without a target selector
-// (selector) in testdata/render. Each "want" comment there has exactly
+// (selector) in testdata/render. The mount prefixes there also trip
+// route-literal, which isn't under test. Each "want" comment there has exactly
 // one entry here; every other case must stay quiet.
 func TestRender_Integration(t *testing.T) {
 	const sel = "Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
@@ -99,7 +101,7 @@ func TestRender_Integration(t *testing.T) {
 		`pages.go:54: [idfor] RenderTarget.Is: argument "content" has type string, ` +
 			`not a method or function, so Is never matches it; pass the component method or function itself`,
 	}
-	if diff := cmp.Diff(want, renderDiags(t)); diff != "" {
+	if diff := cmp.Diff(want, moduleDiags(t, "testdata/render", "idfor", selectorCategory)); diff != "" {
 		t.Errorf("diagnostics (-want +got):\n%s", diff)
 	}
 }

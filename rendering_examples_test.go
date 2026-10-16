@@ -1,9 +1,11 @@
 package structpages
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -276,5 +278,79 @@ func TestRenderingExamples_retargetNavigation(t *testing.T) {
 		if got := rec.Header().Get("HX-Retarget") == "body"; got != c.retarget {
 			t.Errorf("%s: retargeted = %v, want %v", c.name, got, c.retarget)
 		}
+	}
+}
+
+// exBorrowedRegions is the docs' development middleware: it reports a
+// partial request that isn't navigation and targets another page's
+// component, which the served page doesn't have.
+func exBorrowedRegions(report func(served *PageNode, owner *PageNode, component string)) MiddlewareFunc {
+	var (
+		once   sync.Once
+		owners map[string]componentOwner
+	)
+	return func(next http.Handler, pn *PageNode) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			once.Do(func() { owners = exComponentOwners(r.Context(), pn) })
+			key := r.Header.Get("HX-Target")
+			if _, id, ok := strings.Cut(key, "#"); ok {
+				key = id
+			}
+			if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
+				if o, ok := owners[key]; ok && o.page != pn {
+					report(pn, o.page, o.component)
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+type componentOwner struct {
+	page      *PageNode
+	component string
+}
+
+// exComponentOwners maps every component id in the tree to its page.
+func exComponentOwners(ctx context.Context, pn *PageNode) map[string]componentOwner {
+	root := pn
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	owners := map[string]componentOwner{}
+	for n := range root.All() {
+		for name, m := range n.Components {
+			if id, err := ID(ctx, m.Func.Interface()); err == nil {
+				owners[id] = componentOwner{page: n, component: name}
+			}
+		}
+	}
+	return owners
+}
+
+func TestRenderingExamples_borrowedRegions(t *testing.T) {
+	var reports []string
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, exRoot{}, "/", "App", WithArgs(&exStore{}),
+		WithTargetSelector(HTMXv4RenderTarget),
+		WithMiddlewares(exBorrowedRegions(func(served, owner *PageNode, component string) {
+			reports = append(reports, served.Name+" <- "+owner.Name+"."+component)
+		})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportContent, err := sp.ID(exReport.Page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes, err := sp.ID(exDashboard.Notes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"div#" + reportContent, "ul#" + notes, "div#eos-bell-panel"} {
+		serve(t, mux, htmxRequest("/dashboard", target))
+	}
+	if want := []string{"Dashboard <- Report.Page"}; strings.Join(reports, ";") != strings.Join(want, ";") {
+		t.Errorf("reports = %q, want %q", reports, want)
 	}
 }

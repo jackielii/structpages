@@ -37,12 +37,20 @@ var attrs = map[string]bool{
 // HTML attribute names are case-insensitive. htmx also reads every
 // attribute with a "data-" prefix (data-hx-get), and htmx 4 spells
 // inheritance and other modifiers as a ":" suffix on the name
-// (hx-target:inherited), so both are stripped before the lookup.
+// (hx-target:inherited), so both are stripped before the lookup (see
+// Base).
 func IsAttr(name string) bool {
+	return attrs[Base(name)]
+}
+
+// Base returns the htmx attribute name stripped of what htmx ignores
+// when it reads one: case, a "data-" prefix and an htmx 4 ":modifier"
+// suffix. Base("data-hx-target:inherited") is "hx-target".
+func Base(name string) string {
 	n := strings.ToLower(name)
 	n = strings.TrimPrefix(n, "data-")
 	n, _, _ = strings.Cut(n, ":")
-	return attrs[n]
+	return n
 }
 
 // IsElement reports whether tag is an htmx element: htmx 4's

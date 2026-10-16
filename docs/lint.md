@@ -75,6 +75,7 @@ only ever called with a variable builds nothing the linter can see.
 | `url-attr` | URL-bearing HTML attributes in `.gsx` and `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, `fmt.Sprint*` calls, or gsx `` f`/path/@{x}` `` templates. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — e.g. `return "/admin/queues"` — where you should resolve by page type via `URLFor`. Deliberately narrow: exact concrete-route matches only; comparisons (`==`/`switch`) and `Ref(...)` args are skipped; `_test.go` and generated files are skipped. |
 | `selector` | A `structpages.Mount` call with no `structpages.WithTargetSelector(...)` option whose tree serves htmx templates. There is no default target selector since v0.9.0, so every htmx partial request to that tree renders the full `Page`. Pass `WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2 or `WithTargetSelector(structpages.HTMXv4RenderTarget)` for htmx 4. See [How `selector` decides](#how-selector-decides). |
+| `region` | A page that renders a region carrying another page's component id: in a component method of mounted page `P`, an element whose `id` is `ID(ctx, Q.M)` or whose `hx-target` is `IDTarget(ctx, Q.M)`, for another mounted page `Q`. Requests from that region reach `P` targeting `Q.M`'s id, which `P` has no component for, so `P` swaps its whole Page into the region. See [How `region` decides](#how-region-decides). |
 | `mount` | A `Mount`/`Parse` page argument, or a `route`-tagged field, whose type isn't a named struct, so the linter can't rebuild that part of the tree and skips it. Reported while the tree is built, before suppression directives are read, so it can't be suppressed: fix the type. |
 
 The `*StructPages` methods `sp.URLFor(page, ...)`, `sp.ID(v)` and `sp.IDTarget(v)` are checked the same way as
@@ -102,6 +103,42 @@ page as an interface (see [Several trees](#several-trees)) is flagged when any t
 htmx. Mounts in `_test.go` files are skipped: tests often mount a tree only to resolve URLs and ids, and a test
 that sends htmx requests without a selector fails on its own. Suppress with `//structpages:lint:ignore selector` on the Mount line or the
 line above.
+
+### How `region` decides
+
+The check looks at every `structpages.ID` / `IDTarget` call, including the gsx `id` and `target` filters and the
+`*StructPages` methods, that sits in a component method of a mounted page `P`. A component method is a method
+returning a value with `Render(context.Context, io.Writer) error`, which is what gsx's `component (p P) M()`
+lowers to. The call is flagged when all of these hold:
+
+- Its component is a method `Q.M`: a method expression (`detail.Content`), a bound method value (`p.d.Content`),
+  or the trailing element of the `[]any` chain form (`[]any{section, detail.Content}`), whose leading steps place
+  the id but don't change whose component it is. `Q` isn't `P`, and some tree mounts both of them. Unlike the
+  resolution checks, a tree that mounts only one of the two, such as a test tree stubbing a section out, doesn't
+  clear the finding: the bug happens in every tree that mounts both.
+- It is the value of an HTML element's attribute in the `.gsx` source, either as the attribute's last pipeline
+  stage (`id={X |> id}`) or as the whole value (`id={structpages.ID(ctx, X)}`). For `ID` the attribute must be
+  `id`. For `IDTarget` it must be `hx-target` in any htmx spelling (`hx-target:inherited`, `data-hx-target`), on an
+  element other than `<hx-partial>`. An `<hx-partial>` is an out-of-band swap carried in a response: it places
+  content and no request targets it, so updating another page's region from one is fine.
+- `P`'s own `Props` doesn't call `t.Is(Q.M)` on its `RenderTarget`. That call means `P` handles the borrowed
+  region deliberately (typically with `RenderComponent`).
+
+Standalone function components are never flagged: they belong to no page. Neither are components on a type that
+isn't a mounted page, such as a shared component type, because the enclosing method has to be on a page.
+Suppress a finding with `// structpages:lint:ignore region` on the attribute's line or the line above.
+
+The attribute is matched exactly. gsx writes a `/*line pages.gsx:L:C*/` directive in front of every call it
+generates, naming the pipeline stage or seed the call came from, and the linter looks that position up among the
+`.gsx` file's attributes. That has some limits:
+
+- Only `.gsx` templates are checked. templ's generated code carries no position mapping back to the `.templ`
+  source, so there is no exact way to tell which attribute a call feeds.
+- An id built elsewhere and passed in as a value (a prop, a variable, a helper's return) isn't seen. Neither is a
+  call wrapped in more Go code inside the attribute, such as `id={"x-" + structpages.ID(ctx, X)}`.
+- Attributes on a component tag (`<ui.Box id={…}/>`) are props. What the component does with them isn't known,
+  so they aren't checked.
+- The `.x.go` files must be regenerated with gsx v0.4.0 or later, as for the other template checks.
 
 ### gsx templates
 
