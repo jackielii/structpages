@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/jackielii/structpages/tools/lint/gsxscan"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -52,10 +51,6 @@ type checkCtx struct {
 	// IDTarget or Within), so shared page-resolution diagnostics name
 	// the call they came from.
 	callee string
-	// gsxAttrs caches each .gsx file's expression attributes by the
-	// site their value's call is positioned at (see checkRegion); a
-	// file that fails to parse maps to nil.
-	gsxAttrs map[string]map[gsxscan.ExprSite]gsxscan.ExprAttr
 	// srcs caches generated source files read by checkCtx.source.
 	srcs map[string][]byte
 }

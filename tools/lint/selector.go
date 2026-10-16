@@ -206,9 +206,21 @@ func mountOptions(info *types.Info, call *ast.CallExpr) optionsKind {
 		if fn == nil || fn.Pkg() == nil || fn.Pkg().Path() != structpagesPkg {
 			return optionsUnknown
 		}
-		if fn.Name() == "WithTargetSelector" {
+		// WithTargetSelector(nil) leaves the selector unset: the
+		// runtime ignores a nil selector.
+		if fn.Name() == "WithTargetSelector" && (len(c.Args) != 1 || !isNilLiteral(info, c.Args[0])) {
 			kind = optionsWithSelector
 		}
 	}
 	return kind
+}
+
+// isNilLiteral reports whether e is the predeclared nil.
+func isNilLiteral(info *types.Info, e ast.Expr) bool {
+	id, ok := unparen(e).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	_, isNil := info.Uses[id].(*types.Nil)
+	return isNil
 }

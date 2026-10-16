@@ -53,6 +53,17 @@ func Base(name string) string {
 	return n
 }
 
+// IsRequest reports whether name is an htmx attribute that issues a
+// request (hx-get, hx-post, hx-put, hx-patch, hx-delete), in any htmx
+// spelling (see Base).
+func IsRequest(name string) bool {
+	switch Base(name) {
+	case "hx-get", "hx-post", "hx-put", "hx-patch", "hx-delete":
+		return true
+	}
+	return false
+}
+
 // IsElement reports whether tag is an htmx element: htmx 4's
 // <hx-partial>, which targets a swap by id from a response.
 func IsElement(tag string) bool {

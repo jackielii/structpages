@@ -30,13 +30,14 @@ flowchart TD
         R1 -- yes --> H["Your handler"]
         R1 -- no --> R2["Target selector:<br/>what the request wants"]
         R2 --> R3["Props"]
+        R2 -- error --> X3
         R3 --> R4{"Props<br/>returned"}
         R4 -- "RenderComponent" --> X1["Render those<br/>components"]
         R4 -- "ErrSkipPageRender" --> X2["Stop"]
         R4 -- "other error" --> X3["Error handler"]
         R4 -- "nil error" --> R5{"Target Is<br/>which component?"}
         R5 -- "one" --> R6["Render it"]
-        R5 -- "none" --> R7["Render Page"]
+        R5 -- "none" --> R7["Render Page<br/>(error if no Page)"]
         R5 -- "several" --> X3
     end
 ```
@@ -100,7 +101,7 @@ Things to notice:
 - **`Props` asks only when it wants to load less.** It never asks about `Content`, yet `Content` renders when it's targeted: the framework asks the target itself, after `Props`.
 - **Each component takes its share of the results by type.** `Notes` takes only `[]Note`, so the `Stats{}` that `Props` returns for it is never used.
 - **A target that isn't one of the page's components needs `RenderComponent`.** The framework can only render the page's own components; for a standalone function or another page's component, `Props` builds it.
-- **`t.Is(p.Notes)` and `t.Is(dashboard.Notes)` are the same question.** A bound method value and a method expression name the same component.
+- **`t.Is(p.Notes)` and `t.Is(dashboard.Notes)` are the same question.** A bound method value and a method expression name the same component. One exception: inside a generic page type's own methods, Go compiles method values and expressions to anonymous closures, so `Is` can't identify them there. Selection is unaffected, since the framework asks with its own references.
 
 ### When the target belongs to another page
 
@@ -116,8 +117,8 @@ The last row of the table is the one to watch. It happens in two ways, and they 
 // components came from another page's region. Swap the page into body
 // instead. Only pages with a Page are navigated to: action handlers answer
 // boosted forms with fragments for the region, so they're left alone.
-// htmx 4; for htmx 2, drop the HX-Request-Type check and use
-// HTMXRenderTarget.
+// htmx 4; for htmx 2, drop the HX-Request-Type check, use
+// HTMXRenderTarget, and swap with innerHTML (innerMorph is htmx 4).
 func retargetNavigation(next http.Handler, pn *structpages.PageNode) http.Handler {
     _, hasPage := pn.Components["Page"]
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +243,7 @@ component (p exportPage) Table(rows Rows) { … }
 component (p exportPage) Card(rows Rows) { … }
 ```
 
-When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error ("page exportPage has no Page component…"). `Props` must choose with `RenderComponent`.
+When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error (`page <name> has no Page component…`). `Props` must choose with `RenderComponent`.
 
 ### A custom selector
 
@@ -272,7 +273,7 @@ The framework only ever calls `Is`, so a custom target takes part exactly like t
 | Option | Reads | The target `Is` |
 |---|---|---|
 | none | nothing | the page's `Page` |
-| `WithTargetSelector(HTMXRenderTarget)` | htmx 1/2: `HX-Request`, `HX-Target` (a bare id) | the page's component whose id is `HX-Target`, else `Page` when there is no `HX-Target` |
+| `WithTargetSelector(HTMXRenderTarget)` | htmx 1/2: `HX-Request`, `HX-Target` (a bare id) | the page's component that `HX-Target` names (its generated id, or its name or a suffix of it; see the [API guide](./api.md#htmxrendertarget)); `Page` when it isn't an htmx request or has no `HX-Target` |
 | `WithTargetSelector(HTMXv4RenderTarget)` | htmx 4: also `HX-Request-Type`, with `HX-Target` as `tag#id` | the same, and `Page` for `HX-Request-Type: full` (boosted links, `hx-select`) |
 | `WithTargetSelector(yourFunc)` | anything | whatever your `RenderTarget`'s `Is` answers |
 
@@ -347,7 +348,7 @@ func (p dashboard) Props(t structpages.RenderTarget, s *Store) (Stats, []Note, e
 ```
 
 - **Render a different component:** `RenderComponent(p.NotesUnavailable(err))`, `RenderComponent(p.Page(stats, nil))`, or any component from another package. Components are built at the call site, so their arguments are type-checked.
-- **Set a status as well:** call `w.WriteHeader(http.StatusUnprocessableEntity)` before returning `RenderComponent(...)`; the body is written afterwards.
+- **Set a status as well:** set the `Content-Type` and call `w.WriteHeader(...)` before returning `RenderComponent(...)`. The status goes out first, so the framework can't set the header after it. With htmx 2, error statuses aren't swapped unless its `responseHandling` config says so.
 - **Treat it as a failure:** return the error, and the error handler renders it.
 
 ## Updating several regions
@@ -414,15 +415,15 @@ When an htmx request targets a region the served page doesn't have, and `Props` 
 `Props`, extended `ServeHTTP` and component methods are all filled by type, from these sources in order:
 
 1. **`Props`' results** (for components only), each used at most once.
-2. **Per-request values:** `http.ResponseWriter`, `*http.Request`, `RenderTarget`, `*PageNode`.
+2. **Per-request values:** `http.ResponseWriter`, `*http.Request`, `RenderTarget`, `*PageNode`. A component gets the writer, request and target only for a parameter of exactly those types.
 3. **Request args:** the page's own `RequestArgs`, then each ancestor's, then `WithRequestArgs`. Each runs at most once per request.
 4. **`WithArgs` values**, registered once at `Mount`.
 
-Two values that could fill the same parameter fail `Mount`. A parameter nothing fills fails the request that needs it. See [Dependency Injection](./dependency-injection.md) for the matching rules and request args.
+Within the first two sources, a value of exactly the parameter's type wins, then the first value assignable to it, in the order listed. An interface parameter that two request args (at one level) or two `WithArgs` values implement fails `Mount`. A parameter nothing fills fails the request that needs it. See [Dependency Injection](./dependency-injection.md) for the matching rules and request args.
 
 ## Migrating from v0.8
 
 - **htmx apps must choose a selector.** Add `structpages.WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2, or `HTMXv4RenderTarget` for htmx 4, to `Mount`. Without it, partial requests render the full `Page`, and nothing reports an error. The linter's `selector` check flags a `Mount` without one when its pages' templates use htmx.
 - **"Targeted but not handled" is gone.** If `Props` recognises a target with `Is` and then returns no error, that's the normal flow: `Page` renders. Return `RenderComponent` to render what you recognised.
-- **Component parameters are checked at `Mount`,** like `Props`' parameters. A parameter two values could fill fails `Mount`.
-- **Components can take per-request values and request args** as well as `Props`' results.
+- **Component parameters are checked at `Mount`,** like `Props`' parameters, including helper components that requests never select. An interface parameter that two `WithArgs` values implement now fails `Mount`; declare the concrete type, narrow the interface, or register a pointer to an interface variable.
+- **Components can take per-request values and request args** as well as `Props`' results. They get the writer, request and target only for parameters of exactly those types, so an existing `io.Writer` or `any` parameter is still filled as before.

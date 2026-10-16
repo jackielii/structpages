@@ -26,7 +26,16 @@ type SuppressLookup func(filename string, line int, category string) bool
 // the templ file yields a single diagnostic and a nil error — Scan
 // never returns a non-nil error for parse problems, only for I/O.
 func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
-	tf, err := parser.Parse(filename)
+	r := memo(filename, "scan", func() result[[]Diagnostic] {
+		d, err := scan(filename)
+		return result[[]Diagnostic]{d, err}
+	})
+	return r.val, r.err
+}
+
+func scan(filename string) ([]Diagnostic, error) {
+	p := parse(filename)
+	tf, err := p.tf, p.err
 	if err != nil {
 		return []Diagnostic{{
 			Filename: filename,
@@ -47,27 +56,7 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 	}
 
 	v := visitor.New()
-	v.HTMLComment = func(n *parser.HTMLComment) error {
-		cats, ok := urlattr.ParseDirective(n.Contents)
-		if !ok {
-			return nil
-		}
-		ds.Add(commentLine(n), cats)
-		return nil
-	}
-	v.GoComment = func(n *parser.GoComment) error {
-		// Multi-line /* */ comments may span multiple source
-		// lines; the directive only suppresses the line the
-		// comment starts on plus the following line, matching
-		// the // form's semantics. Authors who want to suppress
-		// a block should put the directive on its own line.
-		cats, ok := urlattr.ParseDirective(n.Contents)
-		if !ok {
-			return nil
-		}
-		ds.Add(goCommentLine(n), cats)
-		return nil
-	}
+	collectDirectives(v, ds)
 	v.ConstantAttribute = func(n *parser.ConstantAttribute) error {
 		key, ok := n.Key.(parser.ConstantAttributeKey)
 		if !ok {
@@ -111,6 +100,49 @@ func Scan(filename string, _ SuppressLookup) ([]Diagnostic, error) {
 		return diags, fmt.Errorf("walk %s: %w", filename, err)
 	}
 	return diags, nil
+}
+
+// Directives parses filename and returns its structpages:lint:ignore
+// directives. The analyzer uses it to honour directives written in a
+// .templ file for [region] diagnostics it reports there: templ comments
+// are not carried into the generated Go.
+func Directives(filename string) (*urlattr.Directives, error) {
+	r := memo(filename, "directives", func() result[*urlattr.Directives] {
+		p := parse(filename)
+		if p.err != nil {
+			return result[*urlattr.Directives]{err: p.err}
+		}
+		ds := urlattr.NewDirectives()
+		v := visitor.New()
+		collectDirectives(v, ds)
+		if err := v.VisitTemplateFile(p.tf); err != nil {
+			return result[*urlattr.Directives]{err: err}
+		}
+		return result[*urlattr.Directives]{val: ds}
+	})
+	return r.val, r.err
+}
+
+// collectDirectives makes v record the directives in HTML comments and
+// Go-style comments into ds.
+func collectDirectives(v *visitor.Visitor, ds *urlattr.Directives) {
+	v.HTMLComment = func(n *parser.HTMLComment) error {
+		if cats, ok := urlattr.ParseDirective(n.Contents); ok {
+			ds.Add(commentLine(n), cats)
+		}
+		return nil
+	}
+	v.GoComment = func(n *parser.GoComment) error {
+		// Multi-line /* */ comments may span multiple source
+		// lines; the directive only suppresses the line the
+		// comment starts on plus the following line, matching
+		// the // form's semantics. Authors who want to suppress
+		// a block should put the directive on its own line.
+		if cats, ok := urlattr.ParseDirective(n.Contents); ok {
+			ds.Add(goCommentLine(n), cats)
+		}
+		return nil
+	}
 }
 
 // mapLine maps a 1-indexed snippet line back to the 1-indexed

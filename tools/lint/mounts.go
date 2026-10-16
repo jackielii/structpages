@@ -19,6 +19,9 @@ type mountCall struct {
 	Call    *ast.CallExpr
 	PageArg ast.Expr // the page value
 	Route   string   // the route prefix
+	// RouteArg is the call's route argument, nil when the route is a
+	// constant inside the helper called.
+	RouteArg ast.Expr
 	// mount is the position key (see posKey) of the structpages.Mount
 	// call that serves this tree: Call itself when it is a Mount, the
 	// Mount inside the helper it calls otherwise. Empty when the tree
@@ -220,12 +223,17 @@ func findMounts(pkg *packages.Package, builders treeBuilders) []mountCall {
 			if !routed {
 				return true
 			}
+			var routeArg ast.Expr
+			if b.route >= 0 {
+				routeArg = call.Args[b.route]
+			}
 			calls = append(calls, mountCall{
-				Pkg:     pkg,
-				Call:    call,
-				PageArg: call.Args[b.page],
-				Route:   route,
-				mount:   reachedMount(pkg, call, b),
+				RouteArg: routeArg,
+				Pkg:      pkg,
+				Call:     call,
+				PageArg:  call.Args[b.page],
+				Route:    route,
+				mount:    reachedMount(pkg, call, b),
 			})
 			return true
 		})

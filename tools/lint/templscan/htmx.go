@@ -20,10 +20,23 @@ var errFound = errors.New("htmx markup found")
 // attribute whose name is an expression, or that reaches an element
 // through a spread ({ attrs... }), is a runtime value.
 func HTMX(filename string) (use htmxattr.Use, ok bool, err error) {
-	tf, err := parser.Parse(filename)
-	if err != nil {
-		return htmxattr.Use{}, false, err
+	type found struct {
+		use htmxattr.Use
+		ok  bool
 	}
+	r := memo(filename, "htmx", func() result[found] {
+		u, ok, err := htmx(filename)
+		return result[found]{found{u, ok}, err}
+	})
+	return r.val.use, r.val.ok, r.err
+}
+
+func htmx(filename string) (use htmxattr.Use, ok bool, err error) {
+	p := parse(filename)
+	if p.err != nil {
+		return htmxattr.Use{}, false, p.err
+	}
+	tf := p.tf
 	found := func(name string, r parser.Range) error {
 		use = htmxattr.Use{
 			Filename: filename,

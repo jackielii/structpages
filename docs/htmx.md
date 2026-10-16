@@ -221,7 +221,7 @@ The same works for another page's component. When a page's markup reuses a regio
 
 ## Nested swap levels (Page → Content → Detail)
 
-A page's page components can be composed into **nested swap levels**, each an independent HTMX target. The levels are *not* a tree the matcher walks — they're sibling page components on one page, each with its own id. Because `HX-Target` selects the page component whose id it matches exactly, targeting a given level re-renders *only* that level, even though `Page` composes `Content` composes `Detail`:
+A page's page components can be composed into **nested swap levels**, each an independent HTMX target. The levels are *not* a tree the matcher walks — they're sibling page components on one page, each with its own id. Because `HX-Target` selects the page component whose generated id it names, targeting a given level re-renders *only* that level, even though `Page` composes `Content` composes `Detail`:
 
 - **`Page`** — the full document. Cold loads and `hx-boost` body swaps. Composes the app layout around `Content`.
 - **`Content`** — the page's main region. Holds the page chrome — heading, back-link, toolbar — around the inner level. Swapped on boosted nav between pages.
@@ -272,8 +272,9 @@ sp, err := structpages.Mount(mux, pages{}, "/", "App",
     }),
 )
 
-func (p dashboard) Props(r *http.Request, sel structpages.RenderTarget) (dashboardProps, error) {
+func (p dashboard) Props(w http.ResponseWriter, r *http.Request, sel structpages.RenderTarget) (dashboardProps, error) {
     if jt, ok := sel.(jsonTarget); ok {
+        w.Header().Set("Content-Type", "application/json") // kept: text/html is only the default
         return dashboardProps{}, structpages.RenderComponent(jsonView(jt.data))
     }
     return p.fullProps(r)

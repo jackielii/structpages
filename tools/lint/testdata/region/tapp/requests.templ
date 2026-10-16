@@ -1,0 +1,17 @@
+package tapp
+
+import "github.com/jackielii/structpages"
+
+templ (p ace) Requests() {
+	{{ a := 1; b := 2 }}
+	<p>{ a + b }</p>
+	<div id={ structpages.ID(ctx, detail.Content) } hx-get={ structpages.URLFor(ctx, detail{}) } hx-trigger="load">lazy load from detail</div>
+	<div id={ structpages.ID(ctx, detail.Content) } hx-get={ structpages.URLFor(ctx, ace{}) }>reload from ace</div>
+	<div hx-get="/ace" hx-target={ structpages.IDTarget(ctx, detail.Content) }>literal URL</div>
+	<div id={ structpages.ID(ctx, detail.Content) } { templ.Attributes{"data-x": "y"}... }>spread</div>
+	<div
+		class="multi"
+		hx-target={ structpages.IDTarget(ctx,
+			detail.Content) }
+	>multi-line</div>
+}

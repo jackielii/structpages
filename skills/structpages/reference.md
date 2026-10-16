@@ -145,7 +145,7 @@ component.
 
 | Option | Effect |
 |---|---|
-| `WithArgs(args ...any)` | DI registry, fixed at `Mount`. Each type once; duplicates fail `Mount`. An interface parameter takes a registered pointer to that interface, else the one registration implementing it. A `Props`/`ServeHTTP`/component parameter two values could fill fails `Mount`; one nothing provides fails the request. |
+| `WithArgs(args ...any)` | DI registry, fixed at `Mount`. Each type once; duplicates fail `Mount`. An interface parameter takes a registered pointer to that interface, else the one registration implementing it. A `Props`/`ServeHTTP`/component interface parameter that two registrations (or two request args at one level) implement fails `Mount`; one nothing provides fails the request. |
 | `WithRequestArgs(providers ...any)` | Per-request DI, mount-wide. Each provider is `func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`; runs lazily, at most once per request, when a parameter of type `T` needs it. Matched like `WithArgs`. Another shape, or two providers of one type, fail `Mount`. A provider's error counts as the error of the method that needed it. |
 | `WithErrorHandler(func(http.ResponseWriter, *http.Request, error))` | Renders every error from `Props`, `ServeHTTP`, component lookup and render. Default: plain 500. |
 | `WithMiddlewares(mw ...MiddlewareFunc)` | Global middleware, first is outermost, runs before page `Middlewares`. |
@@ -192,8 +192,8 @@ rendered component's parameters by type), optionally a trailing `error`.
 
 Calling `t.Is(...)` changes nothing; recognising a target and returning no error is still the normal flow.
 
-The writer is **not** buffered. Headers and cookies are fine (`w.WriteHeader(status)` before returning
-`RenderComponent` sets the status); a body write is sent immediately and is not undone by a later error.
+The writer is **not** buffered. Headers and cookies are fine (set `Content-Type`, then `w.WriteHeader(status)`, before returning
+`RenderComponent` to send a status: the framework can't set the header after the status); a body write is sent immediately and is not undone by a later error.
 
 Only `Props` is invoked. Other `*Props` methods are recorded in `PageNode.Props` but never called.
 
@@ -294,7 +294,6 @@ Each argument is a constructed component: a page partial called with its argumen
 `Index{}.List(items)` for another page), a gsx element literal (`<Widget n={1}/>`), or any value with
 `Render(ctx, w)`. The compiler checks its arguments.
 
-Argument count and types are checked before the call and reported as errors.
 
 ## ErrSkipPageRender
 

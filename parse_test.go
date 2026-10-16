@@ -301,7 +301,7 @@ func TestParseContext_callComponentMethod_noResults(t *testing.T) {
 	method, _ := reflect.TypeOf(&pageWithNoReturn{}).MethodByName("NoReturn")
 
 	// This should return error because no results
-	_, err := pc.callComponentMethod(nil, pn, &method)
+	_, err := pc.callComponentMethod(nil, pn, &method, nil, nil)
 	if err == nil {
 		t.Error("Expected error from callComponentMethod with no return value")
 	}
@@ -391,7 +391,7 @@ func TestParseContext_callComponentMethod_wrongReturnType(t *testing.T) {
 	method, _ := reflect.TypeOf(&pageWithWrongReturn{}).MethodByName("WrongReturn")
 
 	// This should return error because return type is not component
-	_, err := pc.callComponentMethod(nil, pn, &method)
+	_, err := pc.callComponentMethod(nil, pn, &method, nil, nil)
 	if err == nil {
 		t.Error("Expected error from callComponentMethod with wrong return type")
 	}

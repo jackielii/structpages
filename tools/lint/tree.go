@@ -36,6 +36,11 @@ type PageTree struct {
 	// whose trees' templates use htmx to the first such use (see
 	// htmxMounts in selector.go). The [selector] check reads it.
 	htmxMounts map[string]htmxattr.Use
+
+	// routeArgs holds the position keys (see posKey) of the route
+	// arguments of every tree-building call: the literal that defines a
+	// root's route, which route-literal must not report.
+	routeArgs map[string]bool
 }
 
 // PageNode mirrors the runtime structpages.PageNode but holds
@@ -129,6 +134,12 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 		}
 		for _, m := range findMounts(pkg, builders) {
 			key := posKey(pkg.Fset, m.Call.Pos())
+			if m.RouteArg != nil {
+				if tree.routeArgs == nil {
+					tree.routeArgs = map[string]bool{}
+				}
+				tree.routeArgs[posKey(pkg.Fset, unparen(m.RouteArg).Pos())] = true
+			}
 			// Record the Mount-call package variant for every call that
 			// maps to a root — the per-variant repeats of one call and
 			// other calls collapsed onto the same root alike — so the

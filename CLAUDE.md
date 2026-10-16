@@ -81,7 +81,8 @@ go tool gsx fmt -w .
    - `args.go`: `argRegistry` matches by type; a registered pointer fills a value param (not the reverse); an interface param takes a registered `*Iface` first, else the one registration implementing it, and two are an error
    - Each registered type appears once; use named types to disambiguate
    - `request_args.go`: `WithRequestArgs(providers...)` and the page method `RequestArgs() []any` (may take `WithArgs` params). Providers are `func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`, run lazily once per request; nearest page first, shadowing outer levels
-   - Parameter fill order: Props' results (components only, each used once) → `w`, `r`, `RenderTarget`, `*PageNode` → request args → `WithArgs`. Components get all of these, not just Props' results
+   - Parameter fill order: Props' results (components only, each used once) → `w`, `r`, `RenderTarget`, `*PageNode` → request args → `WithArgs`. Within the first two an exact type wins, then the first assignable value in that order (`availableArgs`). Props gets `w`/`r`/target as their dynamic types (`requestValues`); components get them only for params of exactly `http.ResponseWriter`/`*http.Request`/`RenderTarget` (`declaredRequestValues`), so an `io.Writer` param still comes from Props or the registry
+   - `htmxUnmatchedTarget.Is` uses `parseContext.componentOwner` (an id → page/method index) and never matches the served page's own type; `matchComponentByTarget` skips its loose passes when the id is exactly another page's component id
    - `Mount` checks every `Props`/extended `ServeHTTP`/component param for ambiguity up front (`checkInjection`; Props' results count as provided for components); `Parse` skips it. A missing dependency stays a request-time error, since pages may be mounted in configurations that don't register their services
 
 ### Key Design Patterns

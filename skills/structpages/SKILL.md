@@ -322,7 +322,7 @@ regions:
 - **The default branch loads full props**, never empty props: browser navigation, boosted swaps and
   unrecognised targets all need the whole page.
 - **Break the flow with `RenderComponent`** to render something other than what the request wants: an
-  empty state, an inline failure notice (call `w.WriteHeader(...)` first for a status), a standalone
+  empty state, an inline failure notice (for a status, set `Content-Type` then call `w.WriteHeader(...)` first), a standalone
   component, another page's component, or several regions.
 
 ```go

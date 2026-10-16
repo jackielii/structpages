@@ -10,11 +10,9 @@ package gsxscan
 
 import (
 	"go/token"
-	"os"
 	"strings"
 
 	"github.com/gsxhq/gsx/ast"
-	"github.com/gsxhq/gsx/parser"
 	"github.com/jackielii/structpages/tools/lint/internal/urlattr"
 )
 
@@ -26,12 +24,19 @@ type Diagnostic = urlattr.Diagnostic
 // gsx file yields a single diagnostic and a nil error — Scan only
 // returns a non-nil error for I/O problems.
 func Scan(filename string) ([]Diagnostic, error) {
-	src, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
+	r := memo(filename, "scan", func() result[[]Diagnostic] {
+		d, err := scan(filename)
+		return result[[]Diagnostic]{d, err}
+	})
+	return r.val, r.err
+}
+
+func scan(filename string) ([]Diagnostic, error) {
+	p := parse(filename)
+	if p.readErr != nil {
+		return nil, p.readErr
 	}
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, src, 0)
+	src, fset, f, err := p.src, p.fset, p.file, p.err
 	if err != nil {
 		return []Diagnostic{{
 			Filename: filename,
@@ -108,12 +113,24 @@ func Scan(filename string) ([]Diagnostic, error) {
 // .x.go's //line directives: gsx comments are not carried into the
 // generated Go, so the analyzer can't see them in its own syntax trees.
 func Directives(filename string) (*urlattr.Directives, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, 0)
-	if err != nil {
-		return nil, err
+	r := memo(filename, "directives", func() result[*urlattr.Directives] {
+		p := parse(filename)
+		if err := firstErr(p.readErr, p.err); err != nil {
+			return result[*urlattr.Directives]{err: err}
+		}
+		return result[*urlattr.Directives]{val: directives(p.fset, p.file)}
+	})
+	return r.val, r.err
+}
+
+// firstErr returns the first non-nil error.
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
 	}
-	return directives(fset, f), nil
+	return nil
 }
 
 // directives collects the suppression directives in f: source-only

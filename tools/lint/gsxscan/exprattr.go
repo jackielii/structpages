@@ -4,78 +4,110 @@ import (
 	"go/token"
 
 	"github.com/gsxhq/gsx/ast"
-	"github.com/gsxhq/gsx/parser"
+	"github.com/jackielii/structpages/tools/lint/internal/attrsite"
+	"github.com/jackielii/structpages/tools/lint/internal/htmxattr"
 )
 
-// ExprAttr is an element attribute whose value is a Go expression,
-// name={seed |> stage …}, located the way gsx's generated .x.go
-// positions the call that produces the value: gsx writes a /*line*/
-// directive before every lowered pipeline stage and before the seed, so
-// a call in the .x.go maps back to exactly one of these sites.
-type ExprAttr struct {
-	// Name is the attribute name as authored ("hx-target:inherited").
-	Name string
-	// Tag is the tag of the element carrying the attribute.
-	Tag string
-	// Component reports that Tag is a component tag (ast.IsComponentTag):
-	// its attributes are props, not HTML attributes of an element.
-	Component bool
-	// Staged reports that the value is the result of a pipeline stage
-	// (`|> id`); the site is then that last stage's name. Otherwise the
-	// value is the seed itself and the site is the seed's first char.
-	Staged bool
-	// Expr is the seed expression source, as authored.
-	Expr string
-}
-
-// ExprSite is a 1-indexed line and column in a .gsx file.
-type ExprSite struct {
-	Line, Col int
-}
-
 // ExprAttrs parses filename and indexes its expression attributes by
-// the site the value's producing call is positioned at: the name of
-// the last pipeline stage when there is one (the stage whose result is
-// the attribute value), the seed's first character otherwise.
-// Attributes inside an in-tag if/switch belong to their element.
-func ExprAttrs(filename string) (map[ExprSite]ExprAttr, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := map[ExprSite]ExprAttr{}
-	site := func(pos token.Pos) ExprSite {
+// the site gsx's generated .x.go positions the call producing the
+// value at. gsx writes a /*line*/ directive before every call it
+// lowers a pipeline stage to, naming that stage's name, and before a
+// seed, naming its first character; the value's call is the last
+// stage's when there is one (its result is the attribute value), the
+// seed otherwise. Attributes inside an in-tag if/switch belong to
+// their element.
+func ExprAttrs(filename string) (map[attrsite.Site]attrsite.Attr, error) {
+	r := memo(filename, "exprattrs", func() result[map[attrsite.Site]attrsite.Attr] {
+		p := parse(filename)
+		if err := firstErr(p.readErr, p.err); err != nil {
+			return result[map[attrsite.Site]attrsite.Attr]{err: err}
+		}
+		return result[map[attrsite.Site]attrsite.Attr]{val: exprAttrs(p.fset, p.file)}
+	})
+	return r.val, r.err
+}
+
+func exprAttrs(fset *token.FileSet, f *ast.File) map[attrsite.Site]attrsite.Attr {
+	out := map[attrsite.Site]attrsite.Attr{}
+	site := func(pos token.Pos) attrsite.Site {
 		p := fset.Position(pos)
-		return ExprSite{Line: p.Line, Col: p.Column}
+		return attrsite.Site{Line: p.Line, Col: p.Column}
 	}
-	var visit func(el *ast.Element, attrs []ast.Attr)
-	visit = func(el *ast.Element, attrs []ast.Attr) {
+	// valueSite returns where the call producing an ExprAttr's value
+	// is positioned.
+	valueSite := func(a *ast.ExprAttr) attrsite.Site {
+		if n := len(a.Stages); n > 0 {
+			return site(a.Stages[n-1].NamePos)
+		}
+		return site(a.ExprPos)
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		el, ok := n.(*ast.Element)
+		if !ok {
+			return true
+		}
+		attrs := flatten(el.Attrs)
+		var requests []attrsite.Request
+		spread := false
 		for _, a := range attrs {
 			switch a := a.(type) {
+			case *ast.SpreadAttr:
+				spread = true
 			case *ast.ExprAttr:
-				ea := ExprAttr{Name: a.Name, Tag: el.Tag, Component: ast.IsComponentTag(el.Tag), Expr: a.Expr}
-				if n := len(a.Stages); n > 0 {
-					ea.Staged = true
-					out[site(a.Stages[n-1].NamePos)] = ea
-				} else {
-					out[site(a.ExprPos)] = ea
+				if htmxattr.IsRequest(a.Name) {
+					requests = append(requests, attrsite.Request{
+						Name: a.Name, Expr: true, Site: valueSite(a),
+						Staged: len(a.Stages) > 0, Stages: len(a.Stages), Source: a.Expr,
+					})
 				}
-			case *ast.CondAttr:
-				visit(el, a.Then)
-				visit(el, a.Else)
-			case *ast.SwitchAttr:
-				for _, c := range a.Cases {
-					visit(el, c.Body)
+			case *ast.StaticAttr:
+				if htmxattr.IsRequest(a.Name) {
+					requests = append(requests, attrsite.Request{Name: a.Name})
+				}
+			case *ast.BoolAttr:
+				if htmxattr.IsRequest(a.Name) {
+					requests = append(requests, attrsite.Request{Name: a.Name})
+				}
+			case *ast.EmbeddedAttr:
+				if htmxattr.IsRequest(a.Name) {
+					requests = append(requests, attrsite.Request{Name: a.Name})
+				}
+			case *ast.MarkupAttr:
+				if htmxattr.IsRequest(a.Name) {
+					requests = append(requests, attrsite.Request{Name: a.Name})
 				}
 			}
 		}
-	}
-	ast.Inspect(f, func(n ast.Node) bool {
-		if el, ok := n.(*ast.Element); ok {
-			visit(el, el.Attrs)
+		for _, a := range attrs {
+			if a, ok := a.(*ast.ExprAttr); ok {
+				out[valueSite(a)] = attrsite.Attr{
+					Name: a.Name, Tag: el.Tag, Component: ast.IsComponentTag(el.Tag),
+					Expr: a.Expr, Staged: len(a.Stages) > 0, Stages: len(a.Stages),
+					Src: site(a.ExprPos), Requests: requests, Spread: spread,
+				}
+			}
 		}
 		return true
 	})
-	return out, nil
+	return out
+}
+
+// flatten returns attrs with the branches of in-tag if/switch groups
+// spliced in: every attribute the element may carry.
+func flatten(attrs []ast.Attr) []ast.Attr {
+	var out []ast.Attr
+	for _, a := range attrs {
+		switch a := a.(type) {
+		case *ast.CondAttr:
+			out = append(out, flatten(a.Then)...)
+			out = append(out, flatten(a.Else)...)
+		case *ast.SwitchAttr:
+			for _, c := range a.Cases {
+				out = append(out, flatten(c.Body)...)
+			}
+		default:
+			out = append(out, a)
+		}
+	}
+	return out
 }

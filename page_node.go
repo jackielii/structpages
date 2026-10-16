@@ -61,6 +61,9 @@ type PageNode struct {
 	// componentExprs holds each component's method expression, the value
 	// the framework passes to RenderTarget.Is when selecting one.
 	componentExprs map[string]any
+	// componentNames are the keys of Components, sorted: the order
+	// selection asks the target in.
+	componentNames []string
 }
 
 // FullRoute returns the complete route path for this page node,

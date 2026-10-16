@@ -138,6 +138,14 @@ func matchComponentByTarget(target string, pn *PageNode, pc *parseContext) strin
 		}
 	}
 
+	// The exact id of another page's component names that component, not
+	// a loosely matching one of this page's.
+	if pc != nil {
+		if _, ok := pc.componentOwner(target); ok {
+			return ""
+		}
+	}
+
 	pagePrefix := camelToKebab(pn.Name)
 
 	// First pass: look for exact matches (highest priority)
@@ -219,8 +227,9 @@ func newHTMXUnmatchedTarget(key string, pn *PageNode, pc *parseContext) RenderTa
 // partial-id convenience that doesn't disambiguate by package.
 //
 // A method matches only the exact id ID generates for it on a mounted
-// page. Ids are unique per page and method, so at most one mount of the
-// receiver type can match.
+// page. A method of the served page's own type never matches: a request
+// for one of its own components is matched by the selector, so it Is none
+// of them. (A type mounted twice can't address its other mount this way.)
 func (t *htmxUnmatchedTarget) Is(component any) bool {
 	info, err := extractMethodInfo(component)
 	if err != nil {
@@ -229,15 +238,20 @@ func (t *htmxUnmatchedTarget) Is(component any) bool {
 	if info.isFunction {
 		return t.isFunction(info)
 	}
-	if t.pc == nil {
+	if t.pc == nil || pageNodeHasType(t.page, info) {
 		return false
 	}
-	for _, pn := range t.pc.collectPageNodesForMethod(info) {
-		if t.pc.componentID(pn, info.methodName, true) == t.key {
-			return true
-		}
+	ref, ok := t.pc.componentOwner(t.key)
+	return ok && ref.method == info.methodName && pageNodeHasType(ref.page, info)
+}
+
+// pageNodeHasType reports whether pn's value has the receiver type info
+// names.
+func pageNodeHasType(pn *PageNode, info *methodInfo) bool {
+	if info.isBound {
+		return sameTypeName(pn.Value.Type(), info.receiverTypeName)
 	}
-	return false
+	return pointerType(pn.Value.Type()) == pointerType(info.receiverType)
 }
 
 func (t *htmxUnmatchedTarget) isFunction(info *methodInfo) bool {

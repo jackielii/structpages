@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackielii/structpages/tools/lint/gsxscan"
 	"github.com/jackielii/structpages/tools/lint/internal/urlattr"
+	"github.com/jackielii/structpages/tools/lint/templscan"
 )
 
 // directiveMap maps a token.Pos (line of a call expression) to the
@@ -19,6 +20,8 @@ type directiveMap struct {
 	// gsx caches the directives of each .gsx file a diagnostic has been
 	// mapped to (nil when the file failed to parse).
 	gsx map[string]*urlattr.Directives
+	// templ is gsx's counterpart for .templ files.
+	templ map[string]*urlattr.Directives
 }
 
 // newDirectiveMap scans every comment in every file in files and
@@ -79,6 +82,11 @@ func (dm *directiveMap) suppressed(pos token.Pos, category string) bool {
 	if strings.HasSuffix(p.Filename, ".gsx") {
 		return dm.gsxDirectives(p.Filename).Suppressed(p.Line, category)
 	}
+	// A [region] finding in templ code is reported at the .templ
+	// itself (see checkCtx.attrOf).
+	if strings.HasSuffix(p.Filename, ".templ") {
+		return dm.templDirectives(p.Filename).Suppressed(p.Line, category)
+	}
 	// find the file base by matching the file name; token.Pos is
 	// monotonic per FileSet, so we walk byLine entries and pick the
 	// one whose file matches.
@@ -114,6 +122,24 @@ func (dm *directiveMap) gsxDirectives(filename string) *urlattr.Directives {
 		dm.gsx = map[string]*urlattr.Directives{}
 	}
 	dm.gsx[filename] = ds
+	return ds
+}
+
+// templDirectives returns the directives of the .templ file filename,
+// parsing it on first use. A file that fails to parse suppresses
+// nothing.
+func (dm *directiveMap) templDirectives(filename string) *urlattr.Directives {
+	if ds, ok := dm.templ[filename]; ok {
+		return ds
+	}
+	ds, err := templscan.Directives(filename)
+	if err != nil {
+		ds = nil
+	}
+	if dm.templ == nil {
+		dm.templ = map[string]*urlattr.Directives{}
+	}
+	dm.templ[filename] = ds
 	return ds
 }
 

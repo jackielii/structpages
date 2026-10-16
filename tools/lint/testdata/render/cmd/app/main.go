@@ -39,4 +39,5 @@ func main() {
 	structpages.Mount(mux, plain.Root{}, "/plain", "Plain") // no htmx
 	structpages.Mount(mux, tpl.Root{}, "/tpl", "Tpl")       // want: templ htmx 4
 	serve(mux, pages.Root{})
+	structpages.Mount(mux, pages.Root{}, "/nil", "App", structpages.WithTargetSelector(nil)) // want: nil is ignored
 }

@@ -4,7 +4,6 @@ import (
 	"go/token"
 
 	"github.com/gsxhq/gsx/ast"
-	"github.com/gsxhq/gsx/parser"
 	"github.com/jackielii/structpages/tools/lint/internal/htmxattr"
 )
 
@@ -16,11 +15,23 @@ import (
 // Only names written in the template count; an attribute that reaches
 // an element through a spread (`{ attrs... }`) is a runtime value.
 func HTMX(filename string) (use htmxattr.Use, ok bool, err error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, filename, nil, 0)
-	if err != nil {
+	type found struct {
+		use htmxattr.Use
+		ok  bool
+	}
+	r := memo(filename, "htmx", func() result[found] {
+		u, ok, err := htmx(filename)
+		return result[found]{found{u, ok}, err}
+	})
+	return r.val.use, r.val.ok, r.err
+}
+
+func htmx(filename string) (use htmxattr.Use, ok bool, err error) {
+	p := parse(filename)
+	if err := firstErr(p.readErr, p.err); err != nil {
 		return htmxattr.Use{}, false, err
 	}
+	fset, f := p.fset, p.file
 	found := func(name string, pos token.Pos) {
 		p := fset.Position(pos)
 		use, ok = htmxattr.Use{Filename: filename, Line: p.Line, Col: p.Column, Name: name}, true

@@ -109,7 +109,7 @@ func (mrt *methodRenderTarget) Is(method any) bool {
 			return false
 		}
 		return mrt.method.Name == info.methodName &&
-			selectedReceiverType.Name() == info.receiverTypeName
+			sameTypeName(selectedReceiverType, info.receiverTypeName)
 	}
 
 	// For unbound methods, compare by receiver type

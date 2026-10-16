@@ -261,35 +261,27 @@ func checkIDRef(ctx *checkCtx, call *ast.CallExpr, fnName string) {
 }
 
 // checkIDFuncArg validates a method-expression (or function) argument
-// to ID/IDTarget. For a method expression p.Method, the receiver type
-// must be mounted as a page. Standalone functions are accepted
-// without check.
+// to ID/IDTarget. For a method expression or method value, the type
+// that owns it at runtime (runtimeOwner) must be mounted as a page.
+// Standalone functions are accepted without check.
 func checkIDFuncArg(ctx *checkCtx, expr ast.Expr, fnName string) {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok {
 		return // Not a method expression: standalone function or variable.
 	}
-	use, ok := ctx.pass.TypesInfo.Uses[sel.Sel]
+	m, ok := runtimeOwner(ctx, sel)
 	if !ok {
 		return
 	}
-	fn, ok := use.(*types.Func)
-	if !ok {
-		return
-	}
-	sig, ok := fn.Type().(*types.Signature)
-	if !ok || sig.Recv() == nil {
-		return
-	}
-	recv := sig.Recv().Type()
-	named, ok := resolveNamedStruct(recv)
-	if !ok {
-		return
-	}
-	if !ctx.isMounted(named) {
+	if !ctx.isMounted(m.recvType) {
+		form := "method expression"
+		if s, ok := ctx.pass.TypesInfo.Selections[sel]; ok && s.Kind() == types.MethodVal {
+			form = "method value"
+		}
+		name := m.recvType.Obj().Name()
 		ctx.report(expr.Pos(), "idfor",
-			"%s: method expression %s.%s: receiver type %s is not mounted as a page",
-			fnName, named.Obj().Name(), fn.Name(), named.Obj().Name())
+			"%s: %s %s.%s: receiver type %s is not mounted as a page",
+			fnName, form, name, m.fnName, name)
 	}
 }
 
@@ -343,7 +335,8 @@ func checkRenderTargetIs(ctx *checkCtx, args []ast.Expr) {
 			return
 		}
 		ctx.report(arg.Pos(), "idfor",
-			"%s: argument %s has type %s, not a method or function, so Is never matches it; "+
+			"%s: argument %s has type %s, not a method or function: structpages' target selectors "+
+				"only ever match a method or function component (a custom RenderTarget might match it); "+
 				"pass the component method or function itself",
 			name, types.ExprString(arg), typeString(t))
 		return

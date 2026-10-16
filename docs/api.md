@@ -252,4 +252,4 @@ htmx 4 variant. htmx 4 sends `HX-Target` as `"<tag>#<id>"` (or bare `"<tag>"`) a
 var ErrSkipPageRender = errors.New("skip page render")
 ```
 
-Return from `Props`, or from a request-arg provider, to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-httpredirect)). Only the Props error path checks this sentinel.
+Return from `Props` to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-http-redirect)). The Props and component paths, and a request arg's error, honour it; an error-returning `ServeHTTP` that returns it sends it to the error handler.

@@ -435,8 +435,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 			sp.onError(w, r, err)
 			return
 		}
-		props = append(props, requestValues(w, r, target)...)
-		comp, err := sp.pc.callComponentMethod(rs, page, method, props...)
+		comp, err := sp.pc.callComponentMethod(rs, page, method, props, declaredRequestValues(w, r, target))
 		if err != nil {
 			// A request arg the component needed can break the flow
 			// like Props.
@@ -456,7 +455,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 // is an error rather than a guess.
 func selectComponent(page *PageNode, target RenderTarget) (*reflect.Method, error) {
 	var selected []string
-	for _, name := range slices.Sorted(maps.Keys(page.Components)) {
+	for _, name := range page.componentNames {
 		if target.Is(page.componentExprs[name]) {
 			selected = append(selected, name)
 		}
@@ -488,6 +487,18 @@ func (sp *StructPages) selectTarget(r *http.Request, pn *PageNode) (RenderTarget
 	return sp.targetSelector(r, pn)
 }
 
+// declaredRequestValues are the per-request values a component can take,
+// typed as requestArgTypes declares. Components get them only for a
+// parameter of exactly that type, so an io.Writer or other interface
+// parameter still comes from Props' results or the registry.
+func declaredRequestValues(w http.ResponseWriter, r *http.Request, target RenderTarget) []reflect.Value {
+	vs := []reflect.Value{reflect.ValueOf(&w).Elem(), reflect.ValueOf(r)}
+	if target != nil {
+		vs = append(vs, reflect.ValueOf(&target).Elem())
+	}
+	return vs
+}
+
 // pageTarget is the TargetSelector used without WithTargetSelector: every
 // request wants Page.
 func pageTarget(_ *http.Request, pn *PageNode) (RenderTarget, error) {
@@ -495,9 +506,10 @@ func pageTarget(_ *http.Request, pn *PageNode) (RenderTarget, error) {
 	return newMethodRenderTarget("Page", &m), nil
 }
 
-// requestValues are the per-request values Props, extended ServeHTTP and
-// component methods can take, besides the *PageNode every injected method
-// gets. Their declared types are requestArgTypes.
+// requestValues are the per-request values Props and extended ServeHTTP
+// take, besides the *PageNode every injected method gets. They are passed
+// as their dynamic types, so a parameter of an interface the writer
+// implements (io.Writer) gets it.
 func requestValues(w http.ResponseWriter, r *http.Request, target RenderTarget) []reflect.Value {
 	vs := []reflect.Value{reflect.ValueOf(w), reflect.ValueOf(r)}
 	if target != nil {
@@ -521,7 +533,10 @@ func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comps ...c
 			return
 		}
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Props may have set its own Content-Type (say, for JSON); keep it.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	}
 	_, _ = w.Write(buf.Bytes())
 }
 
@@ -554,17 +569,17 @@ var requestArgTypes = []reflect.Type{
 func (sp *StructPages) checkInjection() error {
 	var errs []error
 	for pn := range sp.pc.root.All() {
-		componentArgs := requestArgTypes
+		var componentArgs []reflect.Type
 		if m, ok := pn.Props["Props"]; ok && m.Func.IsValid() {
-			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
-			componentArgs = append(propsResultTypes(&m), requestArgTypes...)
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes, nil))
+			componentArgs = propsResultTypes(&m)
 		}
 		for _, name := range slices.Sorted(maps.Keys(pn.Components)) {
 			m := pn.Components[name]
-			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, componentArgs))
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, componentArgs, requestArgTypes))
 		}
 		if m, ok := serveHTTPMethod(pn); ok && isExtendedServeHTTP(&m) {
-			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes, nil))
 		}
 	}
 	return errors.Join(errs...)
@@ -652,9 +667,12 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				wv = reflect.ValueOf(w)
 			}
 
-			// The RenderTarget is injectable here too; a selector error
-			// leaves it out.
-			renderTarget, _ := sp.selectTarget(r, pn)
+			// The RenderTarget is injectable here too.
+			renderTarget, err := sp.selectTarget(r, pn)
+			if err != nil {
+				sp.onError(w, r, fmt.Errorf("error selecting target for %s: %w", pn.Name, err))
+				return
+			}
 			additionalArgs := []reflect.Value{wv, reflect.ValueOf(r)}
 			if renderTarget != nil {
 				additionalArgs = append(additionalArgs, reflect.ValueOf(renderTarget))
@@ -662,13 +680,18 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 
 			results, err := sp.pc.callMethodIn(newRequestScope(r, pn), pn, &method, additionalArgs...)
 			if err != nil {
-				// A request arg's error counts as the handler's own: an
-				// error-returning handler honours RenderComponent.
+				// The call failed before the handler ran, so nothing has
+				// been written: a request arg's RenderComponent or
+				// ErrSkipPageRender breaks the flow as from Props.
+				out := w
 				if bw != nil {
 					bw.buf.Reset()
-					if sp.handleRenderComponentError(bw, r, err) {
-						return
-					}
+					out = bw
+				}
+				if sp.handleRenderComponentError(out, r, err) || errors.Is(err, ErrSkipPageRender) {
+					return
+				}
+				if bw != nil {
 					sp.onError(bw, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				} else {
 					sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))

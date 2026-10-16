@@ -45,7 +45,7 @@ Parameter order doesn't matter, and a method declares only what it uses.
 
 `*structpages.PageNode` is the node of the page being served or set up; the framework always supplies it.
 
-A parameter is filled from the first source that has its type: `Props`' results (components only, each used once), then the per-request values, then request args, then `WithArgs`. [How a Request Is Rendered](./rendering.md#where-parameter-values-come-from) shows where this fits in the request flow.
+A parameter is filled from the first source that has its type: `Props`' results (components only, each used once), then the per-request values, then request args, then `WithArgs`. Within the first two, an exact type wins over an assignable one; a component gets the writer, request and target only for parameters of exactly those types. [How a Request Is Rendered](./rendering.md#where-parameter-values-come-from) shows where this fits in the request flow.
 
 ## Matching rules
 
@@ -127,7 +127,7 @@ func (p accountPage) Props(u *User, store *Store) (AccountProps, error) {
 
 - **Two shapes:** `func(*http.Request) (T, error)`, or `func(*http.Request, *PageNode) (T, error)` when the value depends on the page. `Mount` fails for any other shape, naming the argument.
 - **Lazy and once per request.** A provider runs the first time a parameter needs its type and is reused for the rest of the request, so `Props` and the component it renders share one value, and a database lookup runs once.
-- **Errors count as the error of the method that needed the value.** For `Props` or a component, that means a provider can return `RenderComponent(...)` (say, a sign-in prompt), `ErrSkipPageRender` after redirecting, or any error for the [error handler](./error-handling.md) to render. For an error-returning `ServeHTTP`, `RenderComponent` is honoured and other errors go to the error handler.
+- **Errors count as the error of the method that needed the value.** A provider can return `RenderComponent(...)`, say a sign-in prompt, to render that instead, or any error for the [error handler](./error-handling.md) to render; a typed error the handler turns into a redirect is how to send the user to a sign-in page. (A provider has no writer, so `ErrSkipPageRender` from it just ends the request with an empty response.)
 - **Matched like `WithArgs`:** a provider of `*T` also fills a `T` parameter, and an interface parameter takes the one provider whose type implements it. A provider that returns a nil `*T` fails a `T` parameter; declare `*T` to accept nil.
 - **Optional values:** return a nil pointer, and let the page check it, when absence is normal.
 - **One provider per type** within a registration. Two fail `Mount`.

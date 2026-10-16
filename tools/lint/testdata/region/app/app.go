@@ -14,7 +14,11 @@ type Root struct {
 	ACE     ace     `route:"/ace ACE"`
 	Detail  detail  `route:"/detail Detail"`
 	Handled handled `route:"/handled Handled"`
+	Wrap    wrap    `route:"/wrap Wrap"`
 }
+
+// wrap embeds detail: detail's methods are promoted onto it.
+type wrap struct{ detail }
 
 // ace borrows detail's region; d is a plain field for the bound form.
 type ace struct {

@@ -41,7 +41,7 @@ func (p NcrAnalyticsPage) Props(r *http.Request, appCtx *AppContext, t structpag
 }
 ```
 
-The mount needs an htmx selector (`WithTargetSelector(structpages.HTMXRenderTarget)`, §6) for `HX-Target` to
+The mount needs an htmx selector (`WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 2, or `HTMXv4RenderTarget` as in §6) for `HX-Target` to
 pick `NcrTable` or `NcrContent`; each component takes its share of `Props`' results by type.
 
 ### Markup
@@ -415,7 +415,9 @@ return MyPageProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}
 // <hx-partial hx-target={...}> (here inside CountPartial); htmx 2: hx-swap-oob on their root.
 return MyPageProps{}, structpages.RenderComponent(p.ItemList(items), p.CountPartial(len(items)))
 
-// An inline notice instead of the region the request wanted, with a status.
+// An inline notice instead of the region the request wanted, with a status
+// (Content-Type first: the status flushes the headers).
+w.Header().Set("Content-Type", "text/html; charset=utf-8")
 w.WriteHeader(http.StatusServiceUnavailable)
 return MyPageProps{}, structpages.RenderComponent(p.ListUnavailable(err))
 
