@@ -323,7 +323,8 @@ Every `Mount` and `Parse` call builds its own tree, test fixtures included. As a
 checked against the trees that can serve it: those mounted by a binary (or test binary) that compiles the
 call in. It passes if any of them resolves it, so a test tree that stubs a section out, or mounts it at
 `/` instead of `/orbit`, doesn't flag production code. A type is ambiguous only when one tree mounts it
-twice.
+twice. A helper taking the page as `any` (`func serve(t *testing.T, pages any)`) builds the tree of each
+concrete page passed to it, through chains of helpers and across packages.
 
 | Category | Flags |
 |---|---|

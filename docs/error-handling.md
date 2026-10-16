@@ -6,7 +6,7 @@ sidebar_position: 9
 
 # Error Handling
 
-The error-returning forms of `ServeHTTP` — and **every** Props method — run against a *buffered* response writer. On a non-nil error the buffer is discarded and the error goes to the `WithErrorHandler` callback, which renders a clean error page even if the handler had already written partial output. Everything in this guide follows from that one mechanism.
+The error-returning forms of `ServeHTTP` run against a *buffered* response writer. On a non-nil error the buffer is discarded and the error goes to the `WithErrorHandler` callback, which renders a clean error page even if the handler had already written partial output. Props errors go to the same callback, but Props gets the *unbuffered* writer: setting headers or cookies is fine, while anything written to the body is sent as is and the error page is appended to it. Everything in this guide follows from that.
 
 ## The rules
 
@@ -161,7 +161,7 @@ This works from *either* `ServeHTTP` form — the buffered wrapper implements `F
 | Serves JSON / API | `(w, r, deps...)` *(no return)* | write `w` directly with a JSON error body |
 | Streams (SSE, progress) | either form + `http.NewResponseController` | SSE `event: error` frame, then `return nil` |
 
-Props methods always follow the first row — they are buffered and their errors flow to `WithErrorHandler`.
+Props methods follow the first row — return errors and they flow to `WithErrorHandler`. Props isn't buffered, so never write the body there.
 
 ## ErrSkipPageRender
 

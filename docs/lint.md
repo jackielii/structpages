@@ -48,6 +48,12 @@ a section out, or mounts it at `/` instead of `/orbit`, doesn't produce findings
 A type is ambiguous only when a single tree mounts it at two routes. A finding is worded from a production
 tree when one applies.
 
+A helper that takes the page as an interface and passes it on, such as
+`func serve(t *testing.T, pages any)` calling `structpages.Mount(mux, pages, "/", "t")`, builds a tree at
+each call that hands it a concrete page: `serve(t, appRoot{})` mounts `appRoot`. This works through chains of
+helpers, generic helpers, helpers in other packages, and a route passed in as a constant argument. A helper
+only ever called with a variable builds nothing the linter can see.
+
 ## What it checks
 
 | Category | What it flags |
@@ -85,9 +91,13 @@ return "/legacy-path"
 ```
 
 ```gsx
-// structpages:lint:ignore url-attr
-<a href="/legacy">…</a>
+component Footer() {
+    // structpages:lint:ignore url-attr
+    <a href="/legacy">…</a>
+}
 ```
+
+The same `//` form works in `.templ` files:
 
 ```templ
 // structpages:lint:ignore url-attr

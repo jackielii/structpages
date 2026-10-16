@@ -54,11 +54,13 @@ func (p userProfile) Props(r *http.Request) (UserProfileProps, error) {
     userID := r.PathValue("userId") // "123" if URL is /users/123
     return UserProfileProps{UserID: userID}, nil
 }
+```
 
-templ (p userProfile) Page(props UserProfileProps) {
-    @layout() {
-        <h1>User Profile for { props.UserID }</h1>
-    }
+```gsx
+component (p userProfile) Page(props UserProfileProps) {
+	<Layout>
+		<h1>User Profile for { props.UserID }</h1>
+	</Layout>
 }
 ```
 

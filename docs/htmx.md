@@ -10,22 +10,28 @@ structpages has built-in HTMX support enabled by default through `HTMXRenderTarg
 
 ## The central loop
 
-**One method reference — e.g. `index.TodoList` — drives three sites that must agree, and `ID`/`IDTarget` make them agree by construction:**
+**One method reference — e.g. `index.TodoList` — drives three sites that must agree, and the gsx `id`/`target` filters (`structpages.ID`/`IDTarget`) make them agree by construction:**
 
-1. **Composition site** — where the page component is composed in, wrap it in an element with `id={ structpages.ID(ctx, index.TodoList) }`.
-2. **Trigger site** — the element that fires the update points `hx-target={ structpages.IDTarget(ctx, index.TodoList) }` at the page's own route.
+1. **Composition site** — where the page component is composed in, wrap it in an element with `id={index.TodoList |> id}`.
+2. **Trigger site** — the element that fires the update points `hx-target={index.TodoList |> target}` at the page's own route.
 3. **Server site** — structpages matches the `HX-Target` header back to the page component by id, and the Props method branches on the injected `RenderTarget` with `target.Is(p.TodoList)` to load just that region's data.
 
-```templ
-// Site 1 — composition: set the element ID on the component's wrapper
-<div id={ structpages.ID(ctx, index.TodoList) }>
-    @p.TodoList(props.Todos)
-</div>
+The filters are registered once in `gsx.toml` (see [gsx Patterns](./gsx.md#register-the-filters)); templ users call the functions directly (see [Using templ](./templ.md)).
 
-// Site 2 — trigger: target that id, hit the page's own route
-<input hx-get={ structpages.URLFor(ctx, index{}) }
-       hx-target={ structpages.IDTarget(ctx, index.TodoList) }
-       hx-swap="outerHTML" />
+```gsx
+component (p index) Content(props IndexProps) {
+    // Site 2 — trigger: target that id, hit the page's own route
+    <input
+        name="q"
+        hx-get={index{} |> url}
+        hx-target={index.TodoList |> target}
+        hx-swap="outerHTML"
+    />
+    // Site 1 — composition: set the element id on the component's wrapper
+    <div id={index.TodoList |> id}>
+        <p.TodoList todos={props.Todos}/>
+    </div>
+}
 ```
 
 ```go
@@ -50,7 +56,7 @@ Because all three sites derive from the same method reference, renaming the meth
 
 ## How ids are generated
 
-`structpages.ID` / `structpages.IDTarget` generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method:
+`structpages.ID` / `structpages.IDTarget` (the `id` / `target` filters) generate deterministic element IDs from method references. The id is the page's **full field-name path from the root** joined with the method:
 
 - `ID(ctx, index.TodoList)` → `"index-todo-list"` for a top-level page
 - the same component on a page mounted at `admin.users` → `"admin-users-todo-list"`
@@ -58,9 +64,9 @@ Because all three sites derive from the same method reference, renaming the meth
 
 Including the ancestor path guarantees two different mounts of the same struct never collide. If the full id exceeds the length budget (default 40 chars, see `WithMaxIDLength`) it degrades to the compact leaf-only form with a stable hash suffix when the leaf name is shared.
 
-**Components** (standalone templ functions) are prefixed by their package name: `ID(ctx, UserWidget)` → `"<package>-user-widget"`. Plain strings pass through unchanged — `IDTarget("body")` is `"body"`, not `"#body"` (literal CSS selectors are legitimate; literal URL paths are not).
+**Components** (standalone `component` declarations) are prefixed by their package name: `ID(ctx, UserWidget)` → `"<package>-user-widget"`. Plain strings pass through unchanged — `"body" |> target` is `"body"`, not `"#body"` (literal CSS selectors are legitimate; literal URL paths are not).
 
-**Self-render uses the current mount.** When `ID` runs inside a page's own templ, the id derives from *that mount's* field name — the same struct mounted under different parents produces different ids per render context. **Cross-page references with multiple mounts must be unambiguous** — a bare method expression errors with the available mounts listed; disambiguate with the `[]any` chain form, a `Ref`, or a standalone function:
+**Self-render uses the current mount.** When `ID` runs inside a page's own render, the id derives from *that mount's* field name — the same struct mounted under different parents produces different ids per render context. **Cross-page references with multiple mounts must be unambiguous** — a bare method expression errors with the available mounts listed; disambiguate with the `[]any` chain form, a `Ref`, or a standalone function:
 
 ```go
 // IDTarget(ctx, []any{adminRoot{}, dashboardPage{}, "Header"})  // chain + string
@@ -146,34 +152,39 @@ func (p TeamManagementView) fullProps(r *http.Request, appCtx *AppContext) (Team
     }
     return TeamManagementProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
 }
+```
 
-templ (p TeamManagementView) Page(props TeamManagementProps) {
+```gsx
+component (p TeamManagementView) Page(props TeamManagementProps) {
     <div class="team-management">
         <div class="user-pane">
-            <input hx-get={ structpages.URLFor(ctx, TeamManagementView{}) }
-                   hx-target={ structpages.IDTarget(ctx, TeamManagementView.UserList) }
-                   name="user-search" />
-            <div id={ structpages.ID(ctx, TeamManagementView.UserList) }>
-                @p.UserList(props.UserPaneProps)
+            <input
+                name="user-search"
+                hx-get={TeamManagementView{} |> url}
+                hx-target={TeamManagementView.UserList |> target}
+            />
+            <div id={TeamManagementView.UserList |> id}>
+                <p.UserList pane={props.UserPaneProps}/>
             </div>
         </div>
-
         <div class="group-pane">
-            <input hx-get={ structpages.URLFor(ctx, TeamManagementView{}) }
-                   hx-target={ structpages.IDTarget(ctx, TeamManagementView.GroupList) }
-                   name="group-search" />
-            <div id={ structpages.ID(ctx, TeamManagementView.GroupList) }>
-                @p.GroupList(props.GroupPaneProps)
+            <input
+                name="group-search"
+                hx-get={TeamManagementView{} |> url}
+                hx-target={TeamManagementView.GroupList |> target}
+            />
+            <div id={TeamManagementView.GroupList |> id}>
+                <p.GroupList pane={props.GroupPaneProps}/>
             </div>
         </div>
     </div>
 }
 
-templ (p TeamManagementView) UserList(pane UserPaneProps) {
+component (p TeamManagementView) UserList(pane UserPaneProps) {
     // renders pane.Users, preserves pane.UserSearchQuery in the input
 }
 
-templ (p TeamManagementView) GroupList(pane GroupPaneProps) {
+component (p TeamManagementView) GroupList(pane GroupPaneProps) {
     // renders pane.Groups
 }
 ```
@@ -207,11 +218,11 @@ func (p search) Props(r *http.Request, target structpages.RenderTarget) (SearchP
 
 ### Standalone components shared across pages
 
-A component (standalone templ function) can be an HTMX target without belonging to any page. `target.Is(UserStatsWidget)` matches it, and the package-prefixed id is stable regardless of which pages embed it:
+A component (a standalone `component`) can be an HTMX target without belonging to any page. `target.Is(UserStatsWidget)` matches it, and the package-prefixed id is stable regardless of which pages embed it:
 
-```go
-templ UserStatsWidget(stats UserStats) {
-    <div id={ structpages.ID(ctx, UserStatsWidget) }>{ stats.ActiveUsers } active users</div>
+```gsx
+component UserStatsWidget(stats UserStats) {
+    <div id={UserStatsWidget |> id}>{ stats.ActiveUsers } active users</div>
 }
 
 func (p dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardProps, error) {
@@ -220,9 +231,9 @@ func (p dashboardPage) Props(r *http.Request, target structpages.RenderTarget, s
         if err != nil {
             return DashboardProps{}, err
         }
-        return DashboardProps{}, structpages.RenderComponent(UserStatsWidget(stats))
+        return DashboardProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}/>)
     }
-    // ... full page
+    return p.fullProps(r, store)
 }
 ```
 
@@ -234,15 +245,25 @@ A page's page components can be composed into **nested swap levels**, each an in
 - **`Content`** — the page's main region. Holds the page chrome — heading, back-link, toolbar — around the inner level. Swapped on boosted nav between pages.
 - **`Detail`** (or another inner name) — a region *inside* `Content` that must swap on its own. Holds **none** of the page chrome.
 
-```templ
-templ (d FooDetail) Page(p Props)    { @layout(title) { <main>@d.Content(p)</main> } }
-templ (d FooDetail) Content(p Props) { <div id={ structpages.ID(ctx, FooDetail.Content) }>
-                                          <a href={ structpages.URLFor(ctx, FooList{}) }>&larr; Foos</a>
-                                          @d.Detail(p)
-                                        </div> }
-templ (FooDetail) Detail(p Props)    { <div id={ structpages.ID(ctx, FooDetail.Detail) }>
-                                          // fields, actions — NO back-link, NO header
-                                        </div> }
+```gsx
+component (d FooDetail) Page(props FooProps) {
+    <Layout title={props.Foo.Name}>
+        <main><d.Content props={props}/></main>
+    </Layout>
+}
+
+component (d FooDetail) Content(props FooProps) {
+    <div id={FooDetail.Content |> id}>
+        <a href={FooList{} |> url}>&larr; Foos</a>
+        <d.Detail props={props}/>
+    </div>
+}
+
+component (d FooDetail) Detail(props FooProps) {
+    <div id={FooDetail.Detail |> id}>
+        // fields, actions — NO back-link, NO header
+    </div>
+}
 ```
 
 **Why three levels, not two.** The trap is reusing `Content` as the swap fragment for an embedded region — e.g. a master-detail inspector pane hosting the standalone detail page's `Content`. That drags the page chrome into the pane. Splitting out `Detail` gives the embedded region a chrome-less partial while `Content` keeps the standalone-page chrome. **The level you embed/swap is the one with no chrome of its own.**
@@ -266,7 +287,7 @@ type jsonTarget struct{ data any }
 
 func (t jsonTarget) Is(method any) bool { return false }
 func (t jsonTarget) Component() component {
-    return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+    return gsx.Func(func(ctx context.Context, w io.Writer) error {
         return json.NewEncoder(w).Encode(t.data)
     })
 }

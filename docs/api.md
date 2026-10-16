@@ -50,9 +50,9 @@ func (sp *StructPages) IDTarget(v any) (string, error)
 func (sp *StructPages) PageContext(ctx context.Context) context.Context
 ```
 
-Use the method forms outside request context (initialization, boot-time validation, tests). Within request handlers and templ renders, use the context-based package functions — the framework injects the parse context via internal middleware.
+Use the method forms outside request context (initialization, boot-time validation, tests). Within request handlers and component renders, use the context-based package functions — the framework injects the parse context via internal middleware.
 
-`PageContext` wraps a bare context with `sp`'s page tree so the context-form functions resolve against it. The recommended test pattern: `Parse` once per package, wrap `context.Background()` in `PageContext`, render against the wrapped ctx (see [Templ Patterns](./templ.md#testing-renders-with-a-bare-context)).
+`PageContext` wraps a bare context with `sp`'s page tree so the context-form functions resolve against it. The recommended test pattern: `Parse` once per package, wrap `context.Background()` in `PageContext`, render against the wrapped ctx (see [gsx Patterns](./gsx.md#testing-renders-with-a-bare-context)).
 
 ## Context functions
 
@@ -66,7 +66,7 @@ func Within(ctx context.Context, page any) (bool, error)
 
 Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated).
 
-`CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the templ components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state. Pages served by their own `ServeHTTP` do not set it.
+`CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state. Pages served by their own `ServeHTTP` do not set it.
 
 `Within` reports whether the current page is `page` or one of its descendants: the active-navigation test. `page` takes the forms `URLFor` takes (a page value, `Ref`, a top-level string, a `[]any` chain of page steps without string fragments, or a predicate). A group target matches every page under it, and pages compare by node, so a `/{$}` index leaf matches only itself, not its siblings. Outside a page render (no `CurrentPage`) it returns `false, nil`; a page that doesn't resolve is an error.
 
@@ -136,8 +136,8 @@ Pages can implement these optional methods. Parameters on `Props`, `ServeHTTP`, 
 
 ### Page
 
-```go
-templ (p myPage) Page(props MyProps) { ... }
+```gsx
+component (p myPage) Page(props MyProps) { … }
 ```
 
 The main render entry — a page component composing the full page. Pages without a `Page` method can still render by returning `RenderComponent(...)` from Props.
@@ -148,7 +148,7 @@ The main render entry — a page component composing the full page. Pages withou
 func (p myPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (MyProps, error)
 ```
 
-Loads data before render; the returned props struct is passed to the selected page component. Only the method literally named `Props` is auto-invoked. Runs against a buffered writer — return errors, never write `w` (see [Error Handling](./error-handling.md)).
+Loads data before render; the returned props struct is passed to the selected page component. Only the method literally named `Props` is auto-invoked. Gets the unbuffered writer — set headers or cookies if needed, but return errors rather than writing the body (see [Error Handling](./error-handling.md)).
 
 ### ServeHTTP
 

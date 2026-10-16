@@ -59,7 +59,6 @@ jobs:
           {
             printf -- '---\n'
             printf -- 'title: Examples\n'
-            printf -- 'sidebar_position: 1\n'
             printf -- '---\n\n'
             cat main/examples/README.md
           } > site/docs/examples/index.md
@@ -92,7 +91,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site/build
+          path: site/.vitepress/dist
 
   deploy:
     needs: build

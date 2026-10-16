@@ -112,17 +112,17 @@ var menu = []MenuItem{
 }
 ```
 
-```templ
-templ Navigation() {
+```gsx
+component Navigation() {
     <nav>
-        for _, item := range menu {
-            <a href={ structpages.URLFor(ctx, item.PageRef) }>{ item.Label }</a>
-        }
+        { for _, item := range menu {
+            <a href={item.PageRef |> url}>{ item.Label }</a>
+        } }
     </nav>
 }
 ```
 
-Templ attributes accept `(string, error)`, so no error juggling is needed at the call site. `structpages-lint` validates Ref strings — including ones stored in struct fields like this menu — so a renamed page fails CI, and a boot-time validator catches it in production deploys:
+The `url` filter returns its error from `Render`, so no error juggling is needed at the call site. `structpages-lint` validates Ref strings — including ones stored in struct fields like this menu — so a renamed page fails CI, and a boot-time validator catches it in production deploys:
 
 ```go
 func TestMenuReferences(t *testing.T) {

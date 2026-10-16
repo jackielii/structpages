@@ -30,24 +30,25 @@ func (p index) Props(r *http.Request, target structpages.RenderTarget) ([]Todo, 
         return getAllTodos(), nil // full page
     }
 }
+```
 
-templ (p index) Page(todos []Todo) {
-    @html() {
-        <form hx-post={ structpages.URLFor(ctx, add{}) }
-              hx-target={ structpages.IDTarget(ctx, index.TodoList) }>
-            <input name="text" />
-            <button>Add</button>
-        </form>
-        <div id={ structpages.ID(ctx, index.TodoList) }>
-            @p.TodoList(todos)
-        </div>
-    }
+```gsx
+component (p index) Page(todos []Todo) {
+	<Layout>
+		<form hx-post={add{} |> url} hx-target={index.TodoList |> target}>
+			<input name="text"/>
+			<button>Add</button>
+		</form>
+		<div id={index.TodoList |> id}>
+			<p.TodoList todos={todos}/>
+		</div>
+	</Layout>
 }
 
-templ (p index) TodoList(todos []Todo) {
-    for _, todo := range todos {
-        <div>{ todo.Text }</div>
-    }
+component (p index) TodoList(todos []Todo) {
+	{ for _, todo := range todos {
+		<div>{ todo.Text }</div>
+	} }
 }
 ```
 

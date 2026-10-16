@@ -14,9 +14,9 @@ structpages has its own canonical terms for its recurring patterns. Where a Reac
 |---|---|---|
 | **page** | a route-tagged struct — a node in the route tree | Next/RR route/page |
 | **page group** | a page with no render of its own (no `Page` or `ServeHTTP`), only child pages; served through its `/{$}` page | — (not a "layout route") |
-| **component** | a standalone `templ Foo()` block — reusable, mount-independent, package-prefixed id | React component |
-| **page component** | a `templ (p Page) Foo()` method — mount-aware, receiver in scope (incl. `Page`, `Content`). Used two ways: **composition** (called inside another page component) and **re-rendering** (returned alone as a partial) | React component (bound) |
-| **children** | templ `{ children... }` composition | React children |
+| **component** | a standalone `component Foo(...)` — reusable, mount-independent, package-prefixed id | React component |
+| **page component** | a method component `component (p Page) Foo(...)` — mount-aware, receiver in scope (incl. `Page`, `Content`). Used two ways: **composition** (called inside another page component) and **re-rendering** (returned alone as a partial) | React component (bound) |
+| **children** | a `children gsx.Node` parameter rendered with `{ children }` | React children |
 | **partial** | a page component returned on its own as an HTMX response to re-render just that region — a *role* a page component plays, not a distinct kind | HTMX |
 
 ## The props cluster
@@ -48,7 +48,7 @@ For a rendering page: **route match → Props method** (with `RenderTarget` inje
 
 ## API helpers (literal — these are the public API)
 
-`RenderComponent`, `RenderTarget`, `URLFor`, `ID` / `IDTarget`, `Ref`, `WithArgs` (dependency injection / **args**).
+`RenderComponent`, `RenderTarget`, `URLFor`, `ID` / `IDTarget` (in gsx, the `url` / `id` / `target` filters), `Within`, `Ref`, `WithArgs` (dependency injection / **args**).
 
 ## Loose comparisons (analogies, not structpages terms)
 

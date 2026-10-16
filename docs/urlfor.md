@@ -17,13 +17,17 @@ All are validated by the [`structpages-lint`](./lint.md) analyzer. **The rule of
 
 ## URLFor
 
-`structpages.URLFor(ctx, page, args...)` returns `(string, error)`. Templ attribute values accept `(string, error)` directly:
+`structpages.URLFor(ctx, page, args...)` returns `(string, error)`. In gsx it is the `url` filter: `{ page |> url(params) }` is `structpages.URLFor(ctx, page, params)`, and the error is returned from `Render`:
 
-```templ
-<a href={ structpages.URLFor(ctx, MyPage{}) }>Link</a>
-<a href={ structpages.URLFor(ctx, DetailPage{}, map[string]any{"itemId": item.ID}) }>Detail</a>
-<form action={ structpages.URLFor(ctx, SavePage{}, map[string]any{"itemId": item.ID}) } method="POST">
+```gsx
+component ItemLinks(item Item) {
+    <a href={MyPage{} |> url}>Link</a>
+    <a href={DetailPage{} |> url(map[string]any{"itemId": item.ID})}>Detail</a>
+    <form action={SavePage{} |> url(map[string]any{"itemId": item.ID})} method="POST">…</form>
+}
 ```
+
+In Go code (Props, handlers, middleware) call `structpages.URLFor(r.Context(), ...)` and handle the error. templ users call it directly in attribute expressions (see [Using templ](./templ.md)).
 
 **The recommended shape is two arguments**: `URLFor(ctx, page, params)` with `params` as a `map[string]any`. It's explicit at the call site, survives route changes, and fills both path and query placeholders by name. Positional and key/value-pair forms also work but are easier to misalign during refactors.
 
@@ -105,18 +109,18 @@ url, err := structpages.URLFor(ctx, structpages.Ref("Admin.Settings"))
 
 ## ID and IDTarget
 
-For HTMX you need the server-rendered `id` attribute and the client-side `hx-target` selector to agree. Generate both from the same method reference:
+For HTMX you need the server-rendered `id` attribute and the client-side `hx-target` selector to agree. Generate both from the same method reference with the `id` and `target` filters:
 
-```templ
-<div id={ structpages.ID(ctx, index.TodoList) }>
-    @p.TodoList(props.Todos)
-</div>
-
-<form hx-post={ structpages.URLFor(ctx, addTodo{}) }
-      hx-target={ structpages.IDTarget(ctx, index.TodoList) }>
+```gsx
+component (p index) Content(props IndexProps) {
+    <form hx-post={addTodo{} |> url} hx-target={index.TodoList |> target}>…</form>
+    <div id={index.TodoList |> id}>
+        <p.TodoList todos={props.Todos}/>
+    </div>
+}
 ```
 
-`ID(ctx, index.TodoList)` returns the page's full field-name path joined with the method — `"index-todo-list"` for a top-level page, `"admin-users-todo-list"` when nested; `IDTarget` prepends `#`. Plain strings pass through both functions unchanged — `IDTarget("body")` is `"body"`, not `"#body"`. The full id scheme, multi-mount disambiguation, and the swap loop are covered in [HTMX Integration](./htmx.md).
+`ID(ctx, index.TodoList)` returns the page's full field-name path joined with the method — `"index-todo-list"` for a top-level page, `"admin-users-todo-list"` when nested; `IDTarget` prepends `#`. Plain strings pass through both functions unchanged — `"body" |> target` is `"body"`, not `"#body"`. The full id scheme, multi-mount disambiguation, and the swap loop are covered in [HTMX Integration](./htmx.md).
 
 ## Validation: no dangling URLs in production
 
@@ -142,19 +146,8 @@ func validateURLs(sp *structpages.StructPages) error {
 
 Call it from `main` after `Mount` (fail the boot) and from a one-line test (coverage in CI). See [`examples/url-validation/`](https://github.com/jackielii/structpages/tree/main/examples/url-validation) for the runnable pattern.
 
-## Plain strings outside templ attributes
+## No `must()` helpers
 
-Templ attribute expressions take `(string, error)` directly — no wrapper needed. The exception, still inside templ, is a context that needs a plain string, like `templ.Attributes` map values; use a small `must` helper for those (and only those):
+gsx holes and filters take `(T, error)` wherever the error can be returned from `Render`: element and component attributes, text holes, and the `@{}` holes of `js`/`f` literals on an attribute. So don't write a `must()` helper or app-level `urlFor`/`idFor` wrappers.
 
-```go
-func must[T any](v T, err error) T {
-    if err != nil { panic(err) }
-    return v
-}
-```
-
-```templ
-@PrimaryButton(templ.Attributes{
-    "hx-get": must(structpages.URLFor(ctx, UserNewModal{})),
-}) { + New User }
-```
+The exception is a literal assigned inside a `{{ }}` block, which is a Go statement with no error channel; gsx rejects error-returning filters there. Resolve the value in the attribute where it's used instead, or have a wrapper component take the plain string (`slot={Index.Canvas |> target}`) and build the literal on its own element. templ has its own plain-string places (`templ.Attributes` values); see [Using templ](./templ.md).

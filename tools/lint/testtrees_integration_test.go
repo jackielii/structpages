@@ -13,7 +13,9 @@ import (
 // TestTestTrees_Integration loads testdata/testtrees, a module shaped
 // like a large app: a production tree mounting a section through an
 // alias, test trees that stub that section or mount it at a different
-// root, a test tree built with Parse, an interface-typed Mount helper,
+// root, a test tree built with Parse, trees mounted through helpers
+// that take the page as an interface (chained, generic, with the route
+// as a parameter, and from another package), nav refs held as data,
 // and a separate client binary.
 // Call sites are checked against the trees that can serve them, so only
 // the genuine typos are reported, each worded from a tree that can run
@@ -69,6 +71,7 @@ func TestTestTrees_Integration(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		`orbit.go: [ref] Ref "Orbit.Nope": segment 1 ("Nope") not found as child of "Orbit"; available: Data, Home`,
+		`rail_test.go: [ref] Ref "Plain.Home": anchor "Plain" not found in the page tree`,
 		`routes_test.go: [ref] Ref "Orbit.Data.Nope": segment 2 ("Nope") not found as child of "Data"; available: Detail`,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {

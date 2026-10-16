@@ -2,33 +2,172 @@ package lint
 
 import (
 	"go/ast"
+	"go/types"
 
 	"golang.org/x/tools/go/packages"
 )
 
-// mountCall is a single discovered structpages.Mount(...) or
-// structpages.Parse(...) call: both build a page tree. The
-// fields are stored as AST nodes so callers can re-resolve types via
-// the owning package's TypesInfo.
+// mountCall is a single discovered call that builds a page tree:
+// structpages.Mount(...) or structpages.Parse(...), or a helper that
+// forwards its page argument to one of them. The fields are stored as
+// AST nodes so callers can re-resolve types via the owning package's
+// TypesInfo.
 type mountCall struct {
 	Pkg     *packages.Package
 	Call    *ast.CallExpr
 	PageArg ast.Expr // the page value
 	Route   string   // the route prefix
-	// Options is the slice of variadic option expressions. Used by
-	// future checks that want to look at WithMiddlewares etc. For now
-	// we don't extract WithURLPrefix because the prefix doesn't affect
-	// any of the v1 checks (see design doc, "URL prefix" rationale).
-	Options []ast.Expr
 }
 
-// treeBuilders maps each structpages function that builds a page tree
-// to the position of its page argument; the route prefix follows it.
-// Parse is Mount without the mux: tests use it to get a PageContext.
-var treeBuilders = map[string]int{"Mount": 1, "Parse": 0}
+// treeBuilder describes how a function builds a page tree from its
+// arguments: which parameter is the page, and where the route prefix
+// comes from — a parameter, or a constant fixed inside the function.
+type treeBuilder struct {
+	page  int
+	route int // parameter index of the route; -1 when routeConst is fixed
+	// routeConst is the route the function passes on itself, when
+	// route is -1.
+	routeConst string
+}
 
-// findMounts returns every call to structpages.Mount or Parse in pkg.
-func findMounts(pkg *packages.Package) []mountCall {
+// treeBuilders maps a function's full name (types.Func.FullName) to how
+// it builds a page tree.
+type treeBuilders map[string]treeBuilder
+
+// findTreeBuilders returns structpages.Mount and Parse (Parse is Mount
+// without the mux: tests use it to get a PageContext), plus every
+// function in pkgs that passes one of its own interface-typed
+// parameters on as the page argument of a tree builder — a test helper
+// such as
+//
+//	func serve(t *testing.T, pages any) { structpages.Mount(mux, pages, "/", "t") }
+//
+// A call serve(t, appRoot{}) then builds appRoot's tree, just as the
+// runtime does. Helpers that forward to other helpers are found by
+// iterating to a fixed point, across packages.
+//
+// The route must be a constant at some level: a helper whose route
+// argument is neither a constant nor one of its parameters is not a
+// builder, since no call site can tell where its tree is mounted.
+func findTreeBuilders(pkgs []*packages.Package) treeBuilders {
+	builders := treeBuilders{
+		structpagesPkg + ".Mount": {page: 1, route: 2},
+		structpagesPkg + ".Parse": {page: 0, route: 1},
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, pkg := range pkgs {
+			if pkg.TypesInfo == nil {
+				continue
+			}
+			for _, file := range pkg.Syntax {
+				for _, decl := range file.Decls {
+					fd, ok := decl.(*ast.FuncDecl)
+					if !ok || fd.Body == nil {
+						continue
+					}
+					fn, ok := pkg.TypesInfo.Defs[fd.Name].(*types.Func)
+					if !ok {
+						continue
+					}
+					name := fn.FullName()
+					if _, known := builders[name]; known {
+						continue
+					}
+					if b, ok := forwardedBuilder(pkg, fd, fn, builders); ok {
+						builders[name] = b
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	return builders
+}
+
+// forwardedBuilder reports whether fd calls a tree builder with one of
+// its own interface-typed parameters as the page, and if so how fd
+// itself builds a tree.
+func forwardedBuilder(
+	pkg *packages.Package, fd *ast.FuncDecl, fn *types.Func, builders treeBuilders,
+) (treeBuilder, bool) {
+	params := fn.Type().(*types.Signature).Params()
+	paramIndex := func(e ast.Expr) int {
+		id, ok := unparen(e).(*ast.Ident)
+		if !ok {
+			return -1
+		}
+		v, ok := pkg.TypesInfo.Uses[id].(*types.Var)
+		if !ok {
+			return -1
+		}
+		for i := range params.Len() {
+			if params.At(i) == v {
+				return i
+			}
+		}
+		return -1
+	}
+	var found treeBuilder
+	ok := false
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if ok {
+			return false
+		}
+		call, isCall := n.(*ast.CallExpr)
+		if !isCall {
+			return true
+		}
+		b, isBuilder := builderFor(pkg.TypesInfo, call, builders)
+		if !isBuilder {
+			return true
+		}
+		page := paramIndex(call.Args[b.page])
+		if page < 0 || !types.IsInterface(params.At(page).Type()) {
+			return true
+		}
+		route, routeConst, routed := callRoute(pkg, call, b)
+		if !routed {
+			if route = paramIndex(call.Args[b.route]); route < 0 {
+				return true
+			}
+		}
+		found, ok = treeBuilder{page: page, route: route, routeConst: routeConst}, true
+		return false
+	})
+	return found, ok
+}
+
+// builderFor returns how call builds a page tree, if its callee is a
+// tree builder and the call passes the page and route arguments.
+func builderFor(info *types.Info, call *ast.CallExpr, builders treeBuilders) (treeBuilder, bool) {
+	fn := calleeFunc(info, call)
+	if fn == nil {
+		return treeBuilder{}, false
+	}
+	b, ok := builders[fn.Origin().FullName()]
+	if !ok || call.Ellipsis.IsValid() || len(call.Args) <= max(b.page, b.route) {
+		return treeBuilder{}, false
+	}
+	return b, true
+}
+
+// callRoute returns the route prefix call mounts its tree at, when it
+// is known there: the builder's own constant, or a constant argument.
+// route is -1 whenever routed is true.
+func callRoute(pkg *packages.Package, call *ast.CallExpr, b treeBuilder) (route int, routeConst string, routed bool) {
+	if b.route < 0 {
+		return -1, b.routeConst, true
+	}
+	if s, ok := stringConstant(pkg, call.Args[b.route]); ok {
+		return -1, s, true
+	}
+	return b.route, "", false
+}
+
+// findMounts returns every call in pkg that builds a page tree with a
+// known route.
+func findMounts(pkg *packages.Package, builders treeBuilders) []mountCall {
 	var calls []mountCall
 	for _, file := range pkg.Syntax {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -36,37 +175,22 @@ func findMounts(pkg *packages.Package) []mountCall {
 			if !ok {
 				return true
 			}
-			pageIdx, ok := treeBuilderPageIndex(pkg, call)
-			if !ok || len(call.Args) < pageIdx+3 {
-				return true
-			}
-			route, ok := stringConstant(pkg, call.Args[pageIdx+1])
+			b, ok := builderFor(pkg.TypesInfo, call, builders)
 			if !ok {
 				return true
 			}
-			mc := mountCall{
+			_, route, routed := callRoute(pkg, call, b)
+			if !routed {
+				return true
+			}
+			calls = append(calls, mountCall{
 				Pkg:     pkg,
 				Call:    call,
-				PageArg: call.Args[pageIdx],
+				PageArg: call.Args[b.page],
 				Route:   route,
-			}
-			if len(call.Args) > pageIdx+3 {
-				mc.Options = call.Args[pageIdx+3:]
-			}
-			calls = append(calls, mc)
+			})
 			return true
 		})
 	}
 	return calls
-}
-
-// treeBuilderPageIndex reports whether call is a structpages tree
-// builder and, if so, the index of its page argument.
-func treeBuilderPageIndex(pkg *packages.Package, call *ast.CallExpr) (int, bool) {
-	for name, idx := range treeBuilders {
-		if callFromPackage(pkg, call, name) {
-			return idx, true
-		}
-	}
-	return 0, false
 }

@@ -15,7 +15,7 @@ Struct Pages provides a way to define routing using struct tags and methods. It 
 ## Features
 
 - **Struct-based routing** - Define routes using struct tags
-- **Templ support** - Built-in integration with [Templ](https://templ.guide/)
+- **gsx-first** - Examples and docs use [gsx](https://gsxhq.github.io/); any value with `Render(ctx, w)` renders, so [templ](https://templ.guide/) and `html/template` work too
 - **HTMX-friendly** - Automatic partial rendering support
 - **Middleware** - Standard Go middleware pattern
 - **Type-safe URLs** - Generate URLs from struct references
@@ -29,7 +29,42 @@ go get github.com/jackielii/structpages
 
 ## Quick Start
 
-Define your page structure using struct tags:
+Define your page structure using struct tags, and render pages with gsx. In `pages.gsx`:
+
+```gsx
+package main
+
+type index struct {
+	product `route:"/product Product"`
+	team    `route:"/team Team"`
+}
+
+type product struct{}
+type team struct{}
+
+// Page renders the index page. `|> url` resolves a page to its URL.
+component (p index) Page() {
+	<html>
+		<body>
+			<h1>Welcome</h1>
+			<nav>
+				<a href={product{} |> url}>Product</a>
+				<a href={team{} |> url}>Team</a>
+			</nav>
+		</body>
+	</html>
+}
+
+component (p product) Page() {
+	<h1>Product</h1>
+}
+
+component (p team) Page() {
+	<h1>Team</h1>
+}
+```
+
+In `main.go`:
 
 ```go
 package main
@@ -37,40 +72,32 @@ package main
 import (
     "log"
     "net/http"
+
     "github.com/jackielii/structpages"
 )
 
-type index struct {
-    product `route:"/product Product"`
-    team    `route:"/team Team"`
-    contact `route:"/contact Contact"`
-}
-
-// Implement the Page method using Templ
-templ (index) Page() {
-    <html>
-        <body>
-            <h1>Welcome</h1>
-            <nav>
-                <a href="/product">Product</a>
-                <a href="/team">Team</a>
-                <a href="/contact">Contact</a>
-            </nav>
-        </body>
-    </html>
-}
-
 func main() {
     mux := http.NewServeMux()
-    _, err := structpages.Mount(mux, index{}, "/", "Home")
-    if err != nil {
+    if _, err := structpages.Mount(mux, index{}, "/", "Home"); err != nil {
         log.Fatal(err)
     }
-
     log.Println("Starting server on :8080")
-    http.ListenAndServe(":8080", mux)
+    log.Fatal(http.ListenAndServe(":8080", mux))
 }
 ```
+
+The `url` filter comes from a `gsx.toml` at the module root that registers structpages' helpers:
+
+```toml
+[filters]
+url    = "github.com/jackielii/structpages.URLFor"
+id     = "github.com/jackielii/structpages.ID"
+target = "github.com/jackielii/structpages.IDTarget"
+```
+
+Generate and run with `go tool gsx generate . && go run .` (pin the CLI with
+`go get -tool github.com/gsxhq/gsx/cmd/gsx@latest`). The [Quick Start guide](./docs/quick-start.md) walks
+through it step by step.
 
 Route definitions use the format `[method] path [Title]`:
 
@@ -86,9 +113,10 @@ Route definitions use the format `[method] path [Title]`:
 - [Middleware](./docs/middleware.md) - Using middleware with your pages
 - [HTMX Integration](./docs/htmx.md) - Partial rendering and HTMX support
 - [URLFor & ID Generation](./docs/urlfor.md) - Type-safe URL and HTML id generation
-- [Templ Patterns](./docs/templ.md) - Working with Templ templates
+- [gsx Patterns](./docs/gsx.md) - Layouts, the Props pattern, partials and testing renders with gsx
+- [Using templ](./docs/templ.md) - What changes when your project renders with templ
 - [Advanced Features](./docs/advanced.md) - Dependency injection, Init, dynamic Refs, type aliases
-- [Testing renders](./skills/structpages/SKILL.md#8-testing-renders-with-a-bare-context) - `structpages.Parse` + `sp.PageContext(ctx)` for unit tests that render templ components without an HTTP server
+- [Testing renders](./docs/gsx.md#testing-renders-with-a-bare-context) - `structpages.Parse` + `sp.PageContext(ctx)` for unit tests that render components without an HTTP server
 
 ## Examples
 

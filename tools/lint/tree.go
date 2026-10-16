@@ -89,7 +89,8 @@ func (pn *PageNode) walk(yield func(*PageNode) bool) bool {
 }
 
 // BuildTree finds every structpages.Mount (or Parse) call across the supplied
-// packages and reconstructs the corresponding page trees. Tree-build
+// packages, and every call to a helper that forwards its page argument to
+// one (see findTreeBuilders), and reconstructs the corresponding page trees. Tree-build
 // diagnostics (e.g. Mount with a non-struct page argument) are
 // returned alongside the tree so the driver can surface them.
 //
@@ -114,11 +115,12 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 	roots := map[string]*PageNode{}   // root key -> kept root
 	mountIDs := map[string][]string{} // root key -> Mount-call package variant IDs
 
+	builders := findTreeBuilders(pkgs)
 	for _, pkg := range pkgs {
 		if pkg.TypesInfo == nil {
 			continue
 		}
-		for _, m := range findMounts(pkg) {
+		for _, m := range findMounts(pkg, builders) {
 			pos := pkg.Fset.Position(m.Call.Pos())
 			key := fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column)
 			// Record the Mount-call package variant for every call that
@@ -284,7 +286,8 @@ func buildRoot(pkg *packages.Package, m mountCall) (*PageNode, []Diagnostic) {
 	if !ok {
 		// Two shapes aren't misuses, so they are skipped quietly: an
 		// interface-typed argument is a helper forwarding its caller's
-		// tree (`func mount(pages any)`), which isn't knowable here, and
+		// tree (`func mount(pages any)`), built instead at each call of
+		// the helper that passes a concrete page (findTreeBuilders), and
 		// an anonymous struct (`Parse(struct{}{}, …)`) is test
 		// scaffolding no call site can name.
 		if argType != nil && (types.IsInterface(argType) || isAnonymousStruct(argType)) {
@@ -489,29 +492,20 @@ func typeString(t types.Type) string {
 	return t.String()
 }
 
-// callFromPackage reports whether call is a call to the named function
-// from structpagesPkg. It tolerates dot imports and renamed imports by
-// resolving the callee through TypesInfo.
-func callFromPackage(pkg *packages.Package, call *ast.CallExpr, fnName string) bool {
-	if pkg.TypesInfo == nil {
-		return false
-	}
-	fn := calleeFunc(pkg.TypesInfo, call)
-	if fn == nil {
-		return false
-	}
-	if fn.Pkg() == nil || fn.Pkg().Path() != structpagesPkg {
-		return false
-	}
-	return fn.Name() == fnName
-}
-
 // calleeFunc resolves the callee of a CallExpr to its *types.Func,
 // or returns nil if the call cannot be resolved (e.g., calls through
 // interface values).
 func calleeFunc(info *types.Info, call *ast.CallExpr) *types.Func {
+	fun := call.Fun
+	// An explicitly instantiated generic function: f[T](...).
+	switch ix := fun.(type) {
+	case *ast.IndexExpr:
+		fun = ix.X
+	case *ast.IndexListExpr:
+		fun = ix.X
+	}
 	var ident *ast.Ident
-	switch fun := call.Fun.(type) {
+	switch fun := fun.(type) {
 	case *ast.Ident:
 		ident = fun
 	case *ast.SelectorExpr:
