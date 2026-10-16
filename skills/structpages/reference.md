@@ -46,6 +46,7 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error)
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
 func CurrentPage(ctx context.Context) *PageNode
+func Within(ctx context.Context, page any) (bool, error)
 ```
 
 All three resolvers return an error when `ctx` carries no page tree (outside a request and without
@@ -74,7 +75,13 @@ on attributes; a non-nil error is returned from `Render`. gsx rejects them in a 
 filter is the idiom. Do not register the package with `filter_packages`: names would become `uRLFor`.
 
 `CurrentPage` returns the matched leaf `*PageNode` while serving a `Props`/component page, nil otherwise
-(including `ServeHTTP` pages and `PageContext`). Walk `Parent` for active-navigation state.
+(including `ServeHTTP` pages and `PageContext`).
+
+`Within(ctx, page)` reports whether the current page is `page` or below it; use it for active navigation
+instead of matching path prefixes (examples.md §15). `page` takes `URLFor`'s page forms; a `[]any` chain may
+not carry string fragments. A group target matches every page under it, path-param routes included, with no
+args. A `/{$}` index leaf matches only itself. It returns `false, nil` with no current page, and an error when
+`page` doesn't resolve.
 
 ## URLFor
 
@@ -305,7 +312,7 @@ any route, page or partial rename.
 
 ```shell
 go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
-go tool structpages-lint ./...            # exit 1 on any finding
+go tool structpages-lint ./...            # exit 1 on findings, 2 if packages fail to load
 go tool structpages-lint -tags dev ./...  # include call sites behind build tags
 ```
 

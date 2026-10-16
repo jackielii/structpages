@@ -9,7 +9,8 @@ import (
 )
 
 // checkIDOrIDTarget validates `structpages.ID(ctx, v)` and
-// `structpages.IDTarget(ctx, v)`. Three cases:
+// `structpages.IDTarget(ctx, v)`, or the sp.ID(v) / sp.IDTarget(v)
+// methods; args starts at v. Three cases:
 //
 //   - Method expression (`p.UserList`): the receiver type must be
 //     mounted as a page.
@@ -19,14 +20,14 @@ import (
 //     one page.
 //   - Plain string literal: no check (literal id passes through).
 //   - Standalone function: no check (allowed by runtime).
-func checkIDOrIDTarget(ctx *checkCtx, call *ast.CallExpr, fnName string) {
-	if len(call.Args) != 2 {
+func checkIDOrIDTarget(ctx *checkCtx, args []ast.Expr, fnName string) {
+	if len(args) != 1 {
 		return
 	}
 	if len(ctx.roots) == 0 {
 		return
 	}
-	arg := unparen(call.Args[1])
+	arg := unparen(args[0])
 
 	// String literal? No check.
 	if _, ok := stringConstantFromPass(ctx, arg); ok {

@@ -58,6 +58,8 @@ func main() {
 	// without producing an "unused function" hint when run with the
 	// usual go vet / unusedfunc analyzers.
 	_ = urlSamples
+	_ = methodSamples
+	_ = withinSamples
 }
 
 // urlSamples demonstrates the four families of failure the linter
@@ -185,4 +187,46 @@ func urlSamples(ctx context.Context) {
 
 	// OK: directive without category silences any class.
 	_, _ = structpages.URLFor(ctx, structpages.Ref("AlsoSuppressed")) //structpages:lint:ignore
+}
+
+// methodSamples calls the *StructPages methods, which take the page
+// first: there is no ctx argument to skip.
+func methodSamples(sp *structpages.StructPages) {
+	// OK: "slug" is a param key, not the page.
+	_, _ = sp.URLFor(itemDetail{}, "slug", "x")
+
+	// OK: a Ref page followed by key/value params.
+	_, _ = sp.URLFor(structpages.Ref("Items.Detail"), "slug", "x")
+
+	// BAD: params — "wrong" is not a placeholder in /items/{slug}
+	_, _ = sp.URLFor(itemDetail{}, map[string]any{"wrong": "x"})
+
+	// BAD: urlfor — homePage is not a child of Items
+	_, _ = sp.URLFor([]any{itemsRoot{}, homePage{}})
+
+	// OK: methodexpr on a mounted page
+	var d itemDetail
+	_, _ = sp.ID(d.Stats)
+
+	// BAD: idfor — receiver type unmountedPage is not in the page tree
+	var p unmountedPage
+	_, _ = sp.IDTarget(p.Title)
+}
+
+// withinSamples checks Within's page argument, which resolves like
+// URLFor's but takes page steps only.
+func withinSamples(ctx context.Context) {
+	// OK: a group is a valid target, so is a leaf with path params.
+	_, _ = structpages.Within(ctx, itemsRoot{})
+	_, _ = structpages.Within(ctx, structpages.Ref("Items.Detail"))
+	_, _ = structpages.Within(ctx, []any{itemsRoot{}, itemDetail{}})
+
+	// BAD: ref — Items has no child "Nope"
+	_, _ = structpages.Within(ctx, structpages.Ref("Items.Nope"))
+
+	// BAD: urlfor — unmountedPage is not in the page tree
+	_, _ = structpages.Within(ctx, unmountedPage{})
+
+	// BAD: urlfor — a chain for Within has no string fragments
+	_, _ = structpages.Within(ctx, []any{itemsRoot{}, "?tab=x"})
 }

@@ -9,31 +9,50 @@ import (
 	"strings"
 )
 
-// checkURLFor validates a `structpages.URLFor(ctx, page, args...)`
-// call. It performs:
+// checkURLFor validates a `structpages.URLFor(ctx, page, args...)` or
+// `sp.URLFor(page, args...)` call; args starts at the page argument.
+// It performs:
 //
 //   - typed page lookup (bare typed value or `[]any{...}` chain)
 //   - chain step ordering rules (no Ref/predicate past index 0; no
 //     typed value after a string fragment)
 //   - param key vs route-placeholder check when a literal
 //     map[string]any or a variadic key/value list is supplied
-func checkURLFor(ctx *checkCtx, call *ast.CallExpr) {
-	if len(call.Args) < 2 {
+func checkURLFor(ctx *checkCtx, call *ast.CallExpr, args []ast.Expr) {
+	if len(args) == 0 {
 		return
 	}
 	if len(ctx.roots) == 0 {
 		return
 	}
-	pageArg := call.Args[1]
-	args := call.Args[2:]
-
-	node, frag := resolvePageArgAndFragment(ctx, pageArg)
+	node, frag := resolvePageArgAndFragment(ctx, args[0])
 	if node != nil {
-		checkParamMap(ctx, node, frag, args)
+		checkParamMap(ctx, node, frag, args[1:])
 		if !call.Ellipsis.IsValid() {
-			checkParamPairs(ctx, node, frag, args)
+			checkParamPairs(ctx, node, frag, args[1:])
 		}
 	}
+}
+
+// checkWithin validates `structpages.Within(ctx, page)`. The page
+// argument resolves as URLFor's does, except that a []any chain holds
+// page steps only: Within compares pages, so a string fragment is a
+// runtime error.
+func checkWithin(ctx *checkCtx, args []ast.Expr) {
+	if len(args) != 1 || len(ctx.roots) == 0 {
+		return
+	}
+	page := unparen(args[0])
+	if comp, ok := asAnySliceLiteral(ctx, page); ok {
+		for i, e := range comp.Elts {
+			if _, ok := plainStringConstant(ctx, e); ok {
+				ctx.report(e.Pos(), "urlfor",
+					"Within: chain element %d is a string fragment; Within takes page steps only", i)
+				return
+			}
+		}
+	}
+	resolvePageArg(ctx, page)
 }
 
 // resolvePageArgAndFragment is like resolvePageArg but additionally
@@ -114,14 +133,14 @@ func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 	}
 	if len(matches) == 0 {
 		ctx.report(pos, "urlfor",
-			"URLFor: no page mounted for type %s", named.Obj().Name())
+			"%s: no page mounted for type %s", ctx.callee, named.Obj().Name())
 		return nil
 	}
 	if routes := distinctRoutes(matches); len(routes) > 1 {
 		ctx.report(pos, "urlfor",
-			"URLFor: type %s is ambiguous (mounted at %s); disambiguate with "+
+			"%s: type %s is ambiguous (mounted at %s); disambiguate with "+
 				"[]any{Parent{}, %s{}} chain or Ref(\"Parent.Field\")",
-			named.Obj().Name(), strings.Join(routes, ", "), named.Obj().Name())
+			ctx.callee, named.Obj().Name(), strings.Join(routes, ", "), named.Obj().Name())
 		return nil
 	}
 	return matches[0]
@@ -178,7 +197,7 @@ func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 
 	if len(chain) == 0 {
 		ctx.report(comp.Pos(), "urlfor",
-			"URLFor: []any chain has no page step before string fragments")
+			"%s: []any chain has no page step before string fragments", ctx.callee)
 		return nil
 	}
 
@@ -193,8 +212,8 @@ func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 		s := unparen(step)
 		if call, ok := s.(*ast.CallExpr); ok && isRefConversion(ctx.pass.TypesInfo, call) {
 			ctx.report(s.Pos(), "urlfor",
-				"URLFor: chain step %d is a Ref; Ref is only valid as the first chain step",
-				i+1)
+				"%s: chain step %d is a Ref; Ref is only valid as the first chain step",
+				ctx.callee, i+1)
 			return nil
 		}
 		t := normalisedPageType(ctx.pass.TypesInfo, s)
@@ -214,9 +233,9 @@ func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 			continue
 		}
 		ctx.report(frag.Pos(), "urlfor",
-			"URLFor: typed value at slice position %d follows a string fragment; "+
+			"%s: typed value at slice position %d follows a string fragment; "+
 				"chain steps must all come before any string fragment",
-			chainEnd+i)
+			ctx.callee, chainEnd+i)
 		return nil
 	}
 	return node
@@ -236,7 +255,7 @@ func resolveChainStep(ctx *checkCtx, step ast.Expr, allowRef bool) *PageNode {
 	}
 	if refArg != nil {
 		if !allowRef {
-			ctx.report(s.Pos(), "urlfor", "URLFor: Ref not allowed in this position")
+			ctx.report(s.Pos(), "urlfor", "%s: Ref not allowed in this position", ctx.callee)
 			return nil
 		}
 		if str, ok := stringConstantFromPass(ctx, refArg); ok {
@@ -272,8 +291,8 @@ func descendByType(ctx *checkCtx, parent *PageNode, pos token.Pos, want *types.N
 			names[i] = fmt.Sprintf("%s (%s)", c.Name, c.Type.Obj().Name())
 		}
 		ctx.report(pos, "urlfor",
-			"URLFor chain: parent %s has no child of type %s; available: %s",
-			parent.Name, want.Obj().Name(), strings.Join(names, ", "))
+			"%s chain: parent %s has no child of type %s; available: %s",
+			ctx.callee, parent.Name, want.Obj().Name(), strings.Join(names, ", "))
 		return nil
 	default:
 		fields := make([]string, len(matches))
@@ -282,8 +301,8 @@ func descendByType(ctx *checkCtx, parent *PageNode, pos token.Pos, want *types.N
 		}
 		sort.Strings(fields)
 		ctx.report(pos, "urlfor",
-			"URLFor chain: parent %s has multiple children of type %s: %s; use Ref(%q)",
-			parent.Name, want.Obj().Name(), strings.Join(fields, ", "),
+			"%s chain: parent %s has multiple children of type %s: %s; use Ref(%q)",
+			ctx.callee, parent.Name, want.Obj().Name(), strings.Join(fields, ", "),
 			parent.Name+"."+fields[0])
 		return nil
 	}

@@ -745,3 +745,71 @@ func validateURLs(sp *structpages.StructPages) error {
 
 Call it from `main` and from a test. `examples/url-validation/` in the repository has the runnable version,
 including an integration test that renders pages and asserts their `href`s.
+
+## 15. Active navigation
+
+A nav rail marks the item the current page sits under. Test that with `structpages.Within` rather than
+matching URL prefixes. A group target covers every page below it, including routes with path params such as
+`/tickets/{number}`, without args. A renamed target fails the render and the lint instead of quietly never
+matching.
+
+```go
+type managePages struct {
+    Inbox   inboxPage   `route:"/{$} Inbox"`
+    Tickets ticketPages `route:"/tickets Tickets"`
+}
+
+type ticketPages struct {
+    List   ticketList   `route:"/{$} Tickets"`
+    Detail ticketDetail `route:"/{number} Ticket"`
+}
+
+type navItem struct {
+    Label string
+    Page  any // any form URLFor takes as its page
+}
+
+type navLink struct {
+    Label  string
+    Href   string
+    Active bool
+}
+
+// navRail resolves its items against the page being served and renders them.
+type navRail []navItem
+
+var manageNav = navRail{
+    {Label: "Inbox", Page: structpages.Ref("Manage.Inbox")},
+    {Label: "Tickets", Page: structpages.Ref("Manage.Tickets")},
+}
+
+func (r navRail) Render(ctx context.Context, w io.Writer) error {
+    links := make([]navLink, 0, len(r))
+    for _, item := range r {
+        href, err := structpages.URLFor(ctx, item.Page)
+        if err != nil {
+            return err
+        }
+        active, err := structpages.Within(ctx, item.Page)
+        if err != nil {
+            return err
+        }
+        links = append(links, navLink{Label: item.Label, Href: href, Active: active})
+    }
+    return RailLinks(links).Render(ctx, w)
+}
+```
+
+```gsx
+component RailLinks(links []navLink) {
+    <nav class="rail">
+        { for _, l := range links {
+            <a href={l.Href} { if l.Active { aria-current="page" } }>{ l.Label }</a>
+        } }
+    </nav>
+}
+```
+
+"Tickets" is active on the list and on every ticket. "Inbox" is the `/{$}` index leaf, so it is active only on
+the inbox, even though its URL is a prefix of the tickets URLs. `Within` compares page nodes, not paths.
+Because `navRail` has a `Render` method it is a component, so the layout renders it like any other.

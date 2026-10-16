@@ -32,7 +32,8 @@ The linter needs Go 1.26, and `go get -tool` raises your module's `go` line to m
 
 - Run it from the module root, or pass the packages that hold your `structpages.Mount` calls; it needs them
   to rebuild the tree.
-- It exits 1 when it reports anything, so wire it into CI alongside `go test`.
+- It exits 0 when clean, 1 when it reports findings, and 2 when packages fail to load or type-check (nothing
+  was checked). Wire it into CI alongside `go test`.
 - If pages are mounted behind build tags, pass them through with `-tags`.
 - In gsx projects, generate first (`go tool gsx generate .`): template filters are checked through the
   generated `.x.go`.
@@ -51,12 +52,16 @@ tree when one applies.
 
 | Category | What it flags |
 |---|---|
-| `urlfor` | `structpages.URLFor` chain/composition errors — unmounted type, unknown child type, fragment-before-step, ambiguous bare lookups. |
+| `urlfor` | `structpages.URLFor` (and `Within`) chain/composition errors — unmounted type, unknown child type, fragment-before-step, ambiguous bare lookups. |
 | `ref` | `structpages.Ref(...)` strings that don't resolve to a page-tree node — including refs stored in struct fields and vars (e.g. a nav table). |
 | `idfor` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted as a page, or whose method is missing on a chain leaf. |
 | `params` | `URLFor` param keys that don't appear in the route pattern (including placeholders in a `?q={q}` fragment) — literal `map[string]any` keys and the constant keys of the key/value form, `URLFor(ctx, p, "id", x)` / `url("id", x)`. |
 | `url-attr` | URL-bearing HTML attributes in `.gsx` and `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, `fmt.Sprint*` calls, or gsx `` f`/path/@{x}` `` templates. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — e.g. `return "/admin/queues"` — where you should resolve by page type via `URLFor`. Deliberately narrow: exact concrete-route matches only; comparisons (`==`/`switch`) and `Ref(...)` args are skipped; `_test.go` and generated files are skipped. |
+
+The `*StructPages` methods `sp.URLFor(page, ...)`, `sp.ID(v)` and `sp.IDTarget(v)` are checked the same way as
+the context functions. A `structpages.Within(ctx, page)` target is resolved like a `URLFor` page; it takes no
+params, and a string fragment in its `[]any` chain is reported.
 
 ### gsx templates
 

@@ -61,11 +61,14 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error)
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
 func CurrentPage(ctx context.Context) *PageNode
+func Within(ctx context.Context, page any) (bool, error)
 ```
 
 Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated).
 
-`CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the templ components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state by walking `node.Parent` to see whether a nav target is an ancestor of the current page. Pages served by their own `ServeHTTP` do not set it.
+`CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the templ components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state. Pages served by their own `ServeHTTP` do not set it.
+
+`Within` reports whether the current page is `page` or one of its descendants: the active-navigation test. `page` takes the forms `URLFor` takes (a page value, `Ref`, a top-level string, a `[]any` chain of page steps without string fragments, or a predicate). A group target matches every page under it, and pages compare by node, so a `/{$}` index leaf matches only itself, not its siblings. Outside a page render (no `CurrentPage`) it returns `false, nil`; a page that doesn't resolve is an error.
 
 ## Options
 

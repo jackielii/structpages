@@ -414,7 +414,7 @@ page (not a `ServeHTTP` page).
 ## 9. Lint: structpages-lint
 
 `structpages-lint` rebuilds the page tree from the `route` tags and `Mount` calls and checks every
-`URLFor`/`ID`/`IDTarget`/`Ref` call against it. That covers every `|> url`/`id`/`target` in `.gsx` too,
+`URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call against it. That covers every `|> url`/`id`/`target` in `.gsx` too,
 since gsx lowers them to those calls. It also flags hard-coded internal URLs in `href`/`hx-*`/`action`
 attributes and route-shaped string literals in Go. The compiler can't see any of this, because routes,
 `Ref`s and param keys are strings to it. In a large app, where a route rename touches templates across many

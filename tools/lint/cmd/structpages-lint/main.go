@@ -7,8 +7,9 @@
 //
 //	structpages-lint [packages...]
 //
-// Defaults to ./... when no packages are given. Exits 1 if any
-// diagnostic is reported, 0 otherwise.
+// Defaults to ./... when no packages are given. Exits 0 when there are
+// no findings, 1 when there are, and 2 when the packages could not be
+// loaded or type-checked (nothing was analysed).
 package main
 
 import (
@@ -53,7 +54,7 @@ func main() {
 		os.Exit(2)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	tree, treeDiags := lint.BuildTree(pkgs)

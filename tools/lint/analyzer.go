@@ -15,7 +15,8 @@ import (
 func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "structpageslint",
-		Doc:  "checks structpages.URLFor / ID / IDTarget / Ref calls against the page tree, and flags route string literals that should use URLFor",
+		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref calls against the page tree, " +
+			"and flags route string literals that should use URLFor",
 		Run: func(pass *analysis.Pass) (any, error) {
 			run(pass, tree)
 			return nil, nil
@@ -41,6 +42,10 @@ type checkCtx struct {
 	// caller can resolve quietly yet still learn whether resolution
 	// would have produced a diagnostic.
 	silenced int
+	// callee names the structpages function being checked (URLFor, ID,
+	// IDTarget or Within), so shared page-resolution diagnostics name
+	// the call they came from.
+	callee string
 }
 
 func run(pass *analysis.Pass, tree *PageTree) {
@@ -114,13 +119,24 @@ func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 	if fn == nil || fn.Pkg() == nil || fn.Pkg().Path() != structpagesPkg {
 		return
 	}
+	// The package functions take ctx first; the *StructPages methods
+	// (sp.URLFor(page, ...), sp.ID(v), sp.IDTarget(v)) don't. args
+	// starts at the page argument either way.
+	args := call.Args
+	if sig, ok := fn.Type().(*types.Signature); !ok || sig.Recv() == nil {
+		if len(args) == 0 {
+			return
+		}
+		args = args[1:]
+	}
+	ctx.callee = fn.Name()
 	switch fn.Name() {
 	case "URLFor":
-		checkURLFor(ctx, call)
-	case "ID":
-		checkIDOrIDTarget(ctx, call, "ID")
-	case "IDTarget":
-		checkIDOrIDTarget(ctx, call, "IDTarget")
+		checkURLFor(ctx, call, args)
+	case "ID", "IDTarget":
+		checkIDOrIDTarget(ctx, args, fn.Name())
+	case "Within":
+		checkWithin(ctx, args)
 	}
 }
 
