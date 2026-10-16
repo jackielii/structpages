@@ -62,6 +62,15 @@ func exJoin(s exStats, notes []exNote) string {
 type exRoot struct {
 	Dashboard exDashboard `route:"/dashboard Dashboard"`
 	Report    exReport    `route:"/report Report"`
+	Save      exSaveNote  `route:"POST /notes Save"`
+}
+
+// exSaveNote is an action handler: a boosted form inside a region posts
+// here and gets the region's new content back.
+type exSaveNote struct{}
+
+func (exSaveNote) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
+	return RenderComponent(testComponent{"saved"})
 }
 
 func TestRenderingExamples_table(t *testing.T) {
@@ -206,7 +215,9 @@ func TestRenderingExamples_customSelector(t *testing.T) {
 // another page's region, so the whole page goes to body.
 func exRetargetNavigation(next http.Handler, pn *PageNode) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("HX-Boosted") == "true" &&
+		_, hasPage := pn.Components["Page"]
+		if r.Method == http.MethodGet && hasPage &&
+			r.Header.Get("HX-Boosted") == "true" &&
 			r.Header.Get("HX-Request-Type") == "partial" &&
 			!exWantsOwnComponent(r, pn) {
 			w.Header().Set("HX-Retarget", "body")
@@ -243,16 +254,17 @@ func TestRenderingExamples_retargetNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []struct {
-		name, target, reqType, boosted string
-		retarget                       bool
+		name, method, path, target, reqType, boosted string
+		retarget                                     bool
 	}{
-		{"boosted link from another page's region", "div#report-region", "partial", "true", true},
-		{"boosted link targeting this page's own region", "ul#" + notes, "partial", "true", false},
-		{"boosted link to body", "body", "full", "true", false},
-		{"region reload, not boosted", "div#report-region", "partial", "", false},
+		{"boosted link from another page's region", "GET", "/dashboard", "div#report-region", "partial", "true", true},
+		{"boosted link targeting this page's own region", "GET", "/dashboard", "ul#" + notes, "partial", "true", false},
+		{"boosted link to body", "GET", "/dashboard", "body", "full", "true", false},
+		{"region reload, not boosted", "GET", "/dashboard", "div#report-region", "partial", "", false},
+		{"boosted form in a region posting to an action", "POST", "/notes", "div#report-region", "partial", "true", false},
 	}
 	for _, c := range cases {
-		req := httptest.NewRequest(http.MethodGet, "/dashboard", http.NoBody)
+		req := httptest.NewRequest(c.method, c.path, http.NoBody)
 		req.Header.Set("HX-Request", "true")
 		req.Header.Set("HX-Target", c.target)
 		req.Header.Set("HX-Request-Type", c.reqType)

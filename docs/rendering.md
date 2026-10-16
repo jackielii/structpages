@@ -109,16 +109,20 @@ The last row of the table is the one to watch. It happens in two ways, and they 
 **1. A link inside another page's region navigates here.** Page A has a region with `hx-target:inherited`, and a boosted link inside it goes to the dashboard. The request arrives with `HX-Target` set to A's region. The user meant to navigate, so the right content is the dashboard's `Page`, but htmx will put it into A's region. No `Props` can fix that: the dashboard never had A's region.
 
 - **Fix the markup:** a navigation link must not inherit a region's target. Put `hx-target:inherited` on the region's own controls (tabs, filters, pagination), not on a container that also holds navigation links, or give the link `hx-target="body"`.
-- **Safety net, as middleware:** a boosted request is navigation. When its target is none of the served page's components, send the page to `body`. The middleware runs before `Props`, so it sets the response headers on the writer:
+- **Safety net, as middleware:** a boosted GET to a page with a `Page` is navigation. When its target is none of the served page's components, send the page to `body`. The middleware runs before `Props`, so it sets the response headers on the writer:
 
 ```go
-// retargetNavigation: a boosted request whose target isn't one of this
-// page's components came from another page's region. Swap the page into
-// body instead. htmx 4; for htmx 2, drop the HX-Request-Type check and use
+// retargetNavigation: a boosted GET whose target isn't one of this page's
+// components came from another page's region. Swap the page into body
+// instead. Only pages with a Page are navigated to: action handlers answer
+// boosted forms with fragments for the region, so they're left alone.
+// htmx 4; for htmx 2, drop the HX-Request-Type check and use
 // HTMXRenderTarget.
 func retargetNavigation(next http.Handler, pn *structpages.PageNode) http.Handler {
+    _, hasPage := pn.Components["Page"]
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.Header.Get("HX-Boosted") == "true" &&
+        if r.Method == http.MethodGet && hasPage &&
+            r.Header.Get("HX-Boosted") == "true" &&
             r.Header.Get("HX-Request-Type") == "partial" &&
             !wantsOwnComponent(r, pn) {
             w.Header().Set("HX-Retarget", "body")
@@ -146,7 +150,7 @@ func wantsOwnComponent(r *http.Request, pn *structpages.PageNode) bool {
 structpages.WithMiddlewares(retargetNavigation)
 ```
 
-  It only touches boosted requests, so region reloads and other partial requests are unaffected. If a page's `Props` recognises another page's region on a boosted request and renders it with `RenderComponent`, it can undo the retarget with `w.Header().Del("HX-Retarget")`.
+  It only touches boosted GETs to pages with a `Page`, so region reloads, other partial requests, and boosted forms posting to action handlers are unaffected. If a page's `Props` recognises another page's region on a boosted request and renders it with `RenderComponent`, it can undo the retarget with `w.Header().Del("HX-Retarget")`.
 
 **2. The page reuses another page's region id.** The dashboard renders a region with `report.Detail.Summary`'s id, and a reload inside it targets that id. The page does own this region in practice; it borrowed the id.
 
