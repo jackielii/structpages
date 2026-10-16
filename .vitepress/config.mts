@@ -48,33 +48,37 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Guides',
+        text: 'Building Pages',
         items: [
           { text: 'Routing', link: '/routing' },
           { text: 'Page Response Patterns', link: '/supported-flows' },
           { text: 'gsx Patterns', link: '/gsx' },
-          { text: 'Using templ', link: '/templ' },
-          { text: 'HTMX Integration', link: '/htmx' },
           { text: 'URLFor & ID', link: '/urlfor' },
+          { text: 'HTMX Integration', link: '/htmx' },
           { text: 'Error Handling', link: '/error-handling' },
           { text: 'Middleware', link: '/middleware' },
-          { text: 'Advanced Features', link: '/advanced' },
+          { text: 'Dependency Injection', link: '/dependency-injection' },
         ],
+      },
+      {
+        text: 'Tooling & Testing',
+        items: [
+          { text: 'Testing', link: '/testing' },
+          { text: 'Lint', link: '/lint' },
+        ],
+      },
+      {
+        text: 'Other Renderers',
+        items: [{ text: 'templ and html/template', link: '/templ' }],
       },
       {
         text: 'Reference',
         items: [
           { text: 'API Guide', link: '/api' },
-          { text: 'Lint', link: '/lint' },
           { text: 'Package Reference', link: '/reference/package' },
         ],
       },
       { text: 'Examples', items: [{ text: 'Examples', link: '/examples/' }] },
-      {
-        text: 'About',
-        collapsed: true,
-        items: [{ text: 'Performance', link: '/about/performance' }],
-      },
     ],
     socialLinks: [{ icon: 'github', link: repo }],
     search: { provider: 'local' },
@@ -84,7 +88,6 @@ export default defineConfig({
       // serializes this function into the client: it must be self-contained.
       pattern: ({ filePath }) => {
         const base = 'https://github.com/jackielii/structpages'
-        if (filePath === 'docs/about/performance.md') return `${base}/edit/main/PERFORMANCE.md`
         if (filePath === 'docs/examples/index.md') return `${base}/edit/main/examples/README.md`
         if (filePath.startsWith('docs/reference/')) return base
         return `${base}/edit/main/${filePath}`

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: structpages
   text: Struct-based routing for Go web apps
-  tagline: Built on http.ServeMux. gsx and HTMX first. Type-safe URLs. Beta — battle-tested in production.
+  tagline: Built on http.ServeMux. gsx and HTMX first. Type-safe URLs.
   actions:
     - theme: brand
       text: Get Started
@@ -14,12 +14,12 @@ hero:
       link: https://github.com/jackielii/structpages
 
 features:
-  - title: Struct-based routing
-    details: Define routes as Go struct fields with tags. Nesting structs creates nested route hierarchies. No registration calls.
-  - title: gsx + HTMX
-    details: Pages render with gsx (templ and html/template work too). HTMX-aware partial rendering via the default HTMXRenderTarget returns the right component for hx-target without manual dispatch.
-  - title: Type-safe URLs
-    details: URLFor builds URLs from page types; ID and IDTarget build matching HTML ids and selectors. The structpages-lint analyzer catches mismatches before they ship.
+  - title: Routes are struct fields
+    details: Nest structs to nest routes; route tags hold the path and title. Mount builds the tree onto any http.ServeMux, with no registration calls.
+  - title: Partial rendering without dispatch code
+    details: An HTMX request for one region renders just that component. Props loads only what that region needs, and the full page and the partial share one component.
+  - title: Broken links fail CI
+    details: URLs, ids and Refs resolve from page types, and structpages-lint checks every one against the route tree, so a renamed route or param fails the build instead of 404ing.
 ---
 
 ## Quick look

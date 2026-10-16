@@ -12,3 +12,14 @@
   --vp-c-brand-3: #16b6dd;
   --vp-c-brand-soft: rgba(41, 192, 227, 0.16);
 }
+
+.status-badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: 14px;
+  font-weight: 500;
+}
