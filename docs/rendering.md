@@ -41,6 +41,124 @@ flowchart TD
     end
 ```
 
+## Worked examples
+
+### One page, many requests
+
+A dashboard with a full `Page`, a main `Content` region and a `Notes` list inside it. Its `Props` also recognises two targets that aren't its own components: a standalone `ui.StatsWidget`, and a region of the report page that the dashboard reuses on purpose. The mount uses `HTMXv4RenderTarget`.
+
+```gsx
+component (p dashboard) Page(s Stats, notes []Note) {
+    <Layout><main id={dashboard.Content |> id}><p.Content s={s} notes={notes} /></main></Layout>
+}
+
+component (p dashboard) Content(s Stats, notes []Note) {
+    <ui.StatsWidget s={s} />
+    <ul id={dashboard.Notes |> id}><p.Notes notes={notes} /></ul>
+    <div id={report.Detail.Summary |> id}>…</div>
+}
+
+component (p dashboard) Notes(notes []Note) { … }
+```
+
+```go
+func (p dashboard) Props(t structpages.RenderTarget, store *Store) (Stats, []Note, error) {
+    switch {
+    case t.Is(p.Notes): // one of this page's components: load just its data
+        notes, err := store.Notes()
+        return Stats{}, notes, err
+    case t.Is(ui.StatsWidget): // a standalone component: render it yourself
+        s, err := store.Stats()
+        if err != nil {
+            return Stats{}, nil, err
+        }
+        return Stats{}, nil, structpages.RenderComponent(ui.StatsWidget(s))
+    case t.Is(report.Detail.Summary): // another page's region: render it yourself
+        sum, err := store.Summary()
+        if err != nil {
+            return Stats{}, nil, err
+        }
+        return Stats{}, nil, structpages.RenderComponent(report.Detail{}.Summary(sum))
+    }
+    s, notes, err := store.All()
+    return s, notes, err
+}
+```
+
+| Request | The target `Is` | `Props` | Renders |
+|---|---|---|---|
+| Full page load | `Page` | loads everything | `Page(s, notes)` |
+| Boosted link (`HX-Request-Type: full`) | `Page` | loads everything | `Page(s, notes)` |
+| `HX-Target` = `Content`'s id | `Content` | asks nothing about `Content`, so it loads everything | `Content(s, notes)` |
+| `HX-Target` = `Notes`' id | `Notes` | loads only the notes | `Notes(notes)` |
+| `HX-Target` = `ui.StatsWidget`'s id | none of the page's components; `Is(ui.StatsWidget)` is true | `RenderComponent(ui.StatsWidget(s))` | the widget |
+| `HX-Target` = `report.Detail.Summary`'s id | none of the page's components; `Is(report.Detail.Summary)` is true | `RenderComponent(…Summary(sum))` | the report's summary |
+| `HX-Target` = an id nobody on this page owns | none | loads everything | `Page(s, notes)`: a whole document [lands in that region](#regions-shared-across-pages) |
+
+Things to notice:
+
+- **`Props` asks only when it wants to load less.** It never asks about `Content`, yet `Content` renders when it's targeted: the framework asks the target itself, after `Props`.
+- **Each component takes its share of the results by type.** `Notes` takes only `[]Note`, so the `Stats{}` that `Props` returns for it is never used.
+- **A target that isn't one of the page's components needs `RenderComponent`.** The framework can only render the page's own components; for a standalone function or another page's component, `Props` builds it.
+- **`t.Is(p.Notes)` and `t.Is(dashboard.Notes)` are the same question.** A bound method value and a method expression name the same component.
+
+### Recognised, but not rendered
+
+```go
+func (p dashboard) Props(t structpages.RenderTarget, store *Store) (Stats, []Note, error) {
+    if t.Is(ui.StatsWidget) {
+        s, err := store.Stats()
+        return s, nil, err // no error: normal flow
+    }
+    …
+}
+```
+
+A request for the widget renders `Page`, not the widget. Asking `Is` changes nothing: after `Props`, the framework asks the target about the page's own components, the widget is none of them, so `Page` renders. Return `RenderComponent(ui.StatsWidget(s))` to render it.
+
+### A page without `Page`
+
+```gsx
+type exportPage struct{}
+
+func (p exportPage) Props(r *http.Request, store *Store) (Rows, error) {
+    rows, err := store.Rows(r.Context())
+    if err != nil {
+        return nil, err
+    }
+    if r.URL.Query().Get("view") == "table" {
+        return nil, structpages.RenderComponent(p.Table(rows))
+    }
+    return rows, nil // wants Card? renders Card. Wants nothing? error.
+}
+
+component (p exportPage) Table(rows Rows) { … }
+component (p exportPage) Card(rows Rows) { … }
+```
+
+When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error ("page exportPage has no Page component…"). `Props` must choose with `RenderComponent`.
+
+### A custom selector
+
+```go
+// queryTarget: ?partial=<id> wants the component with that generated id.
+type queryTarget struct {
+    r  *http.Request
+    id string
+}
+
+func (q queryTarget) Is(component any) bool {
+    id, err := structpages.ID(q.r.Context(), component)
+    return err == nil && id == q.id
+}
+
+structpages.WithTargetSelector(func(r *http.Request, _ *structpages.PageNode) (structpages.RenderTarget, error) {
+    return queryTarget{r: r, id: r.URL.Query().Get("partial")}, nil
+})
+```
+
+The framework only ever calls `Is`, so a custom target takes part exactly like the htmx ones: `?partial=<Notes' id>` renders `Notes`, and no parameter renders `Page`. Building `Is` on `structpages.ID` keeps the `ID`/`Is` symmetry. `Is` must answer for one component at most: a target that `Is` two of the page's components is an error naming them, never a guess.
+
 ## What the request wants: the target selector
 
 `WithTargetSelector` sets how every request of the mount is read. **There is no default htmx behaviour**: without a selector, every request wants `Page`, and `Props` decides anything else.
