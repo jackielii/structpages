@@ -4,7 +4,7 @@ slug: /routing
 sidebar_position: 4
 ---
 
-# Routing Patterns and Struct Tags
+# Routing
 
 Routes are struct fields with `route:` tags. Format: `route:"[METHOD] /path [Title]"`.
 
@@ -88,7 +88,9 @@ Children register before parents on the mux, so nested-route conflicts resolve c
 
 ## Wildcard routes and static assets
 
-Use the wildcard form for prefix subtrees — the framework joins nested paths with `path.Join`, which strips trailing slashes, so `route:"/static/"` would register as an exact match, not a prefix. `{path...}` is the right shape:
+Use the wildcard form for prefix subtrees. The framework joins nested paths with `path.Join`, which strips trailing slashes, so `route:"/static/"` would register as an exact match, not a prefix; `{path...}` is the right shape.
+
+A module can serve its own assets as a field next to its pages, so `/admin` and `/admin/static/*` register together and follow the module's mount path:
 
 ```go
 type adminPages struct {
@@ -100,19 +102,40 @@ type adminPages struct {
 //go:embed all:static
 var staticFS embed.FS
 
+var staticRoot = func() fs.FS {
+    sub, err := fs.Sub(staticFS, "static")
+    if err != nil {
+        panic(err) // the directory is embedded above, so this can't fail at run time
+    }
+    return sub
+}()
+
 type staticFiles struct{}
 
 func (staticFiles) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    root, err := fs.Sub(staticFS, "static")
-    if err != nil {
-        http.NotFound(w, r)
-        return
-    }
-    http.ServeFileFS(w, r, root, r.PathValue("path"))
+    http.ServeFileFS(w, r, staticRoot, r.PathValue("path"))
 }
 ```
 
-This keeps the module self-contained: `/admin` and `/admin/static/*` register together, with no separate `mux.Handle` call to keep in sync.
+- `r.PathValue("path")` is the file path, so no `StripPrefix` is needed.
+- The module's `Middlewares` gate the assets too. For public assets, make `Assets` a sibling of the gated struct.
+- Asset files are not pages: link them with a plain path or a build manifest (e.g. Vite), not `URLFor`.
+
+## Serving under a path prefix
+
+There are two ways to put an app under `/app`. If structpages owns the prefix, mount there: `Mount(mux, pages{}, "/app", "App")` registers `/app/...` routes and `URLFor` returns `/app/...` URLs.
+
+If something upstream strips the prefix first — `http.StripPrefix("/app", mux)` or a reverse proxy that forwards `/app/x` as `/x` — mount at `/` and tell structpages the external prefix, so generated URLs still carry it:
+
+```go
+mux := http.NewServeMux()
+if _, err := structpages.Mount(mux, pages{}, "/", "App", structpages.WithURLPrefix("/app")); err != nil {
+    log.Fatal(err)
+}
+log.Fatal(http.ListenAndServe(":8080", http.StripPrefix("/app", mux)))
+```
+
+`WithURLPrefix` affects generated URLs only (`URLFor` and the `url` filter); routes register without it. A missing leading slash is added and a trailing one dropped, so `"app"`, `"/app"` and `"/app/"` are the same, and the root page's URL is `/app`.
 
 ## Never write an in-app URL as a string literal
 

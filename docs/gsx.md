@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # gsx Patterns
 
-structpages renders any value with `Render(context.Context, io.Writer) error`, so it works with any renderer. [gsx](https://github.com/gsxhq/gsx) is the primary path and what every example in the repository uses. templ and `html/template` also work; see [Using templ](./templ.md).
+structpages renders any value with `Render(context.Context, io.Writer) error`, so it works with any renderer. [gsx](https://github.com/gsxhq/gsx) is the primary path and what every example in the repository uses. templ and `html/template` also work; see [templ and html/template](./templ.md).
 
 ## Register the filters
 
@@ -165,29 +165,39 @@ func (a addTodo) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)
 
 For a standalone component, a handler written in a `.gsx` file can return markup directly, since an element literal is a Go expression there: `structpages.RenderComponent(<TodoList todos={todos}/>)`. In a `.go` file call the generated function: `TodoList(todos)`.
 
-## Testing renders with a bare context
+## JavaScript and interpolated attributes
 
-Unit tests that render components directly — without an HTTP server — need a page tree in the context so the `url` / `id` / `target` filters (`URLFor` / `ID` / `IDTarget`) resolve. Use `structpages.Parse` (builds the tree, no mux) and `sp.PageContext`:
+Filters also work inside the `@{}` holes of `js` and `f` literals on an attribute, so ids, selectors and URLs reach JavaScript, Alpine and htmx values the same way; the error still propagates from `Render`:
 
-```go
-func TestProductPageRenders(t *testing.T) {
-    sp, err := structpages.Parse(pages{}, "/", "App",
-        structpages.WithArgs(fakeStore),
-    )
-    if err != nil {
-        t.Fatal(err)
-    }
-    ctx := sp.PageContext(context.Background())
-
-    var buf bytes.Buffer
-    props := productPageProps{Product: sampleProduct}
-    if err := (productPage{}).Page(props).Render(ctx, &buf); err != nil {
-        t.Fatal(err)
-    }
-    if !strings.Contains(buf.String(), sampleProduct.Name) {
-        t.Errorf("rendered page missing product name")
-    }
+```gsx
+component (p Index) Canvas() {
+    <div
+        x-data="{ open: false }"
+        @keydown.escape=js`htmx.ajax('GET', @{Index{} |> url}, @{Index.Canvas |> target})`
+    >
+        <button
+            hx-get={Index{} |> url}
+            hx-target=f`closest @{Index.PickerList |> target}`
+            hx-vals=js`{"pane": @{Index.Canvas |> id}}`
+        >Reload</button>
+    </div>
 }
 ```
 
-`Parse` accepts the same options as `Mount`; mux-shaped options (middlewares) are accepted but inert since no handlers register.
+Keep the literal on the native element that consumes it. A wrapper component takes plain values and builds the literal on its own element:
+
+```gsx
+component OpenButton(slot string, href string, children gsx.Node) {
+    <button @click=js`htmx.ajax('GET', @{href}, @{slot})`>{ children }</button>
+}
+
+component (p Index) Toolbar() {
+    <OpenButton slot={Index.Canvas |> target} href={Detail{} |> url}>Open</OpenButton>
+}
+```
+
+A literal assigned inside a `{{ }}` block can't use these filters ([why](./urlfor.md#no-must-helpers)). Never splice a generated value in with `gsx.RawJS`.
+
+## Testing
+
+Rendering components in unit tests with `Parse` + `PageContext`, and requests through `Mount`, are covered in [Testing](./testing.md).

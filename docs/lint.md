@@ -38,6 +38,16 @@ The linter needs Go 1.26, and `go get -tool` raises your module's `go` line to m
 - In gsx projects, generate first (`go tool gsx generate .`): template filters are checked through the
   generated `.x.go`.
 
+### In CI
+
+```yaml
+- run: go tool gsx generate .   # gsx projects: the linter reads the generated .x.go (recurses)
+- run: go tool structpages-lint ./...
+- run: go tool structpages-lint -tags devtools ./...   # once per build-tag set that mounts pages
+```
+
+Findings exit 1 and fail the step. Packages that don't load or type-check exit 2, so a broken build can't pass as clean.
+
 ### Several trees
 
 Every `structpages.Mount` and `structpages.Parse` call builds its own tree: the app's, a standalone preview

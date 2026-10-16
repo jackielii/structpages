@@ -4,7 +4,7 @@ slug: /concepts
 sidebar_position: 3
 ---
 
-# Concepts & Vocabulary
+# Concepts
 
 structpages has its own canonical terms for its recurring patterns. Where a React / Next.js / React Router concept maps cleanly, it's noted as a cross-reference for knowledge transfer — but the structpages term is primary. Two guardrails: Go wins where Go owns the concept (`ServeHTTP` is a **handler method**, not a "server action"), and pure composition isn't named (a layout is just a **component** that takes **children** — there's no "layout route").
 
@@ -48,7 +48,7 @@ For a rendering page: **route match → Props method** (with `RenderTarget` inje
 
 ## API helpers (literal — these are the public API)
 
-`RenderComponent`, `RenderTarget`, `URLFor`, `ID` / `IDTarget` (in gsx, the `url` / `id` / `target` filters), `Within`, `Ref`, `WithArgs` (dependency injection / **args**).
+[`RenderComponent`](./api.md#rendercomponent), [`RenderTarget`](./htmx.md#rendertarget-in-props), [`URLFor`](./urlfor.md#urlfor), [`ID` / `IDTarget`](./urlfor.md#id-and-idtarget) (in gsx, the [`url` / `id` / `target` filters](./gsx.md#register-the-filters)), [`Within`](./urlfor.md#active-navigation), [`Ref`](./urlfor.md#dynamic-references-with-ref), [`WithArgs`](./dependency-injection.md) (dependency injection / **args**).
 
 ## Loose comparisons (analogies, not structpages terms)
 

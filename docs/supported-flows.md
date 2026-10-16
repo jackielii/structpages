@@ -145,26 +145,7 @@ The `Redirect` type and the error-handler wiring are covered in [Error Handling]
 
 ## A handler method that serves JSON
 
-API endpoints use the **no-error** form so writes go straight to the wire (unbuffered) and the framework's HTML error handler stays out of it. You own the response — including errors, which are JSON like everything else:
-
-```go
-type trackTime struct{}
-
-func (p trackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) {
-    var body trackTimeRequest
-    if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-        writeJSONError(w, http.StatusBadRequest, "invalid request")
-        return
-    }
-    if err := store.UpdateTime(r.Context(), body); err != nil {
-        writeJSONError(w, http.StatusInternalServerError, "update failed")
-        return
-    }
-    w.WriteHeader(http.StatusOK)
-}
-```
-
-See [Error Handling](./error-handling.md) for `writeJSONError` and why `http.Error` is the wrong tool here.
+API endpoints use the **no-error** form, so writes go straight to the wire and the HTML error handler stays out of it. You own the response, errors included, which are JSON like everything else. The worked example is in [Error Handling](./error-handling.md#json-endpoints-the-no-error-form).
 
 ## ServeHTTP signatures
 
@@ -177,7 +158,7 @@ func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)      
 func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error  // DI, buffered
 ```
 
-The error-returning forms run against a *buffered* writer so the error handler can discard partial output and render a clean error page. That has consequences — never write `w` then return an error. The full rules are in [Error Handling](./error-handling.md).
+Only the error-returning forms are buffered; what that means for writing `w` is in [Error Handling](./error-handling.md#the-rules).
 
 ## See also
 

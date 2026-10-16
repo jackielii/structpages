@@ -99,65 +99,32 @@ Generate and run with `go tool gsx generate . && go run .` (pin the CLI with
 `go get -tool github.com/gsxhq/gsx/cmd/gsx@latest`). The [Quick Start guide](./docs/quick-start.md) walks
 through it step by step.
 
-Route definitions use the format `[method] path [Title]`:
-
-- `/path` - All methods, no title
-- `POST /path` - POST requests only
-- `GET /path Page Title` - GET requests with title "Page Title"
-
 ## Documentation
 
-- [API Reference](./docs/api.md) - Complete API documentation for Mount, options, and methods
-- [Routing Patterns](./docs/routing.md) - Route definitions, path parameters, nested routes
-- [Page Response Patterns](./docs/supported-flows.md) - How requests are dispatched to handlers and components
-- [Middleware](./docs/middleware.md) - Using middleware with your pages
-- [HTMX Integration](./docs/htmx.md) - Partial rendering and HTMX support
-- [URLFor & ID Generation](./docs/urlfor.md) - Type-safe URL and HTML id generation
-- [gsx Patterns](./docs/gsx.md) - Layouts, the Props pattern, partials and testing renders with gsx
-- [Using templ](./docs/templ.md) - What changes when your project renders with templ
-- [Advanced Features](./docs/advanced.md) - Dependency injection, Init, dynamic Refs, type aliases
-- [Testing renders](./docs/gsx.md#testing-renders-with-a-bare-context) - `structpages.Parse` + `sp.PageContext(ctx)` for unit tests that render components without an HTTP server
+The full docs live at <https://jackielii.github.io/structpages/>. Good starting points:
+
+- [Quick Start](https://jackielii.github.io/structpages/quick-start) and [Concepts](https://jackielii.github.io/structpages/concepts)
+- [Routing](https://jackielii.github.io/structpages/routing): the `route:"[method] path [Title]"` tag, path params, nesting
+- [gsx Patterns](https://jackielii.github.io/structpages/gsx) and [HTMX Integration](https://jackielii.github.io/structpages/htmx): layouts, the Props pattern, partial rendering
+- [URLFor & ID](https://jackielii.github.io/structpages/urlfor): type-safe URLs and element ids
+- [Dependency Injection](https://jackielii.github.io/structpages/dependency-injection), [Error Handling](https://jackielii.github.io/structpages/error-handling), [Middleware](https://jackielii.github.io/structpages/middleware)
+- [Testing](https://jackielii.github.io/structpages/testing) and [Lint](https://jackielii.github.io/structpages/lint)
+- [API Guide](https://jackielii.github.io/structpages/api)
 
 ## Examples
 
-Check out the [examples directory](./examples) for complete working applications:
-
-- [Simple](./examples/simple) - Basic routing and page rendering
-- [HTMX](./examples/htmx) - HTMX integration with partial updates
-- [HTMX RenderTarget](./examples/htmx-render-target) - Standalone-function components shared across pages, with per-component data loading via `RenderTarget`
-- [Todo](./examples/todo) - Full TODO app: form actions via `ServeHTTP` returning `RenderComponent(...)` to re-render a sibling component (in-memory store)
+Runnable apps live in [`examples/`](./examples); [examples/README.md](./examples/README.md) lists them in the order to read them.
 
 ## Lint Tool
 
-`structpages-lint` is a static analyzer that checks the most common ways `structpages` calls go wrong.
+`structpages-lint` checks every `URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call, `url`/`id`/`target` filter and hard-coded internal URL against the page tree rebuilt from your route tags, so a renamed route fails CI instead of becoming a 404:
 
 ```shell
-go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
-structpages-lint ./...
+go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest
+go tool structpages-lint ./...
 ```
 
-Categories:
-
-- `urlfor`, `ref`, `idfor`, `params` — checks `structpages.URLFor` / `Ref` / `ID` / `IDTarget` call sites against the reconstructed page tree. In gsx projects this covers every `|> url` / `|> id` / `|> target`, which gsx lowers to those calls in the generated `.x.go`; findings point back at the `.gsx` line. `params` checks both literal `map[string]any` keys and the constant keys of the key/value form (`url("id", x)`).
-- `url-attr` — scans `.gsx` and `.templ` files for URL-bearing HTML attributes (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concatenations, `fmt.Sprint*` calls or gsx `` f`/path/@{x}` `` templates — i.e. cases where you should have called `structpages.URLFor`. Allows `https://`, `mailto:`, `#`, protocol-relative `//`.
-- `route-literal` — scans `.go` files for string literals whose value exactly equals a mounted route (e.g. `return "/admin/queues"`), where you should resolve the URL by page type via `structpages.URLFor` instead, so renames break the build rather than drifting. Narrow by design: only an exact concrete-route match counts (param/`{$}` routes, trailing-slash and query variants, and the bare `/` never match); literals in `==`/`switch` comparisons and `Ref(...)` arguments are skipped (they read a route, not generate a URL), as are `_test.go` and generated files.
-
-Suppress a single diagnostic with a comment on the line or the line above. Prefer `//` in templates: Go-style comments never reach the HTML, while `<!-- … -->` HTML comments render into every response.
-
-```go
-//structpages:lint:ignore route-literal      // in .go files
-```
-
-```gsx
-// structpages:lint:ignore url-attr          // in .gsx files (bare, {/* … */}, or inside an attribute list)
-```
-
-```templ
-// structpages:lint:ignore url-attr          // in .templ files (preferred)
-<!-- structpages:lint:ignore url-attr -->    <!-- also works in .templ -->
-```
-
-In `.gsx` a directive covers every category, including findings on `|> url` / `|> id` / `|> target` calls (gsx v0.4.0+, which maps attribute holes to their real line).
+Categories, suppression and CI setup: [Lint](https://jackielii.github.io/structpages/lint).
 
 ## Claude Code Skill
 

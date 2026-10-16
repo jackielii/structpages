@@ -4,7 +4,7 @@ slug: /urlfor
 sidebar_position: 8
 ---
 
-# URLFor & ID Generation
+# URLFor & ID
 
 structpages provides type-safe helpers for generating URLs and DOM identifiers that stay in sync with the route tree:
 
@@ -12,6 +12,7 @@ structpages provides type-safe helpers for generating URLs and DOM identifiers t
 - **`Ref("Parent.Field")`** — string reference for cases the static type lookup can't handle.
 - **`ID(ctx, Page.Method)`** — raw HTML `id` attribute for a page component.
 - **`IDTarget(ctx, Page.Method)`** — `#`-prefixed CSS selector for HTMX `hx-target`.
+- **`Within(ctx, page)`** — whether the page being rendered is that page or below it, for active navigation.
 
 All are validated by the [`structpages-lint`](./lint.md) analyzer. **The rule of thumb: never write an in-app URL as a string literal** — resolve it by page type so the literal can't drift when routes move.
 
@@ -74,6 +75,23 @@ url, err := structpages.URLFor(ctx,
 )
 ```
 
+In markup the same form builds pagination links, one per page:
+
+```gsx
+component Pager(current int, total int, status string) {
+    <nav class="pager">
+        { for n := 1; n <= total; n++ {
+            <a
+                href={[]any{ListPage{}, "?page={page}&status={status}"} |> url(map[string]any{"page": n, "status": status})}
+                { if n == current { aria-current="page" } }
+            >
+                { n }
+            </a>
+        } }
+    </nav>
+}
+```
+
 ### Page groups resolve to their index
 
 A [page group](./concepts.md) is never served at its bare path — ServeMux matches only its subtree, and the bare path 307-redirects to add the trailing slash. So `URLFor` on a page group returns its index child's URL (the `/{$}` route) with the canonical trailing slash:
@@ -97,15 +115,85 @@ href, err := structpages.URLFor(ctx, siblingPage{})
 
 Only the current route's params auto-fill; sibling routes with different param names do not.
 
-## Ref
+## Dynamic references with Ref
 
-When the target page can't be referenced by static type — a cross-package import would cycle, or a Go type alias collapses two routes onto one `reflect.Type` — use `Ref` (a string type):
+When the target page can't be referenced by static type — a cross-package import would cycle, a configuration-driven menu stores its targets as data, or a Go type alias collapses two routes onto one `reflect.Type` — use `Ref` (a string type):
 
 ```go
-url, err := structpages.URLFor(ctx, structpages.Ref("Admin.Settings"))
+// By page field name
+url, err := structpages.URLFor(ctx, structpages.Ref("homePage"))
+
+// Qualified path, with params
+url, err := structpages.URLFor(ctx, structpages.Ref("Admin.ProductPage"),
+    map[string]any{"productId": "123"})
+
+// Composed with a URL fragment
+url, err := structpages.URLFor(ctx, []any{structpages.Ref("userPage"), "?tab=profile"})
 ```
 
-`Ref` resolves by field-name path in the page tree. The anchor segment matches a top-level node if one has that name, otherwise any uniquely-named node anywhere in the tree. An ambiguous anchor errors — qualify it with a parent segment. Ref strings are validated by `structpages-lint` (including refs stored in struct fields, e.g. a nav table), so a lint-passing Ref resolves at runtime.
+`Ref` resolves by field-name path in the page tree. The anchor segment matches a top-level node if one has that name, otherwise any uniquely-named node anywhere in the tree. An ambiguous anchor errors — qualify it with a parent segment. Ref strings are validated by `structpages-lint`, including refs stored in struct fields, so a lint-passing Ref resolves at runtime.
+
+For page components, `Ref("PageName.MethodName")` works with `ID`/`IDTarget`:
+
+```go
+id, err := structpages.ID(ctx, structpages.Ref("userPage.UserList"))
+// → "user-page-user-list"
+```
+
+An unqualified method name (`Ref("UserList")`) resolves only if exactly one page has that method; ambiguity errors with the candidates listed.
+
+### Example: configuration-driven menu
+
+```go
+type MenuItem struct {
+    PageRef structpages.Ref
+    Label   string
+}
+
+var menu = []MenuItem{
+    {structpages.Ref("home"), "Home"},
+    {structpages.Ref("users"), "Users"},
+    {structpages.Ref("settings"), "Settings"},
+}
+```
+
+```gsx
+component Navigation() {
+    <nav>
+        { for _, item := range menu {
+            <a href={item.PageRef |> url}>{ item.Label }</a>
+        } }
+    </nav>
+}
+```
+
+The `url` filter returns its error from `Render`, so the call site needs no error handling. `structpages-lint` checks the Refs stored in `menu`, so a renamed page fails CI; the [boot-time inventory](#validation-no-dangling-urls-in-production) covers deploys. To mark the item for the current page, see [Active navigation](#active-navigation).
+
+### Type aliases
+
+Go type aliases (`type X = Y`) are identical at runtime — `reflect.TypeOf` can't tell them apart. When a type and its alias are both mounted, a bare type lookup is ambiguous:
+
+```go
+type productPage struct{}
+type featuredProduct = productPage // alias — same reflect.Type
+
+type pages struct {
+    products productPage     `route:"/products Products"`
+    featured featuredProduct `route:"/featured Featured"`
+}
+
+// Errors: productPage matches two mounted nodes, and the error lists both.
+url, err := structpages.URLFor(ctx, featuredProduct{})
+```
+
+Disambiguate by field name:
+
+```go
+url, err := structpages.URLFor(ctx, structpages.Ref("featured"))     // → "/featured"
+id, err := structpages.IDTarget(ctx, structpages.Ref("featured.Page")) // → "#featured-page"
+```
+
+The `[]any{Parent{}, Leaf{}}` chain doesn't help here, since both mounts share one type. Aliases are fine for routing and rendering; only type-based lookup is affected.
 
 ## ID and IDTarget
 
@@ -121,6 +209,73 @@ component (p index) Content(props IndexProps) {
 ```
 
 `ID(ctx, index.TodoList)` returns the page's full field-name path joined with the method — `"index-todo-list"` for a top-level page, `"admin-users-todo-list"` when nested; `IDTarget` prepends `#`. Plain strings pass through both functions unchanged — `"body" |> target` is `"body"`, not `"#body"`. The full id scheme, multi-mount disambiguation, and the swap loop are covered in [HTMX Integration](./htmx.md).
+
+## Active navigation
+
+A nav bar marks the item the current page sits under. Ask `structpages.Within(ctx, page)` rather than matching URL prefixes: it reports whether the page being rendered is `page` or one of its descendants. `page` takes the forms `URLFor` takes (a page value, `Ref`, string, a `[]any` chain without string fragments, or a predicate).
+
+```go
+type managePages struct {
+    Inbox   inboxPage   `route:"/{$} Inbox"`
+    Tickets ticketPages `route:"/tickets Tickets"`
+}
+
+type ticketPages struct {
+    List   ticketList   `route:"/{$} Tickets"`
+    Detail ticketDetail `route:"/{number} Ticket"`
+}
+
+type navItem struct {
+    Label string
+    Page  any // any form URLFor takes as its page
+}
+
+type navLink struct {
+    Label  string
+    Href   string
+    Active bool
+}
+
+// navRail resolves its items against the page being served and renders them.
+type navRail []navItem
+
+var manageNav = navRail{
+    {Label: "Inbox", Page: structpages.Ref("Manage.Inbox")},
+    {Label: "Tickets", Page: structpages.Ref("Manage.Tickets")},
+}
+
+func (r navRail) Render(ctx context.Context, w io.Writer) error {
+    links := make([]navLink, 0, len(r))
+    for _, item := range r {
+        href, err := structpages.URLFor(ctx, item.Page)
+        if err != nil {
+            return err
+        }
+        active, err := structpages.Within(ctx, item.Page)
+        if err != nil {
+            return err
+        }
+        links = append(links, navLink{Label: item.Label, Href: href, Active: active})
+    }
+    return RailLinks(links).Render(ctx, w)
+}
+```
+
+```gsx
+component RailLinks(links []navLink) {
+    <nav class="rail">
+        { for _, l := range links {
+            <a href={l.Href} { if l.Active { aria-current="page" } }>{ l.Label }</a>
+        } }
+    </nav>
+}
+```
+
+- **A group covers its subtree.** "Tickets" is a group, so it is active on the list and on every `/tickets/{number}` page, with no args for the path parameter.
+- **Pages compare by node, not by path.** "Inbox" is the `/{$}` index leaf, so it is active only on the inbox, even though its URL is a prefix of the ticket URLs.
+- **Outside a page render** — no `CurrentPage` in ctx, such as a `ServeHTTP` page or a bare `PageContext` in a test — `Within` returns `false, nil`. A target that doesn't resolve is an error, so a renamed page fails the render instead of quietly never matching.
+
+`structpages.CurrentPage(ctx)` returns the matched leaf `*PageNode` itself if you need more than a yes/no; walk `Parent` for its ancestors.
 
 ## Validation: no dangling URLs in production
 

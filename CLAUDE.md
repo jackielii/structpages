@@ -102,7 +102,7 @@ When adding new features:
 
 The published site (https://jackielii.github.io/structpages/) is built from **two sources**:
 
-- **Markdown content** comes from `docs/*.md` (plus `README.md`, `PERFORMANCE.md`, `examples/README.md`) on `main` — the Docs Site workflow copies it in at build time.
+- **Markdown content** comes from `docs/*.md` and `examples/README.md` on `main`, plus a package reference generated with gomarkdoc — the Docs Site workflow copies it in at build time.
 - **The site shell** (VitePress config and sidebar in `.vitepress/config.mts`, homepage in `index.md`, the gsx TextMate grammar for ```` ```gsx ```` fences) lives on the separate `docs-site` branch, checked out as a worktree at `../structpages-docs-site`. New doc pages need a sidebar entry there.
 
 The workflow only auto-triggers on pushes to `main`. After pushing to `docs-site`, deploy manually with `gh workflow run "Docs Site"`. When changing repo-wide claims (e.g. the Alpha→Beta status, June 2026), remember the homepage hero in `index.md` on `docs-site` — it's hardcoded there and not covered by grepping `main`.

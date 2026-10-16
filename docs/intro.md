@@ -36,13 +36,15 @@ type productPages struct {
 
 Each page renders through a **Props method** (loads data) and a **Page method** (a gsx component), or handles the request imperatively with a **handler method** (`ServeHTTP`) — whichever fits the request shape. URLs are generated from page types (`{product{} |> url}` in gsx, `structpages.URLFor(ctx, product{})` in Go) rather than string concatenation, and the [`structpages-lint`](./lint.md) analyzer catches dangling references at build time.
 
-## How a request flows
-
-For a rendering page: **route match → Props method** (with a `RenderTarget` injected to pick the region) **→ page component render** — the full `Page` for normal loads, or a single partial for HTMX requests targeting that region's id. A handler method (`ServeHTTP`) bypasses this pipeline and responds imperatively.
+A request is matched to a page, its Props method loads data, and a page component renders: the whole page, or one region for an HTMX request. [Concepts](./concepts.md#request-lifecycle) walks through it.
 
 ## What's next
 
-- [Quick Start](./quick-start.md) — a minimal working example end-to-end.
-- [Concepts](./concepts.md) — the vocabulary: pages, page components, props, partials.
-- [Routing](./routing.md) — full route tag syntax and nesting rules.
-- [Page Response Patterns](./supported-flows.md) — choosing between Props/Page and ServeHTTP shapes.
+- [Quick Start](./quick-start.md) for a minimal working app, end to end.
+- [Concepts](./concepts.md) for the vocabulary the rest of these docs use.
+- [Routing](./routing.md) for the full tag syntax (HTTP methods, path params, titles).
+- [gsx Patterns](./gsx.md) for shared layouts and the Props pattern.
+- [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target`.
+- [Testing](./testing.md) for rendering pages and components in unit tests.
+- [Examples](./examples/index.md) for full working apps in `examples/` you can clone.
+- [Page Response Patterns](./supported-flows.md) for choosing between the Props/Page and `ServeHTTP` shapes.

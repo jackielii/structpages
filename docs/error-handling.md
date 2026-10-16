@@ -157,14 +157,7 @@ This works from *either* `ServeHTTP` form — the buffered wrapper implements `F
 
 ## Which form to use
 
-| Handler does… | `ServeHTTP` signature | Errors via |
-|---|---|---|
-| Renders HTML / HTMX partial | `(w, r, deps...) error` | `return ErrorWithStatus{…}` / `return err` |
-| Redirects | `(w, r, deps...) error` | `return Redirect{To: …}` |
-| Serves JSON / API | `(w, r, deps...)` *(no return)* | write `w` directly with a JSON error body |
-| Streams (SSE, progress) | either form + `http.NewResponseController` | SSE `event: error` frame, then `return nil` |
-
-Props methods follow the first row — return errors and they flow to `WithErrorHandler`. Props isn't buffered, so never write the body there.
+Pick the `ServeHTTP` signature by what the handler does; the four signatures and when each fits are in [Page Response Patterns](./supported-flows.md#servehttp-signatures). On the error side: HTML handlers and redirects return errors, JSON handlers write their own error bodies, and streams send an `event: error` frame. Props follows the HTML rule, but isn't buffered, so never write the body there.
 
 ## ErrSkipPageRender
 

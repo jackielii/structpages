@@ -9,7 +9,6 @@ on:
       - '**/*.go'
       - '!**/*_test.go'
       - 'README.md'
-      - 'PERFORMANCE.md'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -53,9 +52,8 @@ jobs:
       - name: Copy markdown content from main
         run: |
           set -euo pipefail
-          mkdir -p site/docs site/docs/about site/docs/reference site/docs/examples
+          mkdir -p site/docs site/docs/reference site/docs/examples
           cp main/docs/*.md site/docs/
-          cp main/PERFORMANCE.md site/docs/about/performance.md
           {
             printf -- '---\n'
             printf -- 'title: Examples\n'

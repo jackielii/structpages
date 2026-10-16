@@ -6,7 +6,7 @@ sidebar_position: 12
 
 # API Guide
 
-Hand-written guide to the public API. For generated godoc, see the [package reference](./reference/package.md).
+The curated guide to the public API: what each piece is for, and where the guides cover it. The generated [Package Reference](./reference/package.md) lists every exported symbol.
 
 ## Mount
 
@@ -52,7 +52,7 @@ func (sp *StructPages) PageContext(ctx context.Context) context.Context
 
 Use the method forms outside request context (initialization, boot-time validation, tests). Within request handlers and component renders, use the context-based package functions — the framework injects the parse context via internal middleware.
 
-`PageContext` wraps a bare context with `sp`'s page tree so the context-form functions resolve against it. The recommended test pattern: `Parse` once per package, wrap `context.Background()` in `PageContext`, render against the wrapped ctx (see [gsx Patterns](./gsx.md#testing-renders-with-a-bare-context)).
+`PageContext` wraps a bare context with `sp`'s page tree so the context-form functions resolve against it. The recommended test pattern: `Parse` once per package, wrap `context.Background()` in `PageContext`, render against the wrapped ctx (see [Testing](./testing.md#testing-renders-with-a-bare-context)).
 
 ## Context functions
 
@@ -68,7 +68,7 @@ Page-argument forms, params formats, strict-mode semantics, and chain compositio
 
 `CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state. Pages served by their own `ServeHTTP` do not set it.
 
-`Within` reports whether the current page is `page` or one of its descendants: the active-navigation test. `page` takes the forms `URLFor` takes (a page value, `Ref`, a top-level string, a `[]any` chain of page steps without string fragments, or a predicate). A group target matches every page under it, and pages compare by node, so a `/{$}` index leaf matches only itself, not its siblings. Outside a page render (no `CurrentPage`) it returns `false, nil`; a page that doesn't resolve is an error.
+`Within` reports whether the current page is `page` or one of its descendants: the active-navigation test. `page` takes the forms `URLFor` takes (a page value, `Ref`, a top-level string, a `[]any` chain of page steps without string fragments, or a predicate). A group target matches every page under it, and pages compare by node, so a `/{$}` index leaf matches only itself, not its siblings. Outside a page render (no `CurrentPage`) it returns `false, nil`; a page that doesn't resolve is an error. See [Active navigation](./urlfor.md#active-navigation).
 
 ## Options
 
@@ -78,7 +78,7 @@ Page-argument forms, params formats, strict-mode semantics, and chain compositio
 structpages.WithArgs(store, sessionManager, logger)
 ```
 
-Register dependency-injection values, matched by type into `Props` / `ServeHTTP` / `Middlewares` / `Init` parameters. Each type registers once; see [Advanced](./advanced.md#dependency-injection) for coercion rules and named-type disambiguation.
+Register dependency-injection values, matched by type into `Props` / `ServeHTTP` / `Middlewares` / `Init` parameters. Each type registers once; see [Dependency Injection](./dependency-injection.md) for the matching rules and named-type disambiguation.
 
 ### WithErrorHandler
 
@@ -118,7 +118,7 @@ Character budget for generated element ids before they degrade from the readable
 structpages.WithURLPrefix("/app")
 ```
 
-Prefix prepended to all generated URLs — for apps served under a sub-path.
+Prefix prepended to all generated URLs — for apps served under a sub-path. See [Serving under a path prefix](./routing.md#serving-under-a-path-prefix).
 
 ### WithWarnEmptyRoute
 
@@ -152,14 +152,7 @@ Loads data before render; the returned props struct is passed to the selected pa
 
 ### ServeHTTP
 
-Four signatures:
-
-```go
-func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request)                      // standard http.Handler, unbuffered
-func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request) error                // buffered; error → WithErrorHandler
-func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)        // DI, no return, unbuffered
-func (p T) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error  // DI, buffered
-```
+A page that handles the request itself: four signatures, with or without injected dependencies and an `error` return. Only the error-returning forms are buffered. The signatures are listed in [Page Response Patterns](./supported-flows.md#servehttp-signatures); the buffering rules are in [Error Handling](./error-handling.md).
 
 In the DI forms, `RenderTarget` is also injectable, so a handler method can branch on `target.Is(...)` before responding.
 
@@ -177,7 +170,7 @@ Page-specific middleware, also applied to all descendants.
 func (p *T) Init(deps ...) error
 ```
 
-One-time setup at `Mount`; errors abort the mount. See [Advanced](./advanced.md#initialization).
+One-time setup at `Mount`; errors abort the mount. See [Dependency Injection](./dependency-injection.md#init).
 
 ## RenderTarget
 
@@ -236,7 +229,3 @@ var ErrSkipPageRender = errors.New("skip page render")
 ```
 
 Return from `Props` to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-httpredirect)). Only the Props error path checks this sentinel.
-
-## Buffered response
-
-Only the error-returning `ServeHTTP` is buffered: on error the buffer is discarded and `WithErrorHandler` renders instead. `Props` and the no-return `ServeHTTP` forms write straight through. Rules, streaming and patterns: [Error Handling](./error-handling.md).

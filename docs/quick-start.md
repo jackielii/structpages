@@ -121,4 +121,5 @@ Open [http://localhost:8080](http://localhost:8080). You should see "Hello, stru
 - [Routing](./routing.md) for the full tag syntax (HTTP methods, path params, titles).
 - [gsx Patterns](./gsx.md) for shared layouts and the Props pattern.
 - [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target`.
+- [Testing](./testing.md) for rendering pages and components in unit tests.
 - [Examples](./examples/index.md) for full working apps in `examples/` you can clone.

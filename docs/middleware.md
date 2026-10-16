@@ -4,7 +4,7 @@ slug: /middleware
 sidebar_position: 10
 ---
 
-# Middleware Usage
+# Middleware
 
 `MiddlewareFunc` is standard Go middleware that also receives the route's `*PageNode`, so middleware can inspect page metadata:
 
