@@ -316,17 +316,9 @@ func (p Index) Props(r *http.Request, s *store.Store, sel structpages.RenderTarg
 }
 ```
 
-`RenderComponent` forms, preferred first:
-
-1. **Constructed component** — `RenderComponent(p.UserList(pane))`, `RenderComponent(<StatsWidget stats={stats}/>)`,
-   `RenderComponent(other{}.Row(row))`. Compile-time checked.
-2. **Method expression** — `RenderComponent(Index.ItemList)` or `RenderComponent(Index.ItemList, items)`:
-   the framework finds the mounted page and fills parameters you don't pass from `WithArgs` values and
-   `*PageNode` (not `*http.Request` or the writer). Use only when the component's parameters should be
-   injected; arguments are checked at runtime.
-3. **Via target** — `RenderComponent(sel, args...)` after `sel.Is(fn)` matched; `Is` stores the function
-   on match. Works with the built-in selectors (and custom selectors that delegate to them); any other
-   `RenderTarget` implementation is rejected.
+`RenderComponent` takes one constructed component — `RenderComponent(p.UserList(pane))`,
+`RenderComponent(<StatsWidget stats={stats}/>)`, `RenderComponent(other{}.Row(row))` — so the compiler
+checks its arguments. Pages are stateless, so a zero-value receiver builds another page's component.
 
 ### Nested swap levels
 

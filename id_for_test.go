@@ -999,39 +999,6 @@ func TestID_ErrorPaths(t *testing.T) {
 	}
 }
 
-// Test types for findPageNodeByTypeName
-type testPageWithMethod struct{}
-
-func (testPageWithMethod) ExistingMethod() component { return testComponent{content: "test"} }
-
-// Test findPageNodeByTypeName with method not found
-func TestFindPageNodeByTypeName_MethodNotFound(t *testing.T) {
-	type pages struct {
-		testPageWithMethod `route:"/ Test"`
-	}
-
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pages{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	// Try to find a method that doesn't exist on the page
-	info := &methodInfo{
-		isBound:          true,
-		receiverTypeName: "testPageWithMethod",
-		methodName:       "NonExistentMethod",
-	}
-
-	_, err = sp.pc.findPageNodeByTypeName(info.receiverTypeName, info.methodName)
-	if err == nil {
-		t.Error("Expected error for method not found")
-	}
-	if !strings.Contains(err.Error(), "method \"NonExistentMethod\" not found on page") {
-		t.Errorf("Expected 'method not found on page' error, got: %v", err)
-	}
-}
-
 // Test componentID with a nil node (standalone function)
 func TestComponentID_StandaloneFunction(t *testing.T) {
 	pc := &parseContext{maxIDLen: defaultMaxIDLen}
@@ -1047,32 +1014,4 @@ func TestComponentID_StandaloneFunction(t *testing.T) {
 	if id != "#user-stats-widget" {
 		t.Errorf("componentID with nil node (selector) = %q, want %q", id, "#user-stats-widget")
 	}
-}
-
-// Test findPageNodeForMethod panic with standalone function
-func TestFindPageNodeForMethod_PanicOnStandaloneFunction(t *testing.T) {
-	type pages struct {
-		testPageWithMethod `route:"/ Test"`
-	}
-
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pages{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	// Create a methodInfo for a standalone function
-	info := &methodInfo{
-		isFunction: true,
-		methodName: "StandaloneFunction",
-	}
-
-	// This should panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic when calling findPageNodeForMethod with standalone function")
-		}
-	}()
-
-	_, _ = sp.pc.findPageNodeForMethod(info)
 }

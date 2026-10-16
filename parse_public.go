@@ -31,13 +31,9 @@ func Parse(page any, route, title string, options ...Option) (*StructPages, erro
 	for _, opt := range options {
 		opt(sp)
 	}
-	pc, err := parsePageTree(route, page, sp.args...)
-	if err != nil {
+	if err := sp.parse(page, route, title); err != nil {
 		return nil, err
 	}
-	pc.root.Title = title
-	pc.urlPrefix = sp.urlPrefix
-	sp.pc = pc
 	return sp, nil
 }
 

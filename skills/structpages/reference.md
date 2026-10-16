@@ -226,7 +226,8 @@ type TargetSelector func(r *http.Request, pn *PageNode) (RenderTarget, error)
 
 `Is` accepts method expressions, bound methods and standalone functions. It matches a standalone function
 by its package-qualified id (the one `id` generates), and also by the bare or page-prefixed function id.
-For a function target, `Is` records the matched function; `RenderComponent(sel, args...)` needs that.
+For a function target, `Is` records that it matched; a request whose target no `Is` call matched falls back
+to `Page`.
 
 ### HTMXRenderTarget (default) and HTMXv4RenderTarget
 
@@ -242,23 +243,20 @@ htmx 4's `tag#id` `HX-Target` (falling back to the tag, so a `Form` component ma
 ### Custom selectors
 
 A custom `TargetSelector` should delegate to `HTMXRenderTarget` (or `HTMXv4RenderTarget`) and return
-its result: `RenderComponent(sel, ...)` only accepts the built-in target implementations, so a
-selector that returns its own `RenderTarget` type can use `Is` but not the via-target form.
+its result. Only the built-in targets render a selected component on their own, so with a target of
+your own type `Props` must return `RenderComponent` for every request it serves.
 
 ## RenderComponent
 
 ```go
-func RenderComponent(targetOrMethod any, args ...any) error
+func RenderComponent(comp interface{ Render(context.Context, io.Writer) error }) error
 ```
 
 Returned as an error from `Props` or a `ServeHTTP` that returns `error`; other `Props` results are ignored.
 
-| First argument | Args | Resolution |
-|---|---|---|
-| component value (`p.List(items)`, `<Widget n={1}/>`) | none | rendered directly; compile-time checked |
-| `RenderTarget` after `Is` matched | optional | method target: called on the current page; function target: the recorded function |
-| method expression `Index.List` / bound method | optional | owning mounted page found; missing params filled from `WithArgs` values and `*PageNode` |
-| other function | must match | called with `args` |
+`comp` is a constructed component: a page partial called with its arguments (`p.List(items)`,
+`Index{}.List(items)` for another page), a gsx element literal (`<Widget n={1}/>`), or any value with
+`Render(ctx, w)`. The compiler checks its arguments.
 
 Argument count and types are checked before the call and reported as errors.
 

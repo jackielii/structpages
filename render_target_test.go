@@ -171,9 +171,9 @@ func (standaloneTestPage) Page(data string) component {
 func (p standaloneTestPage) Props(r *http.Request, target RenderTarget) (string, error) {
 	switch {
 	case target.Is(AnotherStandaloneWidget):
-		return "", RenderComponent(target)
+		return "", RenderComponent(AnotherStandaloneWidget())
 	case target.Is(StandaloneWidget):
-		return "standalone data", RenderComponent(target, "standalone data")
+		return "standalone data", RenderComponent(StandaloneWidget("standalone data"))
 	case target.Is(p.Page):
 		return "page data", nil
 	default:
@@ -258,9 +258,9 @@ func TestFunctionRenderTarget_Is(t *testing.T) {
 		t.Error("Should match StandaloneWidget")
 	}
 
-	// funcValue should be set after match
-	if !frt.funcValue.IsValid() {
-		t.Error("funcValue should be set after Is() returns true")
+	// matched should be set after match
+	if !frt.matched {
+		t.Error("matched should be set after Is() returns true")
 	}
 
 	// Should NOT match AnotherStandaloneWidget
@@ -461,10 +461,9 @@ func (methodTargetPage) CustomComponent(data string) component {
 }
 
 func (p methodTargetPage) Props(r *http.Request, target RenderTarget) (string, error) {
-	// Check if target is CustomComponent and use RenderComponent with it
+	// Check if target is CustomComponent and render it with its data
 	if target.Is(methodTargetPage.CustomComponent) {
-		// This will hit renderOpFromTarget with methodRenderTarget
-		return "", RenderComponent(target, "method target data")
+		return "", RenderComponent(p.CustomComponent("method target data"))
 	}
 	return "page data", nil
 }

@@ -431,10 +431,6 @@ return MyPageProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}
 
 // Nothing.
 return structpages.RenderComponent(gsx.Text(""))
-
-// Parameters filled from WithArgs values and *PageNode, e.g.
-// component (p MyPage) RecentActivity(appCtx *AppContext).
-return structpages.RenderComponent(MyPage.RecentActivity)
 ```
 
 ---

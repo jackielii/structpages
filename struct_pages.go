@@ -144,10 +144,26 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 		opt(sp)
 	}
 
-	// Parse page tree
+	if err := sp.parse(page, route, title); err != nil {
+		return nil, err
+	}
+
+	// Register all pages
+	middlewares := append([]MiddlewareFunc{withPcCtx(sp.pc), extractURLParams}, sp.middlewares...)
+	if err := sp.registerPageItem(mux, sp.pc.root, middlewares); err != nil {
+		return nil, err
+	}
+
+	return sp, nil
+}
+
+// parse builds sp's page tree from page with the options already applied
+// to sp. Mount and Parse share it, so the tree and its ids are the same
+// whether or not routes are registered.
+func (sp *StructPages) parse(page any, route, title string) error {
 	pc, err := parsePageTree(route, page, sp.args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	pc.root.Title = title
 	pc.urlPrefix = sp.urlPrefix
@@ -156,18 +172,11 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 		// length-independent, so only the uniqueness check must re-run.
 		pc.maxIDLen = sp.maxIDLen
 		if err := pc.checkIDUniqueness(); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	sp.pc = pc
-
-	// Register all pages
-	middlewares := append([]MiddlewareFunc{withPcCtx(pc), extractURLParams}, sp.middlewares...)
-	if err := sp.registerPageItem(mux, pc.root, middlewares); err != nil {
-		return nil, err
-	}
-
-	return sp, nil
+	return nil
 }
 
 // WithArgs adds global dependency injection arguments that will be
@@ -378,7 +387,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 		props, err := sp.execProps(page, r, w, target)
 		if err != nil {
 			// Check if it's a render component error
-			if sp.handleRenderComponentError(w, r, err, page) {
+			if sp.handleRenderComponentError(w, r, err) {
 				return
 			}
 
@@ -417,9 +426,9 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 
 		if frt, ok := target.(*functionRenderTarget); ok {
 			// Check if this is a plain string ID (not a matched function)
-			// If funcValue is not valid, it means Props never called Is() with a matching function
+			// If no Is() call matched, Props never asked about a function with this id
 			// This indicates a static ID like "body" or "comments-list" that didn't match any component method
-			if !frt.funcValue.IsValid() {
+			if !frt.matched {
 				// Check if page has a Page() method to fallback to
 				// if the component method exists and Props returns values that fit the method's arguments, allow it
 				if pageMethod, hasPage := page.Components["Page"]; hasPage && pageMethod.Func.IsValid() {
@@ -439,9 +448,8 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 
 			sp.onError(w, r, fmt.Errorf(
 				"page %s: Component function '%s' is targeted but not handled. "+
-					"check target.Is(%s) and call RenderComponent(target, args...). "+
-					"Or build the component directly and call RenderComponent(component)",
-				page.Name, funcName, funcName))
+					"check target.Is(%s) and return RenderComponent(%s(...))",
+				page.Name, funcName, funcName, funcName))
 			return
 		}
 
@@ -500,7 +508,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				// Clear the buffer since we have an error
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pn) {
+				if sp.handleRenderComponentError(bw, r, err) {
 					return
 				}
 				// Write error directly to the buffered writer
@@ -549,7 +557,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				// - therefore this branch is only reachable when bw != nil
 				bw.buf.Reset()
 				// Check if it's a render component error
-				if sp.handleRenderComponentError(bw, r, err, pn) {
+				if sp.handleRenderComponentError(bw, r, err) {
 					return
 				}
 				sp.onError(bw, r, err)

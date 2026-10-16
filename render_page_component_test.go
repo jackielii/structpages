@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -43,9 +42,9 @@ func (c renderTestConditionalPage) Props(r *http.Request) (string, error) {
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return "", RenderComponent((*renderTestErrorPage).ErrorComponent, "Something went wrong")
+		return "", RenderComponent(renderTestErrorPage{}.ErrorComponent("Something went wrong"))
 	case "notfound":
-		return "", RenderComponent((*renderTestErrorPage).NotFoundComponent, "ignored")
+		return "", RenderComponent(renderTestErrorPage{}.NotFoundComponent("ignored"))
 	default:
 		return "success", nil
 	}
@@ -174,7 +173,7 @@ func (m multiArgComponent) Render(ctx context.Context, w io.Writer) error {
 type multiArgTestPage struct{}
 
 func (m multiArgTestPage) Props(r *http.Request) (string, error) {
-	return "", RenderComponent((*multiArgPage).MultiComponent, "test", 5, true)
+	return "", RenderComponent(multiArgPage{}.MultiComponent("test", 5, true))
 }
 
 func (m multiArgTestPage) Page(message string) component {
@@ -209,65 +208,6 @@ func TestRenderPageComponentMultipleArgs(t *testing.T) {
 	}
 }
 
-// Test error handling when page not found
-type invalidPageTestPage struct{}
-
-// Helper type that has methods but won't be registered
-type unregisteredPage struct{}
-
-func (u unregisteredPage) SomeComponent() component {
-	return renderTestSuccessComponent{message: "unregistered"}
-}
-
-func (i invalidPageTestPage) Props(r *http.Request) (string, error) {
-	// Reference a page that doesn't exist in the router
-	return "", RenderComponent((*unregisteredPage).SomeComponent)
-}
-
-func (i invalidPageTestPage) Page(message string) component {
-	return renderTestSuccessComponent{message: message}
-}
-
-// Test RenderPageComponent with invalid page
-func TestRenderPageComponentInvalidPage(t *testing.T) {
-	type pages struct {
-		invalidPageTestPage `route:"/invalid"`
-	}
-
-	var capturedError error
-	errorHandler := func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedError = err
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(errorHandler))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/invalid", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rec.Code)
-	}
-
-	if capturedError == nil {
-		t.Error("expected error to be captured")
-	} else {
-		expectedErrorSubstring := "no page node found"
-		if !strings.Contains(capturedError.Error(), expectedErrorSubstring) {
-			t.Errorf("expected error to contain %q, got %q", expectedErrorSubstring, capturedError.Error())
-		}
-	}
-}
-
-// Note: Test for "component not found" removed - with method expressions,
-// referencing a non-existent component is now a compile-time error, not a runtime error.
-// This is intentional and provides better type safety.
-
 // Test RenderPageComponent with different component methods
 type componentVariationsPage struct{}
 
@@ -275,9 +215,9 @@ func (c componentVariationsPage) Props(r *http.Request) (string, error) {
 	component := r.URL.Query().Get("component")
 	switch component {
 	case "header":
-		return "", RenderComponent((*headerPage).Page, "ignored")
+		return "", RenderComponent(headerPage{}.Page("ignored"))
 	case "footer":
-		return "", RenderComponent((*footerPage).Page, "© 2024")
+		return "", RenderComponent(footerPage{}.Page("© 2024"))
 	default:
 		return "default", nil
 	}
@@ -393,9 +333,9 @@ func (e errHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *http.
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return RenderComponent((*renderTestErrorPage).ErrorComponent, "Error from handler")
+		return RenderComponent(renderTestErrorPage{}.ErrorComponent("Error from handler"))
 	case "notfound":
-		return RenderComponent((*renderTestErrorPage).NotFoundComponent, "ignored")
+		return RenderComponent(renderTestErrorPage{}.NotFoundComponent("ignored"))
 	default:
 		_, _ = w.Write([]byte("<div>normal response</div>"))
 		return nil
@@ -461,9 +401,9 @@ func (e extendedHandlerWithRenderComponent) ServeHTTP(w http.ResponseWriter, r *
 	trigger := r.URL.Query().Get("trigger")
 	switch trigger {
 	case "error":
-		return RenderComponent((*renderTestErrorPage).ErrorComponent, "Error with logging: "+logger)
+		return RenderComponent(renderTestErrorPage{}.ErrorComponent("Error with logging: " + logger))
 	case "multi":
-		return RenderComponent((*multiArgPage).MultiComponent, "extended", 3, false)
+		return RenderComponent(multiArgPage{}.MultiComponent("extended", 3, false))
 	default:
 		_, _ = w.Write([]byte("<div>extended handler: " + logger + "</div>"))
 		return nil
@@ -530,7 +470,7 @@ type errHandlerWithRenderSamePageComponent struct{}
 
 func (e errHandlerWithRenderSamePageComponent) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.URL.Query().Get("alt") == "true" {
-		return RenderComponent((*errHandlerWithRenderSamePageComponent).AltView, "alternative view")
+		return RenderComponent(e.AltView("alternative view"))
 	}
 	_, _ = w.Write([]byte("<div>default view</div>"))
 	return nil
@@ -586,69 +526,6 @@ func TestRenderComponent_FromErrHandler(t *testing.T) {
 	}
 }
 
-// Test renderOpFromTarget with invalid funcValue
-func TestRenderOpFromTarget_InvalidFuncValue(t *testing.T) {
-	// Create a functionRenderTarget with no funcValue set
-	frt := &functionRenderTarget{
-		hxTarget: "test-target",
-		pageName: "TestPage",
-		// funcValue is left as zero value (invalid)
-	}
-
-	// Try to create renderOp from this target - should error
-	_, err := renderOpFromTarget(frt, nil)
-	if err == nil {
-		t.Error("Expected error when functionRenderTarget has invalid funcValue")
-	}
-	if !strings.Contains(err.Error(), "has no funcValue") {
-		t.Errorf("Expected 'has no funcValue' error, got: %v", err)
-	}
-}
-
-// Custom RenderTarget type for testing unsupported type error
-type unsupportedRenderTarget struct{}
-
-func (unsupportedRenderTarget) Is(any) bool { return false }
-
-// Test renderOpFromTarget with unsupported RenderTarget type
-func TestRenderOpFromTarget_UnsupportedType(t *testing.T) {
-	// Create an unsupported RenderTarget type
-	urt := unsupportedRenderTarget{}
-
-	// Try to create renderOp from this target - should error
-	_, err := renderOpFromTarget(urt, nil)
-	if err == nil {
-		t.Error("Expected error when renderOpFromTarget receives unsupported type")
-	}
-	if !strings.Contains(err.Error(), "unsupported RenderTarget type") {
-		t.Errorf("Expected 'unsupported RenderTarget type' error, got: %v", err)
-	}
-}
-
-// Test resolveRenderOp with direct component instance with args (error)
-func TestResolveRenderOp_ComponentWithArgs(t *testing.T) {
-	comp := testComponent{content: "test"}
-	err := RenderComponent(comp, "extra arg")
-	if err == nil {
-		t.Error("Expected error when RenderComponent called with component and args")
-	}
-	if !strings.Contains(err.Error(), "component instance cannot have args") {
-		t.Errorf("Expected 'cannot have args' error, got: %v", err)
-	}
-}
-
-// Test resolveRenderOp with non-function, non-component target
-func TestResolveRenderOp_InvalidTarget(t *testing.T) {
-	// Try to render a string (not a valid target type)
-	err := RenderComponent("not valid")
-	if err == nil {
-		t.Error("Expected error when RenderComponent called with invalid target")
-	}
-	if !strings.Contains(err.Error(), "must be a component, RenderTarget, or function") {
-		t.Errorf("Expected 'must be a component, RenderTarget, or function' error, got: %v", err)
-	}
-}
-
 // Test page that uses RenderComponent with direct component
 type directComponentPage struct{}
 
@@ -690,171 +567,5 @@ func TestRenderComponent_DirectComponent(t *testing.T) {
 	body := rec.Body.String()
 	if body != "Direct component" {
 		t.Errorf("Expected 'Direct component', got %q", body)
-	}
-}
-
-// Test page with a method that's NOT a component
-type pageWithNonComponentMethod struct{}
-
-func (pageWithNonComponentMethod) Page(data string) component {
-	return testComponent{content: "Page: " + data}
-}
-
-// This is NOT a component method (doesn't return component)
-func (pageWithNonComponentMethod) NonComponentMethod() string {
-	return "not a component"
-}
-
-// Test page that tries to render non-component method from another page
-type crossPageErrorPage struct{}
-
-func (crossPageErrorPage) Page(data string) component {
-	return testComponent{content: "CrossPage: " + data}
-}
-
-func (p crossPageErrorPage) Props(r *http.Request, target RenderTarget) (string, error) {
-	// Try to render a method from pageWithNonComponentMethod
-	// This method exists on the type but isn't registered as a component
-	return "", RenderComponent(pageWithNonComponentMethod.NonComponentMethod)
-}
-
-// Test error when method not found in Components map
-func TestHandleRenderComponentError_MethodNotInComponents(t *testing.T) {
-	type pages struct {
-		crossPageErrorPage         `route:"/ CrossPageError"`
-		pageWithNonComponentMethod `route:"/other Other"`
-	}
-
-	mux := http.NewServeMux()
-	var capturedErr error
-	sp, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-	_ = sp
-
-	// Make HTMX request
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "some-target")
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	// Should get error because NonComponentMethod is not in Components map
-	if capturedErr == nil {
-		t.Error("Expected error when method not in Components map")
-	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "not found in page") {
-		t.Errorf("Expected 'not found in page' error, got: %v", capturedErr)
-	}
-}
-
-// Function that returns wrong type (for testing executeRenderOp error)
-func badFunctionReturnsString() string {
-	return "not a component"
-}
-
-// Test page that tries to render function with wrong return type
-type renderBadFunctionPage struct{}
-
-func (renderBadFunctionPage) Page(data string) component {
-	return testComponent{content: "RenderBad: " + data}
-}
-
-func (p renderBadFunctionPage) Props(r *http.Request, target RenderTarget) (string, error) {
-	// Try to render a function that returns wrong type
-	return "", RenderComponent(badFunctionReturnsString)
-}
-
-// Test executeRenderOp error when function returns wrong type
-func TestHandleRenderComponentError_ExecuteRenderOpFails(t *testing.T) {
-	type pages struct {
-		renderBadFunctionPage `route:"/ RenderBad"`
-	}
-
-	mux := http.NewServeMux()
-	var capturedErr error
-	sp, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-	_ = sp
-
-	// Make HTMX request
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "some-target")
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	// Should get error because function returns wrong type
-	if capturedErr == nil {
-		t.Error("Expected error when function returns wrong type")
-	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error rendering component") {
-		t.Errorf("Expected 'error rendering component' error, got: %v", capturedErr)
-	}
-}
-
-// Custom unsupported RenderTarget
-type customUnsupportedTarget struct{}
-
-func (customUnsupportedTarget) Is(any) bool { return true }
-
-// Page that uses unsupported RenderTarget
-type unsupportedTargetPage struct{}
-
-func (unsupportedTargetPage) Page(data string) component {
-	return testComponent{content: "Page: " + data}
-}
-
-func (p unsupportedTargetPage) Props(r *http.Request, target RenderTarget) (string, error) {
-	// Create and use an unsupported RenderTarget type
-	customTarget := customUnsupportedTarget{}
-	return "", RenderComponent(customTarget)
-}
-
-// Test resolveRenderOp error when renderOpFromTarget fails
-func TestResolveRenderOp_RenderOpFromTargetError(t *testing.T) {
-	type pages struct {
-		unsupportedTargetPage `route:"/ UnsupportedTarget"`
-	}
-
-	mux := http.NewServeMux()
-	var capturedErr error
-	sp, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-	_ = sp
-
-	// Make HTMX request
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "some-target")
-
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	// Should get error because customUnsupportedTarget is not supported
-	if capturedErr == nil {
-		t.Error("Expected error when using unsupported RenderTarget type")
-	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "unsupported RenderTarget type") {
-		t.Errorf("Expected 'unsupported RenderTarget type' error, got: %v", capturedErr)
 	}
 }

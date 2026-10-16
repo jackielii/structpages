@@ -104,3 +104,28 @@ func TestWithMaxIDLength(t *testing.T) {
 		t.Errorf("with maxIDLen=8, id = %q, want compact 'item-box-<hash>' form", got)
 	}
 }
+
+// TestWithMaxIDLength_Parse pins that Parse honours the option too, so a
+// test rendering under Parse+PageContext gets the ids production does.
+func TestWithMaxIDLength_Parse(t *testing.T) {
+	mounted, err := Mount(http.NewServeMux(), &degRoot{}, "/", "App", WithMaxIDLength(8))
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	parsed, err := Parse(&degRoot{}, "/", "App", WithMaxIDLength(8))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ref := []any{degAlpha{}, degComp.Box}
+	want, err := mounted.IDTarget(ref)
+	if err != nil {
+		t.Fatalf("Mount IDTarget: %v", err)
+	}
+	got, err := parsed.IDTarget(ref)
+	if err != nil {
+		t.Fatalf("Parse IDTarget: %v", err)
+	}
+	if got != want {
+		t.Errorf("Parse id = %q, Mount id = %q; want equal", got, want)
+	}
+}

@@ -685,14 +685,14 @@ func (p renderComponentPage) Props(r *http.Request) (string, error) {
 	view := r.URL.Query().Get("view")
 	switch view {
 	case "partial":
-		// Use RenderComponent with custom args
-		return "ignored", RenderComponent((*renderComponentPage).PartialView, "custom partial data")
+		// Render a partial built with its own data
+		return "ignored", RenderComponent(p.PartialView("custom partial data"))
 	case "custom":
-		// Use RenderComponent with multiple args
-		return "ignored", RenderComponent((*renderComponentPage).CustomView, "test", 42)
+		// Render a partial built with several arguments
+		return "ignored", RenderComponent(p.CustomView("test", 42))
 	case "alt":
-		// Use RenderComponent without args - should use Props return value
-		return "props data", RenderComponent((*renderComponentPage).AltView, "props data")
+		// Render an alternative view
+		return "props data", RenderComponent(p.AltView("props data"))
 	default:
 		// Normal flow
 		return "default data", nil
@@ -1010,13 +1010,9 @@ func TestStructPages_IDFor(t *testing.T) {
 }
 
 // Test type for Error test
-type testPageError struct{}
-
-func (testPageError) Component() component { return testComponent{"test"} }
-
 // TestErrRenderComponent_Error tests the Error method of errRenderComponent
 func TestErrRenderComponent_Error(t *testing.T) {
-	err := RenderComponent(testPageError.Component)
+	err := RenderComponent(testComponent{"test"})
 	if err == nil {
 		t.Fatal("RenderComponent should return non-nil error")
 	}
@@ -1169,18 +1165,6 @@ func (extendedHandlerErrorPageWithReturn) ServeHTTP(w http.ResponseWriter, r *ht
 	return nil
 }
 
-// Test RenderComponent with invalid method expression (non-function)
-func TestHandleRenderComponentError_InvalidMethodExpr(t *testing.T) {
-	// RenderComponent should fail immediately with invalid input
-	err := RenderComponent("not a function") // Not a function, should fail
-	if err == nil {
-		t.Fatal("Expected RenderComponent to return error for invalid input")
-	}
-	if !strings.Contains(err.Error(), "target must be a component, RenderTarget, or function") {
-		t.Errorf("Expected 'target must be a component, RenderTarget, or function' error, got: %v", err)
-	}
-}
-
 // Test RenderComponent with function (standalone function component)
 func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	mux := http.NewServeMux()
@@ -1192,11 +1176,11 @@ func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", http.NoBody)
 	rec := httptest.NewRecorder()
 
-	// Create a function that returns a component (valid standalone function)
+	// Build the component with a standalone function
 	standaloneFunc := func() component { return testComponent{"test from function"} }
 
-	err = RenderComponent(standaloneFunc)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+	err = RenderComponent(standaloneFunc())
+	handled := sp.handleRenderComponentError(rec, req, err)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1205,75 +1189,6 @@ func TestHandleRenderComponentError_NoReceiver(t *testing.T) {
 	// Check that the component was rendered
 	if !strings.Contains(rec.Body.String(), "test from function") {
 		t.Errorf("Expected component to be rendered, got: %s", rec.Body.String())
-	}
-}
-
-// myComponentGetter implements componentGetter interface for testing
-type myComponentGetter struct {
-	data string
-}
-
-func (mcg myComponentGetter) Component() component {
-	return testComponent{mcg.data}
-}
-
-// Test RenderComponent with type that implements Component() method
-func TestRenderComponent_ComponentGetter(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Create a componentGetter
-	getter := myComponentGetter{data: "from component getter"}
-	err = RenderComponent(getter)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Check that the component was rendered
-	if !strings.Contains(rec.Body.String(), "from component getter") {
-		t.Errorf("Expected component to be rendered, got: %s", rec.Body.String())
-	}
-}
-
-// Test RenderComponent with method from unregistered page type
-func TestHandleRenderComponentError_PageNotFound(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	// Create a custom error handler that captures errors
-	var capturedErr error
-	sp.onError = func(w http.ResponseWriter, r *http.Request, err error) {
-		capturedErr = err
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Try to render component from unregistered page
-	err = RenderComponent(unregisteredPage.SomeComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	}
-	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "cannot find page for method expression") {
-		t.Errorf("Expected 'cannot find page for method expression' error, got: %v", capturedErr)
 	}
 }
 
@@ -1297,8 +1212,8 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// Trigger component render error
-	err = RenderComponent(errorComponentPage.ErrorComponent)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
+	err = RenderComponent(errorComponentPage{}.ErrorComponent())
+	handled := sp.handleRenderComponentError(rec, req, err)
 
 	if !handled {
 		t.Error("Expected handleRenderComponentError to handle the error")
@@ -1309,85 +1224,6 @@ func TestHandleRenderComponentError_ComponentCallError(t *testing.T) {
 	if capturedErr != nil && !strings.Contains(capturedErr.Error(), "error calling component") {
 		t.Logf("Got error: %v", capturedErr)
 	}
-}
-
-// Test handleRenderComponentError with args provided to RenderComponent
-func TestHandleRenderComponentError_WithArgs(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Trigger component render with args
-	err = RenderComponent(argsComponentTestPage.ComponentWithArgs, "arg1", 42)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Should have successfully rendered the component with args
-	result := rec.Body.String()
-	if !strings.Contains(result, "arg1") || !strings.Contains(result, "42") {
-		t.Errorf("Expected component to render with args, got: %s", result)
-	}
-}
-
-type argsComponentTestPage struct{}
-
-func (argsComponentTestPage) Page() component {
-	return testComponent{"page"}
-}
-
-func (argsComponentTestPage) ComponentWithArgs(s string, i int) component {
-	return testComponent{fmt.Sprintf("component: %s, %d", s, i)}
-}
-
-// TestRenderComponent_InsufficientArgs tests what happens when insufficient arguments
-// are provided to RenderComponent. The DI system should catch this and return an error.
-func TestRenderComponent_InsufficientArgs(t *testing.T) {
-	// Capture errors
-	var capturedErr error
-
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
-		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-			capturedErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Try to call a method that needs 2 args but only provide 1
-	err = RenderComponent((*argsComponentTestPage).ComponentWithArgs, "only-one-arg")
-
-	// This should be handled gracefully, not panic
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Should get an error response with clear message about missing argument
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	} else if !strings.Contains(capturedErr.Error(), "requires argument of type int") {
-		t.Errorf("Expected error about missing int argument, got: %v", capturedErr)
-	}
-	t.Logf("Error (as expected): %v", capturedErr)
-}
-
-// Standalone function for testing
-func standaloneComponentFunc(s string, i int) component {
-	return testComponent{fmt.Sprintf("standalone: %s, %d", s, i)}
 }
 
 // Standalone function with different params than page
@@ -1453,136 +1289,6 @@ func TestStandaloneFunctionHTMXTarget_NoTargetIsCheck(t *testing.T) {
 
 	// The old behavior expected an error, but the new behavior is more flexible:
 	// Pages with only Page() can handle any target ID without explicit target.Is() checks
-}
-
-// TestRenderComponent_StandaloneFunctionInsufficientArgs tests what happens when
-// a standalone function (not a method) is called with insufficient arguments.
-// Standalone functions bypass the DI system, so we need explicit validation.
-func TestRenderComponent_StandaloneFunctionInsufficientArgs(t *testing.T) {
-	// Capture errors
-	var capturedErr error
-
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
-		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-			capturedErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Try to call a standalone function with insufficient args
-	// Should now be handled gracefully with validation
-	err = RenderComponent(standaloneComponentFunc, "only-one-arg")
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Should get a clear error message, not a panic
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	}
-	errMsg := capturedErr.Error()
-	// Check for function name and argument count error
-	if !strings.Contains(errMsg, "standaloneComponentFunc") {
-		t.Errorf("Expected error to include function name, got: %v", capturedErr)
-	}
-	if !strings.Contains(errMsg, "expects 2 arguments but got 1") {
-		t.Errorf("Expected error about argument count mismatch, got: %v", capturedErr)
-	}
-	t.Logf("Error (as expected): %v", capturedErr)
-}
-
-// TestRenderComponent_TypeMismatch tests what happens when arguments have the wrong type.
-// This should return a clear error instead of panicking.
-func TestRenderComponent_TypeMismatch(t *testing.T) {
-	var capturedErr error
-
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test",
-		WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-			capturedErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}))
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// standaloneComponentFunc expects (string, int) but we pass (string, string)
-	// This should be caught by type validation
-	wrongTypeArg := reflect.ValueOf("not-an-int")
-	err = &errRenderComponent{
-		op: &renderOp{
-			callable: reflect.ValueOf(standaloneComponentFunc),
-			args:     []reflect.Value{reflect.ValueOf("test"), wrongTypeArg},
-		},
-	}
-
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Should get a clear error message about type mismatch, not a panic
-	if capturedErr == nil {
-		t.Error("Expected error to be captured")
-	}
-	errMsg := capturedErr.Error()
-	// Check for page name, function name, and type error
-	if !strings.Contains(errMsg, "argsComponentTestPage") {
-		t.Errorf("Expected error to include page name, got: %v", capturedErr)
-	}
-	if !strings.Contains(errMsg, "standaloneComponentFunc") {
-		t.Errorf("Expected error to include function name, got: %v", capturedErr)
-	}
-	if !strings.Contains(errMsg, "has type string, expected int") {
-		t.Errorf("Expected error about type mismatch, got: %v", capturedErr)
-	}
-	t.Logf("Error (as expected): %v", capturedErr)
-}
-
-// TestHandleRenderComponentError_BoundMethodWithArgs tests that bound methods with
-// arguments are properly detected and don't cause a panic. This was a bug in v0.1.0
-// where bound methods with arguments were not detected as bound (only methods with
-// zero args were detected), causing them to be incorrectly treated as unbound method
-// expressions, which led to "reflect: Call with too few input arguments" panic.
-func TestHandleRenderComponentError_BoundMethodWithArgs(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &argsComponentTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Create a bound method (instance.Method) with arguments
-	instance := argsComponentTestPage{}
-	boundMethod := instance.ComponentWithArgs
-
-	// Trigger component render with bound method - this should work without panic
-	err = RenderComponent(boundMethod, "bound", 99)
-	handled := sp.handleRenderComponentError(rec, req, err, sp.pc.root)
-
-	if !handled {
-		t.Error("Expected handleRenderComponentError to handle the error")
-	}
-
-	// Should have successfully rendered the component with args
-	result := rec.Body.String()
-	if !strings.Contains(result, "bound") || !strings.Contains(result, "99") {
-		t.Errorf("Expected component to render with args, got: %s", result)
-	}
 }
 
 // Test Props method that returns error
@@ -1812,9 +1518,9 @@ func (propsOnlyPage) TableView(props TableViewProps) component {
 func (p propsOnlyPage) Props(r *http.Request) error {
 	switch r.FormValue("view") {
 	case "card":
-		return RenderComponent(propsOnlyPage.CardView, CardViewProps{ViewMode: "card"})
+		return RenderComponent(p.CardView(CardViewProps{ViewMode: "card"}))
 	case "table":
-		return RenderComponent(propsOnlyPage.TableView, TableViewProps{ViewMode: "table"})
+		return RenderComponent(p.TableView(TableViewProps{ViewMode: "table"}))
 	default:
 		// Unknown view - return nil to trigger error
 		return nil
@@ -1836,15 +1542,15 @@ func (p propsOnlyPageWithTarget) Props(r *http.Request, target RenderTarget) err
 	// This should not panic even though no component is selected yet
 	if target.Is(propsOnlyPageWithTarget.CardView) {
 		// This branch should not execute since no component is selected
-		return RenderComponent(propsOnlyPageWithTarget.TableView, TableViewProps{ViewMode: "unexpected"})
+		return RenderComponent(p.TableView(TableViewProps{ViewMode: "unexpected"}))
 	}
 
 	// Select component based on query parameter
 	switch r.FormValue("view") {
 	case "card":
-		return RenderComponent(propsOnlyPageWithTarget.CardView, CardViewProps{ViewMode: "card"})
+		return RenderComponent(p.CardView(CardViewProps{ViewMode: "card"}))
 	default:
-		return RenderComponent(propsOnlyPageWithTarget.TableView, TableViewProps{ViewMode: "table"})
+		return RenderComponent(p.TableView(TableViewProps{ViewMode: "table"}))
 	}
 }
 
@@ -2165,137 +1871,6 @@ func TestPropsOnlyPageWithRenderTarget(t *testing.T) {
 		if rec.Body.String() != "Card View: card" {
 			t.Errorf("expected body %q, got %q", "Card View: card", rec.Body.String())
 		}
-	}
-}
-
-// Test RenderComponent edge cases for coverage
-func TestRenderComponent_EdgeCases(t *testing.T) {
-	// Test componentGetter with args (should error)
-	getter := myComponentGetter{data: "test"}
-	err := RenderComponent(getter, "extra arg")
-	if err == nil {
-		t.Fatal("Expected error when passing args to componentGetter")
-	}
-	if !strings.Contains(err.Error(), "componentGetter cannot have args") {
-		t.Errorf("Expected 'componentGetter cannot have args' error, got: %v", err)
-	}
-
-	// Test direct component with args (should error)
-	comp := testComponent{"test"}
-	err = RenderComponent(comp, "extra arg")
-	if err == nil {
-		t.Fatal("Expected error when passing args to component instance")
-	}
-	if !strings.Contains(err.Error(), "component instance cannot have args") {
-		t.Errorf("Expected 'component instance cannot have args' error, got: %v", err)
-	}
-
-	// Test with non-function, non-component, non-RenderTarget
-	err = RenderComponent(struct{ Name string }{"test"})
-	if err == nil {
-		t.Fatal("Expected error for non-component struct")
-	}
-	if !strings.Contains(err.Error(), "target must be a component, RenderTarget, or function") {
-		t.Errorf("Expected 'target must be' error, got: %v", err)
-	}
-}
-
-// Test executeRenderOp error paths
-func TestExecuteRenderOp_Errors(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, &handleErrorTestPage{}, "/", "Test")
-	if err != nil {
-		t.Fatalf("Mount failed: %v", err)
-	}
-
-	// Test function that doesn't return a component
-	badFunc := func() string { return "not a component" }
-	op := &renderOp{
-		callable: reflect.ValueOf(badFunc),
-		args:     []reflect.Value{},
-	}
-
-	_, err = sp.executeRenderOp(op, sp.pc.root)
-	if err == nil {
-		t.Fatal("Expected error for function not returning component")
-	}
-	if !strings.Contains(err.Error(), "must return component") {
-		t.Errorf("Expected 'must return component' error, got: %v", err)
-	}
-
-	// Test function that returns wrong number of values
-	multiReturnFunc := func() (component, error) {
-		return testComponent{"test"}, nil
-	}
-	op2 := &renderOp{
-		callable: reflect.ValueOf(multiReturnFunc),
-		args:     []reflect.Value{},
-	}
-
-	_, err = sp.executeRenderOp(op2, sp.pc.root)
-	if err == nil {
-		t.Fatal("Expected error for function returning multiple values")
-	}
-	if !strings.Contains(err.Error(), "must return single value") {
-		t.Errorf("Expected 'must return single value' error, got: %v", err)
-	}
-
-	// Test method without page context
-	method := reflect.Method{}
-	op3 := &renderOp{
-		method: &method,
-		args:   []reflect.Value{},
-	}
-
-	_, err = sp.executeRenderOp(op3, nil)
-	if err == nil {
-		t.Fatal("Expected error for method without page context")
-	}
-	if !strings.Contains(err.Error(), "cannot execute method without page context") {
-		t.Errorf("Expected 'cannot execute method without page context' error, got: %v", err)
-	}
-
-	// Test renderOp with nothing set
-	op4 := &renderOp{}
-	_, err = sp.executeRenderOp(op4, sp.pc.root)
-	if err == nil {
-		t.Fatal("Expected error for empty renderOp")
-	}
-	if !strings.Contains(err.Error(), "renderOp has no component, method, or callable") {
-		t.Errorf("Expected 'renderOp has no' error, got: %v", err)
-	}
-}
-
-// customTestTarget is an unsupported RenderTarget type for testing
-type customTestTarget struct{}
-
-func (ct customTestTarget) Is(any) bool { return false }
-
-// Test renderOpFromTarget error paths
-func TestRenderOpFromTarget_Errors(t *testing.T) {
-	// Test custom RenderTarget type (unsupported)
-	ct := customTestTarget{}
-	_, err := renderOpFromTarget(ct, []reflect.Value{})
-	if err == nil {
-		t.Fatal("Expected error for unsupported RenderTarget type")
-	}
-	if !strings.Contains(err.Error(), "unsupported RenderTarget type") {
-		t.Errorf("Expected 'unsupported RenderTarget type' error, got: %v", err)
-	}
-
-	// Test functionRenderTarget without funcValue set
-	frt := &functionRenderTarget{
-		hxTarget: "test",
-		pageName: "Test",
-		// funcValue not set (Is() was not called)
-	}
-
-	_, err = renderOpFromTarget(frt, []reflect.Value{})
-	if err == nil {
-		t.Fatal("Expected error for functionRenderTarget without funcValue")
-	}
-	if !strings.Contains(err.Error(), "did you call target.Is() first") {
-		t.Errorf("Expected 'did you call target.Is() first' error, got: %v", err)
 	}
 }
 

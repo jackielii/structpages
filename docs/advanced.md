@@ -61,9 +61,9 @@ func (p userPage) Props(r *http.Request, apiKey APIKey, dbName DatabaseName) (Us
 }
 ```
 
-**Type matching with coercion.** The argument registry coerces between pointer and value forms and falls back to assignability. One concrete consequence: a single `*AppContext` registration can fill a parameter typed as any interface that `*AppContext` implements — register concrete types, declare interface parameters where it helps testability.
+**Type matching.** Parameters match registrations by type. A registered pointer also fills a parameter of its value type (`*AppContext` fills `AppContext`), but not the reverse: a registered value can't fill a pointer parameter. A concrete registration does not fill an interface-typed parameter, so declare the parameter as the type you registered.
 
-**Generic types and interface types both work** — type parameters, slices/maps as deps, aliases, function types, complex constraints, pointer semantics, and interface injection are all covered by the library's test matrix. Anywhere these docs say "type", read it as "any reflect-distinguishable type".
+**Generic types work** — type parameters, slices/maps as deps, aliases, function types and complex constraints are all covered by the library's test matrix. Anywhere these docs say "type", read it as "any reflect-distinguishable type".
 
 `*structpages.PageNode` is always available for injection — the framework adds the current node automatically.
 

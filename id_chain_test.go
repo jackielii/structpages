@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -124,5 +125,27 @@ func TestID_ChainFormErrors(t *testing.T) {
 				t.Errorf("error %q does not contain %q", err.Error(), tc.wantInErr)
 			}
 		})
+	}
+}
+
+// TestID_ChainFormLeavesCallerSliceIntact pins that resolving a chain
+// ending in a method expression doesn't write the implicit receiver step
+// into the caller's slice, so a stored chain can be reused.
+func TestID_ChainFormLeavesCallerSliceIntact(t *testing.T) {
+	sp, err := Mount(http.NewServeMux(), &degRoot{}, "/", "App")
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	ref := []any{degAlpha{}, degComp.Box}
+	first, err := sp.IDTarget(ref)
+	if err != nil {
+		t.Fatalf("first IDTarget: %v", err)
+	}
+	second, err := sp.IDTarget(ref)
+	if err != nil {
+		t.Fatalf("second IDTarget on the same slice: %v", err)
+	}
+	if first != second {
+		t.Errorf("same chain gave %q then %q", first, second)
 	}
 }

@@ -124,7 +124,7 @@ func (c complexErrorPage) WithHeaders() component {
 
 func (c complexErrorPage) Props(r *http.Request) error {
 	if r.URL.Query().Get("headers") == "true" {
-		return RenderComponent((*complexErrorPage).WithHeaders)
+		return RenderComponent(c.WithHeaders())
 	}
 	return nil
 }

@@ -10,7 +10,7 @@ The error-returning forms of `ServeHTTP` run against a *buffered* response write
 
 ## The rules
 
-1. **Never call `http.Error` (or write `w`) in an error-returning handler or in Props.** If you write then `return err`, the write is discarded; if you write then `return nil`, you bypass the error handler. Just return the error.
+1. **Never call `http.Error` (or write `w`) in an error-returning handler or in Props.** In an error-returning `ServeHTTP`, a write followed by `return err` is discarded; in Props it has already been sent, and the error page is appended to it. A write followed by `return nil` bypasses the error handler either way. Just return the error.
 2. **For a specific status code, return a typed error** that the global handler unwraps with `errors.As`. Plain errors fall through to a logged 500.
 3. **API/JSON endpoints use the no-error `ServeHTTP` form** — direct `w` writes are correct there because you own the status code and skip the buffering wrapper. Write JSON error bodies, not `http.Error`.
 4. **For streaming (SSE), flush with `http.NewResponseController(w)`** — it works from either `ServeHTTP` form and is the only way to guarantee unbuffered delivery through middleware.
@@ -128,7 +128,10 @@ func (p trackTime) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Stor
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
-    json.NewEncoder(w).Encode(map[string]string{"error": msg})
+    if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+        // The status is already sent; all that's left is to record it.
+        slog.Error("write JSON error body", "error", err)
+    }
 }
 ```
 
@@ -165,4 +168,4 @@ Props methods follow the first row — return errors and they flow to `WithError
 
 ## ErrSkipPageRender
 
-If a Props method writes the response itself (rare — prefer the `Redirect` signal), return `structpages.ErrSkipPageRender` to skip rendering. Only the Props error path checks this sentinel; returning it from `ServeHTTP` does nothing special.
+If a Props method writes the response itself (rare — prefer the `Redirect` signal), return `structpages.ErrSkipPageRender` to skip rendering. Only the Props error path checks this sentinel; returned from `ServeHTTP` it is an ordinary error, and the error page renders.

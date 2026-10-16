@@ -23,12 +23,10 @@ type index struct {
 }
 
 func (p index) Props(r *http.Request, target structpages.RenderTarget) ([]Todo, error) {
-    switch {
-    case target.Is(p.TodoList):
-        return getActiveTodos(), nil // partial update — load only what it needs
-    default:
-        return getAllTodos(), nil // full page
+    if target.Is(p.TodoList) {
+        return getActiveTodos() // partial update — load only what it needs
     }
+    return getAllTodos() // full page
 }
 ```
 
@@ -123,7 +121,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 }
 ```
 
-**Prefer passing the component instance.** `index{}.TodoList(todos)` is a normal Go call — the compiler checks argument types and counts — and page structs are stateless, so a zero-value receiver constructs a *sibling* page's component just as well as your own. Passing the component method itself is also supported — `RenderComponent(index.TodoList, todos)` — and the framework will find the page, DI-inject any injectable parameters, and fill the rest from the args; but those checks happen at runtime, so reserve it for components whose parameters genuinely need framework DI (see [HTMX Integration](./htmx.md)).
+**Pass a constructed component.** `index{}.TodoList(todos)` is a normal Go call — the compiler checks argument types and counts — and page structs are stateless, so a zero-value receiver constructs a *sibling* page's component just as well as your own.
 
 ## A handler method that redirects
 

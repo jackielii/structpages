@@ -110,7 +110,7 @@ Replace the default `HTMXRenderTarget` — e.g. with the htmx 4 variant, or a cu
 structpages.WithMaxIDLength(60) // default 40
 ```
 
-Character budget for generated element ids before they degrade from the readable full-path form (`admin-users-user-list`) to the compact leaf-only form (`user-list`, plus a stable hash suffix when the leaf name is not unique). Affects id generation only, never routing.
+Character budget for generated element ids before they degrade from the readable full-path form (`admin-users-user-list`) to the compact form of the last path segment and the method (`users-user-list`, plus a stable hash suffix when the leaf name is not unique). Affects id generation only, never routing.
 
 ### WithURLPrefix
 
@@ -128,7 +128,7 @@ structpages.WithWarnEmptyRoute(func(pn *structpages.PageNode) {
 })
 ```
 
-Customize or suppress (`func(*PageNode) {}`) warnings for pages with no handler and no children.
+Called for each page with no handler and no children, which is otherwise skipped silently. Nothing is reported by default.
 
 ## Page methods
 
@@ -192,29 +192,18 @@ Represents the page component selected for this request. Injected into Props (an
 ## RenderComponent
 
 ```go
-func RenderComponent(targetOrMethod any, args ...any) error
+func RenderComponent(comp interface{ Render(context.Context, io.Writer) error }) error
 ```
 
 Returns a sentinel error instructing the framework to render a specific component. Honored in the Props error path and the buffered-`ServeHTTP` error path; when returned from Props, the other return values are ignored.
 
-**Direct (preferred — compile-time-checked):**
+`comp` is any component — a `gsx.Node`, a `templ.Component`, or a page partial called with its arguments — so the compiler checks those arguments at the call site:
 
 ```go
 return MyProps{}, structpages.RenderComponent(p.UserList(users))      // same page
 return structpages.RenderComponent(index{}.TodoList(todos))           // another page — zero-value receiver
 return MyProps{}, structpages.RenderComponent(UserStatsWidget(stats)) // standalone component
 ```
-
-**Reflective (framework finds the page and applies DI):**
-
-```go
-return structpages.RenderComponent(MyPage.ItemList)        // params DI-injected by the framework
-return structpages.RenderComponent(MyPage.ItemList, items) // explicit args fill non-injected params, checked at runtime
-```
-
-Reserve the reflective form for components whose parameters the framework should DI-inject. Argument count and assignability are validated before the call — mismatches surface as readable errors, but at runtime, not compile time.
-
-A custom `RenderTarget` that also implements `Component() component` can be rendered with `RenderComponent(target)` (no args).
 
 ## HTMXRenderTarget
 
@@ -250,4 +239,4 @@ Return from `Props` to skip rendering when the response was written directly (ra
 
 ## Buffered response
 
-Error-returning `ServeHTTP` (and every `Props`) runs against a buffered writer: on error the buffer is discarded and `WithErrorHandler` renders instead. The no-return forms are unbuffered. For streaming through either form, `http.NewResponseController(w)` reaches the real flusher via the `Unwrap()` chain. Full rules and patterns: [Error Handling](./error-handling.md).
+Only the error-returning `ServeHTTP` is buffered: on error the buffer is discarded and `WithErrorHandler` renders instead. `Props` and the no-return `ServeHTTP` forms write straight through. Rules, streaming and patterns: [Error Handling](./error-handling.md).

@@ -50,8 +50,7 @@ type Ref string
 //	func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
 //	    switch {
 //	    case target.Is(UserStatsWidget):
-//	        stats := loadUserStats()
-//	        return DashboardProps{}, RenderComponent(target, stats)
+//	        return DashboardProps{}, RenderComponent(UserStatsWidget(loadUserStats()))
 //	    case target.Is(p.Page):
 //	        return DashboardProps{Stats: loadAll()}, nil
 //	    }
@@ -137,9 +136,9 @@ func (mrt *methodRenderTarget) Is(method any) bool {
 
 // functionRenderTarget is the concrete implementation for function components.
 type functionRenderTarget struct {
-	hxTarget  string        // Raw HX-Target from request (e.g., "dashboard-page-user-stats-widget")
-	pageName  string        // Page name for normalization (e.g., "DashboardPage")
-	funcValue reflect.Value // Stored when Is() finds a match (lazy evaluation)
+	hxTarget string // Raw HX-Target from request (e.g., "dashboard-page-user-stats-widget")
+	pageName string // Page name for normalization (e.g., "DashboardPage")
+	matched  bool   // Set when Is() matches a function
 }
 
 func (frt *functionRenderTarget) Is(method any) bool {
@@ -164,7 +163,7 @@ func (frt *functionRenderTarget) Is(method any) bool {
 	// only the overlay slot, never the drawer's. Generate the element's id with
 	// structpages.ID(ctx, fn) and this is the match you get.
 	if info.packageName != "" && normalized == camelToKebab(info.packageName)+"-"+funcKebab {
-		frt.funcValue = reflect.ValueOf(method)
+		frt.matched = true
 		return true
 	}
 
@@ -174,7 +173,7 @@ func (frt *functionRenderTarget) Is(method any) bool {
 	// package-qualified id above when cross-package uniqueness matters.
 	pageStripped := strings.TrimPrefix(normalized, camelToKebab(frt.pageName)+"-")
 	if normalized == funcKebab || pageStripped == funcKebab {
-		frt.funcValue = reflect.ValueOf(method)
+		frt.matched = true
 		return true
 	}
 

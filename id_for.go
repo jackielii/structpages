@@ -163,7 +163,9 @@ func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool
 		return "", errors.New("ID: empty []any chain")
 	}
 	last := parts[len(parts)-1]
-	chainSteps := parts[:len(parts)-1]
+	// Cap the capacity so appending the method expression's receiver step
+	// below copies instead of overwriting the caller's last element.
+	chainSteps := parts[: len(parts)-1 : len(parts)-1]
 
 	var methodName string
 	var fromMethodExpr *methodInfo
@@ -366,55 +368,6 @@ func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 	// matching a same-named type that doesn't have the method.
 	_, found := pointerType(nodeType).MethodByName(info.methodName)
 	return found
-}
-
-// findPageNodeForMethod finds a page node using the method info.
-// Only call this for methods, not for standalone functions.
-func (p *parseContext) findPageNodeForMethod(info *methodInfo) (*PageNode, error) {
-	if info.isFunction {
-		panic("findPageNodeForMethod called with standalone function")
-	}
-
-	if info.isBound {
-		// Find by type name string
-		return p.findPageNodeByTypeName(info.receiverTypeName, info.methodName)
-	}
-	// Find by reflect.Type
-	return p.findPageNodeByType(info.receiverType)
-}
-
-// findPageNodeByTypeName finds a PageNode by matching its type name.
-// Also verifies that the method exists on the page.
-func (p *parseContext) findPageNodeByTypeName(typeName, methodName string) (*PageNode, error) {
-	for node := range p.root.All() {
-		nodeType := node.Value.Type()
-		nodeTypeName := nodeType.Name()
-		if nodeType.Kind() == reflect.Pointer {
-			nodeTypeName = nodeType.Elem().Name()
-		}
-		if nodeTypeName == typeName {
-			// Verify the method exists
-			if _, found := nodeType.MethodByName(methodName); !found {
-				return nil, fmt.Errorf("method %q not found on page %q", methodName, node.Name)
-			}
-			return node, nil
-		}
-	}
-	return nil, fmt.Errorf("no page node found with type name %q", typeName)
-}
-
-// findPageNodeByType finds a PageNode by its receiver type.
-func (p *parseContext) findPageNodeByType(receiverType reflect.Type) (*PageNode, error) {
-	// Normalize to pointer type for comparison
-	targetType := pointerType(receiverType)
-
-	for node := range p.root.All() {
-		nodeType := pointerType(node.Value.Type())
-		if targetType == nodeType {
-			return node, nil
-		}
-	}
-	return nil, fmt.Errorf("no page node found for type %s", targetType.String())
 }
 
 // idForRef handles dynamic method references using the Ref type.

@@ -109,7 +109,7 @@ Route definitions use the format `[method] path [Title]`:
 
 - [API Reference](./docs/api.md) - Complete API documentation for Mount, options, and methods
 - [Routing Patterns](./docs/routing.md) - Route definitions, path parameters, nested routes
-- [Supported Request Flows](./docs/supported-flows.md) - How requests are dispatched to handlers and components
+- [Page Response Patterns](./docs/supported-flows.md) - How requests are dispatched to handlers and components
 - [Middleware](./docs/middleware.md) - Using middleware with your pages
 - [HTMX Integration](./docs/htmx.md) - Partial rendering and HTMX support
 - [URLFor & ID Generation](./docs/urlfor.md) - Type-safe URL and HTML id generation

@@ -25,7 +25,6 @@ component (p index) Content(props IndexProps) {
         name="q"
         hx-get={index{} |> url}
         hx-target={index.TodoList |> target}
-        hx-swap="outerHTML"
     />
     // Site 1 — composition: set the element id on the component's wrapper
     <div id={index.TodoList |> id}>
@@ -191,10 +190,6 @@ component (p TeamManagementView) GroupList(pane GroupPaneProps) {
 
 Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running. The composition site passes the same pane struct (`props.UserPaneProps`) the partial branch builds — full render and partial re-render share one component signature.
 
-### Why `RenderComponent(p.X(args))` and not `RenderComponent(target, args)`
-
-`p.GroupList(groups)` is a normal Go call — the compiler checks argument types and counts. The reflective forms (`RenderComponent(target, args)`, `RenderComponent(index.TodoList, args)`) defer those checks to runtime. Use the reflective method-expression form only for components whose parameters the framework should DI-inject; for everything else, construct the component.
-
 ### Overriding the selection
 
 Props can render a different component than the one selected — return any constructed component:
@@ -280,17 +275,12 @@ sp, err := structpages.Mount(mux, pages{}, "/", "App",
 )
 ```
 
-For fully custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`), typically delegating to `HTMXRenderTarget` for the cases you don't override. If your target also implements `Component() component`, then `RenderComponent(target)` (no args) renders it directly:
+For fully custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`), typically delegating to `HTMXRenderTarget` for the cases you don't override. Only the built-in targets render a selected component on their own, so for a target of your own type `Props` returns `RenderComponent` itself, type-asserting the target to read what it carries:
 
 ```go
 type jsonTarget struct{ data any }
 
 func (t jsonTarget) Is(method any) bool { return false }
-func (t jsonTarget) Component() component {
-    return gsx.Func(func(ctx context.Context, w io.Writer) error {
-        return json.NewEncoder(w).Encode(t.data)
-    })
-}
 
 sp, err := structpages.Mount(mux, pages{}, "/", "App",
     structpages.WithTargetSelector(func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
@@ -300,6 +290,13 @@ sp, err := structpages.Mount(mux, pages{}, "/", "App",
         return structpages.HTMXRenderTarget(r, pn)
     }),
 )
+
+func (p dashboard) Props(r *http.Request, sel structpages.RenderTarget) (dashboardProps, error) {
+    if jt, ok := sel.(jsonTarget); ok {
+        return dashboardProps{}, structpages.RenderComponent(jsonView(jt.data))
+    }
+    return p.fullProps(r)
+}
 ```
 
 The exact matching algorithm (including the authoritative pass against real generated ids) is documented in the [API reference](./api.md#htmxrendertarget).

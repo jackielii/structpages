@@ -165,8 +165,6 @@ func (a addTodo) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store)
 
 For a standalone component, a handler written in a `.gsx` file can return markup directly, since an element literal is a Go expression there: `structpages.RenderComponent(<TodoList todos={todos}/>)`. In a `.go` file call the generated function: `TodoList(todos)`.
 
-The reflective method-expression form — `RenderComponent(index.TodoList)` with no constructed component — exists for page components whose parameters the framework should DI-inject rather than you supplying them. Prefer direct construction whenever you're loading the data yourself anyway.
-
 ## Testing renders with a bare context
 
 Unit tests that render components directly — without an HTTP server — need a page tree in the context so the `url` / `id` / `target` filters (`URLFor` / `ID` / `IDTarget`) resolve. Use `structpages.Parse` (builds the tree, no mux) and `sp.PageContext`:
