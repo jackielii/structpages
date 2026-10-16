@@ -46,7 +46,7 @@ func checkRefLiterals(ctx *checkCtx) {
 			}
 			// Validate as a URLFor ref: the full dotted path must resolve
 			// to a page. resolveRef reports on failure.
-			resolveRef(ctx, lit.Pos(), val, false)
+			ctx.inSomeTree(func() { resolveRef(ctx, lit.Pos(), val, false) })
 			return true
 		})
 	}

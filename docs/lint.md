@@ -37,6 +37,16 @@ The linter needs Go 1.26, and `go get -tool` raises your module's `go` line to m
 - In gsx projects, generate first (`go tool gsx generate .`): template filters are checked through the
   generated `.x.go`.
 
+### Several trees
+
+Every `structpages.Mount` and `structpages.Parse` call builds its own tree: the app's, a standalone preview
+binary's, and every test fixture's. The runtime resolves `URLFor`, `ID` and `Ref` against the one tree
+serving the request, and the linter does the same. A call is checked against the trees mounted by a binary
+or test binary that compiles the call in, and it passes if any of them resolves it. A test tree that stubs
+a section out, or mounts it at `/` instead of `/orbit`, doesn't produce findings in production code.
+A type is ambiguous only when a single tree mounts it at two routes. A finding is worded from a production
+tree when one applies.
+
 ## What it checks
 
 | Category | What it flags |

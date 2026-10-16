@@ -16,7 +16,7 @@ func TestConcreteRoutes(t *testing.T) {
 		),
 	}}
 
-	got := concreteRoutes(tree)
+	got := concreteRoutes(tree.Roots)
 
 	for _, excluded := range []string{
 		"/",                                    // bare root

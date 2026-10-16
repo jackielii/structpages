@@ -11,8 +11,10 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"maps"
 	"path"
 	"reflect"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -52,6 +54,14 @@ type PageNode struct {
 	// mounted once per binary across separate main packages is
 	// unambiguous in each process.
 	binaries map[string]bool
+	// reach is the set of packages compiled into any of binaries: the
+	// code that can run while this root's tree serves a request. Nil
+	// when binaries is nil. Populated only on root nodes.
+	reach map[string]bool
+	// prod marks a root reached by a real (non-test) main package.
+	// Diagnostics prefer it, since a production tree is complete while
+	// test trees often stub whole sections out. Root nodes only.
+	prod bool
 }
 
 // Diagnostic is a tree-build-time diagnostic. Call-site diagnostics
@@ -78,7 +88,7 @@ func (pn *PageNode) walk(yield func(*PageNode) bool) bool {
 	return true
 }
 
-// BuildTree finds every structpages.Mount call across the supplied
+// BuildTree finds every structpages.Mount (or Parse) call across the supplied
 // packages and reconstructs the corresponding page trees. Tree-build
 // diagnostics (e.g. Mount with a non-struct page argument) are
 // returned alongside the tree so the driver can surface them.
@@ -100,9 +110,9 @@ func (pn *PageNode) walk(yield func(*PageNode) bool) bool {
 func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 	tree := &PageTree{}
 	var diags []Diagnostic
-	seenPos := map[string]bool{}
-	roots := map[string]*PageNode{}    // root key -> kept root
-	mountPkgs := map[string][]string{} // root key -> Mount-call package paths
+	posRoot := map[string]string{}    // Mount-call position -> root key ("" when skipped)
+	roots := map[string]*PageNode{}   // root key -> kept root
+	mountIDs := map[string][]string{} // root key -> Mount-call package variant IDs
 
 	for _, pkg := range pkgs {
 		if pkg.TypesInfo == nil {
@@ -111,20 +121,25 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 		for _, m := range findMounts(pkg) {
 			pos := pkg.Fset.Position(m.Call.Pos())
 			key := fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column)
-			if seenPos[key] {
+			// Record the Mount-call package variant for every call that
+			// maps to a root — the per-variant repeats of one call and
+			// other calls collapsed onto the same root alike — so the
+			// root is attributed to every binary that compiles one in.
+			if rk, ok := posRoot[key]; ok {
+				if rk != "" {
+					mountIDs[rk] = append(mountIDs[rk], pkg.ID)
+				}
 				continue
 			}
-			seenPos[key] = true
 			root, ds := buildRoot(pkg, m)
 			diags = append(diags, ds...)
 			if root == nil {
+				posRoot[key] = ""
 				continue
 			}
 			rk := typeKey(root.Type) + "|" + root.Route
-			// Record the Mount-call package for every call that maps to
-			// this root — even the dedup-collapsed ones — so a root
-			// mounted by two binaries is attributed to both.
-			mountPkgs[rk] = append(mountPkgs[rk], normalizePkgPath(pkg.PkgPath))
+			posRoot[key] = rk
+			mountIDs[rk] = append(mountIDs[rk], pkg.ID)
 			if _, ok := roots[rk]; ok {
 				continue
 			}
@@ -134,56 +149,110 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 	}
 
 	closures := mainClosures(pkgs)
+	prodMains := realMains(pkgs)
 	for rk, root := range roots {
-		root.binaries = binariesFor(mountPkgs[rk], closures)
+		root.binaries = binariesFor(mountIDs[rk], closures)
+		for b := range root.binaries {
+			if root.reach == nil {
+				root.reach = map[string]bool{}
+			}
+			maps.Copy(root.reach, closures[b].pkgs)
+			root.prod = root.prod || prodMains[b]
+		}
 	}
 	return tree, diags
 }
 
-// mainClosures maps each main package's normalised import path to the
-// set of package paths reachable from it (including itself). A Mount
-// call in package P belongs to binary M iff P is in M's closure.
-func mainClosures(pkgs []*packages.Package) map[string]map[string]bool {
-	closures := map[string]map[string]bool{}
+// rootsFor returns the roots whose tree can serve a request that runs
+// code in pkgPath: those reached by a binary that compiles pkgPath in,
+// plus roots with no binary attribution (library-only analysis), which
+// apply everywhere. Production roots come first.
+//
+// At runtime URLFor, ID and Ref resolve against the one tree serving
+// the request, so a call site is checked tree by tree rather than
+// against every Mount in the module (see checkCtx.inSomeTree).
+func (t *PageTree) rootsFor(pkgPath string) []*PageNode {
+	if t == nil {
+		return nil
+	}
+	np := normalizePkgPath(pkgPath)
+	var out []*PageNode
+	for _, r := range t.Roots {
+		if r.binaries == nil || r.reach[np] {
+			out = append(out, r)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].prod && !out[j].prod })
+	return out
+}
+
+// realMains returns the normalised paths of the non-test main packages
+// in pkgs. A synthesised test main ("foo.test") normalises onto its
+// package path, so it is recognised by its un-normalised path.
+func realMains(pkgs []*packages.Package) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range pkgs {
+		if p != nil && p.Name == "main" && !strings.HasSuffix(p.PkgPath, ".test") {
+			out[normalizePkgPath(p.PkgPath)] = true
+		}
+	}
+	return out
+}
+
+// binary is what one main package compiles in.
+type binary struct {
+	// ids are the package variant IDs ("foo", "foo [foo.test]"). A
+	// Mount call belongs to the binary iff its variant is here: a call
+	// in foo's _test.go file exists only in "foo [foo.test]", not in
+	// the plain "foo" every other binary imports.
+	ids map[string]bool
+	// pkgs are the normalised paths of ids: the code that can run in
+	// the binary, keyed the way an analysis pass names its package.
+	pkgs map[string]bool
+}
+
+// mainClosures maps each main package's normalised import path to what
+// it compiles in. A main package surfacing under several variants (its
+// test binary) is unioned under the one path.
+func mainClosures(pkgs []*packages.Package) map[string]*binary {
+	closures := map[string]*binary{}
 	for _, p := range pkgs {
 		if p == nil || p.Name != "main" {
 			continue
 		}
 		mainPath := normalizePkgPath(p.PkgPath)
-		closure := closures[mainPath]
-		if closure == nil {
-			closure = map[string]bool{}
-			closures[mainPath] = closure
+		bin := closures[mainPath]
+		if bin == nil {
+			bin = &binary{ids: map[string]bool{}, pkgs: map[string]bool{}}
+			closures[mainPath] = bin
 		}
-		// A main package may surface under several test variants; union
-		// their closures under the one normalised path.
-		collectImports(p, closure)
+		collectImports(p, bin)
 	}
 	return closures
 }
 
-// collectImports records p and every package transitively imported by
-// p into seen, keyed by normalised import path.
-func collectImports(p *packages.Package, seen map[string]bool) {
-	np := normalizePkgPath(p.PkgPath)
-	if seen[np] {
+// collectImports records p and every package variant it transitively
+// imports into bin.
+func collectImports(p *packages.Package, bin *binary) {
+	if bin.ids[p.ID] {
 		return
 	}
-	seen[np] = true
+	bin.ids[p.ID] = true
+	bin.pkgs[normalizePkgPath(p.PkgPath)] = true
 	for _, imp := range p.Imports {
-		collectImports(imp, seen)
+		collectImports(imp, bin)
 	}
 }
 
-// binariesFor returns the set of main-package paths whose closure
-// reaches any of the given Mount-call packages. Returns nil when no
-// main package reaches them (library-only analysis), so such roots
-// fall into the shared default binary group during ambiguity checks.
-func binariesFor(mountPkgPaths []string, closures map[string]map[string]bool) map[string]bool {
+// binariesFor returns the set of main-package paths that compile in any
+// of the given Mount-call package variants. Returns nil when no main
+// package does (library-only analysis); such roots apply to every
+// package (see PageTree.rootsFor).
+func binariesFor(mountIDs []string, closures map[string]*binary) map[string]bool {
 	bins := map[string]bool{}
-	for _, mp := range mountPkgPaths {
-		for mainPath, closure := range closures {
-			if closure[mp] {
+	for _, id := range mountIDs {
+		for mainPath, bin := range closures {
+			if bin.ids[id] {
 				bins[mainPath] = true
 			}
 		}
@@ -210,8 +279,17 @@ func normalizePkgPath(p string) string {
 // named struct.
 func buildRoot(pkg *packages.Package, m mountCall) (*PageNode, []Diagnostic) {
 	var diags []Diagnostic
-	pageType, ok := resolveNamedStruct(pkg.TypesInfo.TypeOf(m.PageArg))
+	argType := pkg.TypesInfo.TypeOf(m.PageArg)
+	pageType, ok := resolveNamedStruct(argType)
 	if !ok {
+		// Two shapes aren't misuses, so they are skipped quietly: an
+		// interface-typed argument is a helper forwarding its caller's
+		// tree (`func mount(pages any)`), which isn't knowable here, and
+		// an anonymous struct (`Parse(struct{}{}, …)`) is test
+		// scaffolding no call site can name.
+		if argType != nil && (types.IsInterface(argType) || isAnonymousStruct(argType)) {
+			return nil, nil
+		}
 		diags = append(diags, Diagnostic{
 			Pos: pkg.Fset.Position(m.PageArg.Pos()),
 			Message: fmt.Sprintf("[mount] Mount page argument has non-struct type %s; skipping",
@@ -235,6 +313,17 @@ func buildRoot(pkg *packages.Package, m mountCall) (*PageNode, []Diagnostic) {
 	collectMethods(pageType, root)
 	populateChildren(pkg, root, map[*types.Named]bool{pageType: true}, &diags)
 	return root, diags
+}
+
+// isAnonymousStruct reports whether t is an unnamed struct type or a
+// pointer to one.
+func isAnonymousStruct(t types.Type) bool {
+	t = types.Unalias(t)
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = types.Unalias(ptr.Elem())
+	}
+	_, ok := t.(*types.Struct)
+	return ok
 }
 
 // populateChildren walks the struct fields of node.Type, picking up
@@ -306,14 +395,17 @@ func typeKey(named *types.Named) string {
 	return obj.Pkg().Path() + "." + obj.Name()
 }
 
-// resolveNamedStruct peels a single layer of pointer indirection and
-// returns the underlying *types.Named iff it backs a struct type.
+// resolveNamedStruct peels aliases and a single layer of pointer
+// indirection and returns the underlying *types.Named iff it backs a
+// struct type. A field declared with an alias (`type API = api.Root`)
+// has a *types.Alias type, which the runtime sees straight through.
 func resolveNamedStruct(t types.Type) (*types.Named, bool) {
 	if t == nil {
 		return nil, false
 	}
+	t = types.Unalias(t)
 	if ptr, ok := t.(*types.Pointer); ok {
-		t = ptr.Elem()
+		t = types.Unalias(ptr.Elem())
 	}
 	named, ok := t.(*types.Named)
 	if !ok {

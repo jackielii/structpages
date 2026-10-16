@@ -27,7 +27,7 @@ func checkRefConversion(ctx *checkCtx, call *ast.CallExpr) {
 	if !ok {
 		return
 	}
-	if ctx.tree == nil || len(ctx.tree.Roots) == 0 {
+	if len(ctx.roots) == 0 {
 		return
 	}
 	// A Ref conversion site doesn't know whether the value will be
@@ -127,7 +127,7 @@ func resolveRef(ctx *checkCtx, pos token.Pos, ref string, isIDContext bool) *Pag
 func resolveRefByRoute(ctx *checkCtx, pos token.Pos, ref string) *PageNode {
 	var match *PageNode
 	var allRoutes []string
-	for _, root := range ctx.tree.Roots {
+	for _, root := range ctx.roots {
 		root.All(func(n *PageNode) bool {
 			allRoutes = append(allRoutes, n.FullRoute)
 			if n.FullRoute == ref {
@@ -165,10 +165,10 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 	}
 	var anchor *PageNode
 	if isIDContext {
-		anchor = findRefAnchor(ctx.tree.Roots, segments[0], true)
+		anchor = findRefAnchor(ctx.roots, segments[0], true)
 		if anchor == nil {
 			var available []string
-			for _, root := range ctx.tree.Roots {
+			for _, root := range ctx.roots {
 				root.All(func(n *PageNode) bool {
 					available = append(available, n.Name)
 					return true
@@ -184,7 +184,7 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 		// prefer a top-level anchor, else accept a uniquely-named anchor
 		// anywhere in the tree, and treat >1 match as ambiguous. Keeping
 		// this in lockstep is what makes a lint-passing Ref runtime-valid.
-		for _, root := range ctx.tree.Roots {
+		for _, root := range ctx.roots {
 			if root.Name == segments[0] {
 				anchor = root
 				break
@@ -201,7 +201,7 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 		}
 		if anchor == nil {
 			var matches []*PageNode
-			for _, root := range ctx.tree.Roots {
+			for _, root := range ctx.roots {
 				root.All(func(n *PageNode) bool {
 					if n.Name == segments[0] {
 						matches = append(matches, n)
@@ -288,7 +288,7 @@ func findRefAnchor(roots []*PageNode, segName string, isIDContext bool) *PageNod
 
 func resolveRefByName(ctx *checkCtx, pos token.Pos, ref string) *PageNode {
 	var allNames []string
-	for _, root := range ctx.tree.Roots {
+	for _, root := range ctx.roots {
 		var found *PageNode
 		root.All(func(n *PageNode) bool {
 			allNames = append(allNames, n.Name)

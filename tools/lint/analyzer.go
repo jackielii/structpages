@@ -27,7 +27,11 @@ func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 type checkCtx struct {
 	pass *analysis.Pass
 	tree *PageTree
-	dm   *directiveMap
+	// roots are the trees that can serve this package's code (see
+	// PageTree.rootsFor). Inside inSomeTree it is narrowed to one root
+	// at a time, so the resolvers simply walk ctx.roots.
+	roots []*PageNode
+	dm    *directiveMap
 	// silent suppresses diagnostic emission when true. Used by helper
 	// callers (e.g. urlfor.go using resolveRefSilent) to obtain a
 	// resolved node without re-reporting failures the Ref-conversion
@@ -41,7 +45,7 @@ type checkCtx struct {
 
 func run(pass *analysis.Pass, tree *PageTree) {
 	dm := newDirectiveMap(pass.Fset, pass.Files)
-	ctx := &checkCtx{pass: pass, tree: tree, dm: dm}
+	ctx := &checkCtx{pass: pass, tree: tree, roots: tree.rootsFor(pass.Pkg.Path()), dm: dm}
 	for _, f := range pass.Files {
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -56,9 +60,45 @@ func run(pass *analysis.Pass, tree *PageTree) {
 	checkRefLiterals(ctx)
 }
 
+// inSomeTree runs check against each candidate tree in turn and
+// reports nothing if any tree passes it cleanly. Otherwise it reruns
+// check against the preferred (first) tree, reporting its diagnostics.
+//
+// This mirrors the runtime, which resolves against the single tree
+// serving the request: a test tree that stubs out a section, or mounts
+// a sub-tree at "/" instead of "/orbit", doesn't make a call that is
+// valid in the production tree wrong.
+func (ctx *checkCtx) inSomeTree(check func()) {
+	roots := ctx.roots
+	if len(roots) <= 1 {
+		check()
+		return
+	}
+	defer func() { ctx.roots = roots }()
+	silent, silenced := ctx.silent, ctx.silenced
+	ctx.silent = true
+	for _, r := range roots {
+		ctx.roots = []*PageNode{r}
+		before := ctx.silenced
+		check()
+		if ctx.silenced == before {
+			ctx.silent, ctx.silenced = silent, silenced
+			return
+		}
+	}
+	ctx.silent, ctx.silenced = silent, silenced
+	ctx.roots = roots[:1]
+	check()
+}
+
 // visitCall identifies what kind of structpages call this is and
-// invokes the appropriate per-family check.
+// checks it against the trees that can serve it.
 func visitCall(ctx *checkCtx, call *ast.CallExpr) {
+	ctx.inSomeTree(func() { checkCall(ctx, call) })
+}
+
+// checkCall invokes the per-family check for call.
+func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 	info := ctx.pass.TypesInfo
 	if info == nil {
 		return

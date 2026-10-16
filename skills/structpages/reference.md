@@ -312,6 +312,12 @@ go tool structpages-lint -tags dev ./...  # include call sites behind build tags
 Run it from the module root (or pass the packages holding the `Mount` calls): it needs them to rebuild the
 tree, and exits 0 with a warning when there are none.
 
+Every `Mount` and `Parse` call builds its own tree, test fixtures included. As at runtime, a call is
+checked against the trees that can serve it: those mounted by a binary (or test binary) that compiles the
+call in. It passes if any of them resolves it, so a test tree that stubs a section out, or mounts it at
+`/` instead of `/orbit`, doesn't flag production code. A type is ambiguous only when one tree mounts it
+twice.
+
 | Category | Flags |
 |---|---|
 | `urlfor` | `URLFor` targets: unmounted or ambiguous type, unknown chain child, typed value after a fragment |

@@ -32,7 +32,8 @@ func buildNavTree() *PageTree {
 // the runtime resolver (structpages parse.go), so a lint-passing Ref is
 // runtime-valid.
 func TestResolveRefByQualified_nestedAnchor(t *testing.T) {
-	ctx := &checkCtx{tree: buildNavTree(), silent: true}
+	ctx := ctxFor(buildNavTree())
+	ctx.silent = true
 
 	got := resolveRefByQualified(ctx, token.NoPos, "Section.Leaf", "Section.Leaf", false)
 	if got == nil {
@@ -63,7 +64,8 @@ func TestResolveRefByQualified_ambiguousAnchor(t *testing.T) {
 	a, b := mkWrapper("/a"), mkWrapper("/b")
 	root := &PageNode{Name: "Root", FullRoute: "/", Children: []*PageNode{a, b}}
 	a.Parent, b.Parent = root, root
-	ctx := &checkCtx{tree: &PageTree{Roots: []*PageNode{root}}, silent: true}
+	ctx := ctxFor(&PageTree{Roots: []*PageNode{root}})
+	ctx.silent = true
 
 	if n := resolveRefByQualified(ctx, token.NoPos, "Section.Leaf", "Section.Leaf", false); n != nil {
 		t.Errorf("ambiguous 'Section' anchor resolved to %q, want nil", n.Name)
@@ -73,7 +75,8 @@ func TestResolveRefByQualified_ambiguousAnchor(t *testing.T) {
 // TestResolveRefByQualified_topLevelStillWins pins backward compatibility:
 // a top-level anchor resolves exactly as before.
 func TestResolveRefByQualified_topLevelStillWins(t *testing.T) {
-	ctx := &checkCtx{tree: buildNavTree(), silent: true}
+	ctx := ctxFor(buildNavTree())
+	ctx.silent = true
 	if n := resolveRefByQualified(ctx, token.NoPos, "Wrapper.Section", "Wrapper.Section", false); n == nil || n.Name != "Section" {
 		t.Errorf("Wrapper.Section: got %v, want Section", n)
 	}
@@ -103,10 +106,8 @@ func TestResolveRefAtCallSite_oneDiagnosticPerRef(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var got []string
-		ctx := &checkCtx{
-			tree: buildNavTree(),
-			pass: &analysis.Pass{Report: func(d analysis.Diagnostic) { got = append(got, d.Message) }},
-		}
+		ctx := ctxFor(buildNavTree())
+		ctx.pass = &analysis.Pass{Report: func(d analysis.Diagnostic) { got = append(got, d.Message) }}
 		if refConversionReports(ctx, token.NoPos, tc.ref) {
 			resolveRef(ctx, token.NoPos, tc.ref, true) // what checkRefConversion emits
 		}
@@ -120,4 +121,10 @@ func TestResolveRefAtCallSite_oneDiagnosticPerRef(t *testing.T) {
 				tc.ref, tc.idContext, tc.wantSubstr, got)
 		}
 	}
+}
+
+// ctxFor returns a checkCtx that checks against every root of tree, as
+// the analyzer does for a package every tree can serve.
+func ctxFor(tree *PageTree) *checkCtx {
+	return &checkCtx{tree: tree, roots: tree.Roots}
 }

@@ -29,7 +29,7 @@ import (
 // Suppress an intentional literal with
 // `//structpages:lint:ignore route-literal`.
 func checkRouteLiterals(ctx *checkCtx) {
-	routes := concreteRoutes(ctx.tree)
+	routes := concreteRoutes(ctx.roots)
 	if len(routes) == 0 {
 		return
 	}
@@ -70,9 +70,9 @@ func checkRouteLiterals(ctx *checkCtx) {
 // share a route (method splits like GET+POST on one path), a navigable
 // (GET/ALL) page is preferred as the suggestion since URLFor builds URLs to
 // follow, not to POST to.
-func concreteRoutes(tree *PageTree) map[string]*PageNode {
+func concreteRoutes(roots []*PageNode) map[string]*PageNode {
 	out := map[string]*PageNode{}
-	for _, root := range tree.Roots {
+	for _, root := range roots {
 		root.All(func(n *PageNode) bool {
 			r := n.FullRoute
 			if r == "" || r == "/" || strings.ContainsAny(r, "{}") {

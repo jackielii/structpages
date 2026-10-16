@@ -21,7 +21,7 @@ func checkURLFor(ctx *checkCtx, call *ast.CallExpr) {
 	if len(call.Args) < 2 {
 		return
 	}
-	if ctx.tree == nil || len(ctx.tree.Roots) == 0 {
+	if len(ctx.roots) == 0 {
 		return
 	}
 	pageArg := call.Args[1]
@@ -89,34 +89,25 @@ func resolvePageArg(ctx *checkCtx, expr ast.Expr) *PageNode {
 	return resolveByType(ctx, expr.Pos(), t)
 }
 
-// nodeMatch pairs a matched node with the root of the tree it belongs
-// to. The root carries binary attribution, used to scope ambiguity per
-// binary.
-type nodeMatch struct {
-	node *PageNode
-	root *PageNode
-}
-
 // resolveByType looks up a named struct type in the page tree. It
 // errors with a suggested chain form on ambiguity, mirroring the
 // runtime "ambiguous: type X matches N nodes" message.
 //
-// Ambiguity is scoped per binary (issue #22): a type is only ambiguous
-// when ≥2 of its mounts resolve to distinct routes within a single
-// main package. A shared page mounted once per binary across separate
-// binaries — a standalone preview/gallery binary plus the same tree
-// embedded in an app — resolves to exactly one route in each process,
-// so it must not be flagged. Within one binary, the same path mounted
-// twice (a structural test re-mounting a production sub-tree at the
-// path it already lives at) collapses by FullRoute and stays
-// unambiguous.
+// The runtime resolves against the one tree serving the request, so
+// ambiguity is judged within a tree: callers run under
+// checkCtx.inSomeTree, which narrows ctx.roots to one root at a time.
+// A page mounted once in each of two trees — a standalone preview
+// binary plus the same tree embedded in an app (issue #22), or a test
+// tree mounting a section at "/" — is unambiguous in each. The same
+// path reached twice (a re-mounted sub-tree at the path it already
+// lives at) collapses by FullRoute and stays unambiguous.
 func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 	wantKey := typeKey(named)
-	var matches []nodeMatch
-	for _, root := range ctx.tree.Roots {
+	var matches []*PageNode
+	for _, root := range ctx.roots {
 		root.All(func(n *PageNode) bool {
 			if typeKey(n.Type) == wantKey {
-				matches = append(matches, nodeMatch{node: n, root: root})
+				matches = append(matches, n)
 			}
 			return true
 		})
@@ -126,49 +117,28 @@ func resolveByType(ctx *checkCtx, pos token.Pos, named *types.Named) *PageNode {
 			"URLFor: no page mounted for type %s", named.Obj().Name())
 		return nil
 	}
-	if routes, ok := ambiguousRoutes(matches); ok {
+	if routes := distinctRoutes(matches); len(routes) > 1 {
 		ctx.report(pos, "urlfor",
 			"URLFor: type %s is ambiguous (mounted at %s); disambiguate with "+
 				"[]any{Parent{}, %s{}} chain or Ref(\"Parent.Field\")",
 			named.Obj().Name(), strings.Join(routes, ", "), named.Obj().Name())
 		return nil
 	}
-	return matches[0].node
+	return matches[0]
 }
 
-// ambiguousRoutes reports whether the matched nodes are ambiguous
-// within any single binary, returning the conflicting routes when they
-// are. Mounts are grouped by the binaries that can execute them; a type
-// resolving to ≥2 distinct FullRoutes inside one binary is ambiguous.
-// Roots with no binary attribution (library-only analysis) share an
-// implicit default group, so their mutual ambiguity is still caught.
-func ambiguousRoutes(matches []nodeMatch) ([]string, bool) {
-	byBin := map[string]map[string]bool{}
-	for _, m := range matches {
-		bins := m.root.binaries
-		if len(bins) == 0 {
-			bins = map[string]bool{"": true}
-		}
-		for b := range bins {
-			set := byBin[b]
-			if set == nil {
-				set = map[string]bool{}
-				byBin[b] = set
-			}
-			set[m.node.FullRoute] = true
-		}
+// distinctRoutes returns the sorted, de-duplicated FullRoutes of nodes.
+func distinctRoutes(nodes []*PageNode) []string {
+	set := map[string]bool{}
+	for _, n := range nodes {
+		set[n.FullRoute] = true
 	}
-	for _, set := range byBin {
-		if len(set) >= 2 {
-			routes := make([]string, 0, len(set))
-			for r := range set {
-				routes = append(routes, r)
-			}
-			sort.Strings(routes)
-			return routes, true
-		}
+	routes := make([]string, 0, len(set))
+	for r := range set {
+		routes = append(routes, r)
 	}
-	return nil, false
+	sort.Strings(routes)
+	return routes
 }
 
 // resolveChainLiteralWithFragment is the chain-form walker that
@@ -182,7 +152,7 @@ func resolveChainLiteralWithFragment(ctx *checkCtx, comp *ast.CompositeLit) (*Pa
 	}
 	var frag strings.Builder
 	for _, e := range comp.Elts {
-		s, ok := stringConstantFromPass(ctx, e)
+		s, ok := plainStringConstant(ctx, e)
 		if !ok {
 			continue
 		}
@@ -193,11 +163,12 @@ func resolveChainLiteralWithFragment(ctx *checkCtx, comp *ast.CompositeLit) (*Pa
 
 // resolveChainLiteral handles the `[]any{step0, step1, ..., "?fragment"}`
 // shape. Steps before the first string element are chain steps; the
-// rest are appended literals.
+// rest are appended literals. As at runtime (`part.(string)`), only a
+// plain string is a fragment: a Ref constant is a chain step.
 func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 	chainEnd := len(comp.Elts)
 	for i, e := range comp.Elts {
-		if _, ok := stringConstantFromPass(ctx, e); ok {
+		if _, ok := plainStringConstant(ctx, e); ok {
 			chainEnd = i
 			break
 		}
@@ -239,7 +210,7 @@ func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 
 	// Phase 2: ensure no typed values appear after a string fragment.
 	for i, frag := range fragments {
-		if _, ok := stringConstantFromPass(ctx, frag); ok {
+		if _, ok := plainStringConstant(ctx, frag); ok {
 			continue
 		}
 		ctx.report(frag.Pos(), "urlfor",
@@ -253,15 +224,25 @@ func resolveChainLiteral(ctx *checkCtx, comp *ast.CompositeLit) *PageNode {
 
 func resolveChainStep(ctx *checkCtx, step ast.Expr, allowRef bool) *PageNode {
 	s := unparen(step)
+	// A Ref step is either a conversion, Ref("A.B"), or a Ref-typed
+	// constant such as `const Compare = structpages.Ref("A.B")`. Its
+	// string is validated where it is written (checkRefConversion), so
+	// it resolves quietly here.
+	refArg := s
 	if call, ok := s.(*ast.CallExpr); ok && isRefConversion(ctx.pass.TypesInfo, call) {
+		refArg = call.Args[0]
+	} else if !isRefType(ctx.pass.TypesInfo.TypeOf(s)) {
+		refArg = nil
+	}
+	if refArg != nil {
 		if !allowRef {
 			ctx.report(s.Pos(), "urlfor", "URLFor: Ref not allowed in this position")
 			return nil
 		}
-		if str, ok := stringConstantFromPass(ctx, call.Args[0]); ok {
+		if str, ok := stringConstantFromPass(ctx, refArg); ok {
 			save := ctx.silent
 			ctx.silent = true
-			node := resolveRef(ctx, call.Args[0].Pos(), str, false)
+			node := resolveRef(ctx, refArg.Pos(), str, false)
 			ctx.silent = save
 			return node
 		}
@@ -312,20 +293,7 @@ func descendByType(ctx *checkCtx, parent *PageNode, pos token.Pos, want *types.N
 // of pointer indirection. Returns nil if expr is not a named struct
 // (e.g. interface{}, an untyped value, a function, etc.).
 func normalisedPageType(info *types.Info, expr ast.Expr) *types.Named {
-	t := info.TypeOf(expr)
-	if t == nil {
-		return nil
-	}
-	if ptr, ok := t.(*types.Pointer); ok {
-		t = ptr.Elem()
-	}
-	named, ok := t.(*types.Named)
-	if !ok {
-		return nil
-	}
-	if _, ok := named.Underlying().(*types.Struct); !ok {
-		return nil
-	}
+	named, _ := resolveNamedStruct(info.TypeOf(expr))
 	return named
 }
 

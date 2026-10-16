@@ -23,7 +23,7 @@ func checkIDOrIDTarget(ctx *checkCtx, call *ast.CallExpr, fnName string) {
 	if len(call.Args) != 2 {
 		return
 	}
-	if ctx.tree == nil || len(ctx.tree.Roots) == 0 {
+	if len(ctx.roots) == 0 {
 		return
 	}
 	arg := unparen(call.Args[1])
@@ -233,7 +233,7 @@ func checkIDRef(ctx *checkCtx, call *ast.CallExpr, fnName string) {
 	}
 	// Simple method name — must be on exactly one mounted page.
 	var matches []*PageNode
-	for _, root := range ctx.tree.Roots {
+	for _, root := range ctx.roots {
 		root.All(func(n *PageNode) bool {
 			if _, ok := n.Methods[ref]; ok {
 				matches = append(matches, n)
@@ -296,7 +296,7 @@ func checkIDFuncArg(ctx *checkCtx, expr ast.Expr, fnName string) {
 // the tree.
 func (ctx *checkCtx) isMounted(named *types.Named) bool {
 	key := typeKey(named)
-	for _, root := range ctx.tree.Roots {
+	for _, root := range ctx.roots {
 		found := false
 		root.All(func(n *PageNode) bool {
 			if typeKey(n.Type) == key {
@@ -315,7 +315,7 @@ func (ctx *checkCtx) isMounted(named *types.Named) bool {
 // isRefType reports whether t is structpages.Ref (a defined string
 // type), as opposed to a plain string.
 func isRefType(t types.Type) bool {
-	named, ok := t.(*types.Named)
+	named, ok := types.Unalias(t).(*types.Named)
 	if !ok {
 		return false
 	}
