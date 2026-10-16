@@ -77,7 +77,7 @@ Each `WithArgs` value is registered under its type, and a parameter takes the re
   props, err := usersPage{}.Props(req, fakeUsers{})
   ```
 
-  If two registrations implement the interface, `Mount` fails and names both: declare the concrete type, or narrow the interface. A registration of the parameter's exact type, and the per-request values in the table, are always used first.
+  If two registrations implement the interface, `Mount` fails and names both: declare the concrete type, or narrow the interface. The per-request values in the table are always used first: a `Props(w io.Writer)` gets the response writer, whatever is registered.
 - **Generic types work** — type parameters, slices and maps as dependencies, aliases, function types and complex constraints. Anywhere these docs say "type", read it as "any reflect-distinguishable type".
 
 `Mount` checks every `Props` and `ServeHTTP` parameter for ambiguity up front, so two registrations implementing one interface parameter fail at startup with the page and both types named, not on the first request to that page. `Parse` skips the check.
