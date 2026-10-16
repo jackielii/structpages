@@ -55,21 +55,24 @@ type Ref string
 //	        return DashboardProps{Stats: loadAll()}, nil
 //	    }
 //	}
+//
+// Is reports whether the target matches the given method or function
+// reference. It works with both page methods and standalone functions, and
+// takes method/function expressions for compile-time safety.
+//
+// ID/Is symmetry: an element whose id is ID(ctx, X) is matched by Is(X).
+// For a standalone function this is the PACKAGE-qualified id (e.g.
+// "overlay-mount" for overlay.Mount), so Is(overlay.Mount) matches the
+// overlay slot and not a same-named Mount from another package. This is how
+// a shared element becomes a positive render target: render it with
+// id={ ID(ctx, fn) }, then a request targeting it resolves to a target that
+// Is(fn) recognises — e.g. a multi-method page can detect "I was opened into
+// the shared slot" and render its dialog fragment instead of the full page.
+// Is also accepts the bare function id and the page-prefixed form as a
+// partial-id convenience; those do not disambiguate by package.
 type RenderTarget interface {
-	// Is checks if this target matches the given method or function reference.
-	// Works with both page methods and standalone functions.
-	// Uses method/function expressions for compile-time safety.
-	//
-	// ID/Is symmetry: an element whose id is ID(ctx, X) is matched by Is(X).
-	// For a standalone function this is the PACKAGE-qualified id (e.g.
-	// "overlay-mount" for overlay.Mount), so Is(overlay.Mount) matches the
-	// overlay slot and not a same-named Mount from another package. This is how
-	// a shared element becomes a positive render target: render it with
-	// id={ ID(ctx, fn) }, then a request targeting it resolves to a target that
-	// Is(fn) recognises — e.g. a multi-method page can detect "I was opened into
-	// the shared slot" and render its dialog fragment instead of the full page.
-	// Is also accepts the bare function id and the page-prefixed form as a
-	// partial-id convenience; those do not disambiguate by package.
+	// Is reports whether the target matches method, a method or function
+	// expression. See the RenderTarget doc for the matching rules.
 	//
 	// For function components, Is() has a side effect: it stores the function
 	// value when a match is found, enabling lazy evaluation of the hxTarget.

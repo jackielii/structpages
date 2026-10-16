@@ -40,7 +40,7 @@ import (
 // can each expose a "Mount"/"Widget" component without their ids colliding. When
 // you give a shared element a render-target identity this way — e.g. a singleton
 // overlay slot's id = ID(ctx, overlay.Mount) — RenderTarget.Is(overlay.Mount)
-// matches it exactly (see RenderTarget.Is), and the pairing stays correct
+// matches it exactly (see [RenderTarget]), and the pairing stays correct
 // without anyone depending on the id's internal format. Hardcoding the string
 // forfeits both the uniqueness guarantee and that ID/Is symmetry.
 //
