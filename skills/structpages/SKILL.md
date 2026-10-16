@@ -379,7 +379,9 @@ components. Each type may be registered once (use named types to register two va
 A registered pointer also fills a value parameter, but a registered value does not fill a pointer
 parameter, so register services as pointers. An interface parameter takes the one registration that
 implements it, so a `Props` can declare a narrow interface and a test can call it with a fake; two
-implementations fail `Mount` (`Parse` doesn't check). A missing dependency fails the request, not `Mount`.
+implementations of a `Props`/`ServeHTTP` parameter fail `Mount` (`Parse` doesn't check). Register a
+pointer to an interface variable (`var s Store = pg; WithArgs(&s)`) to pick one. A missing dependency
+fails the request, not `Mount`.
 `*PageNode` is always injectable. Application services go here, not in globals.
 
 ## 8. Testing renders with a bare context

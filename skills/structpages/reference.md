@@ -145,7 +145,7 @@ component.
 
 | Option | Effect |
 |---|---|
-| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. An interface parameter takes the one registration implementing it. A parameter two registrations could fill fails `Mount`; one nothing provides fails the request. |
+| `WithArgs(args ...any)` | DI registry. Each type once; duplicates fail `Mount`. An interface parameter takes a registered pointer to that interface, else the one registration implementing it. A `Props`/`ServeHTTP` parameter two registrations could fill fails `Mount`; one nothing provides fails the request. |
 | `WithErrorHandler(func(http.ResponseWriter, *http.Request, error))` | Renders every error from `Props`, `ServeHTTP`, component lookup and render. Default: plain 500. |
 | `WithMiddlewares(mw ...MiddlewareFunc)` | Global middleware, first is outermost, runs before page `Middlewares`. |
 | `WithTargetSelector(TargetSelector)` | Chooses the `RenderTarget`. Default `HTMXRenderTarget`; use `HTMXv4RenderTarget` for htmx 4. |

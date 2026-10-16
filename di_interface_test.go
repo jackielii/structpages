@@ -79,6 +79,24 @@ func TestInjection_exactRegistrationWins(t *testing.T) {
 	}
 }
 
+// TestInjection_pointerToInterfaceIsUsedFirst pins that registering a
+// pointer to an interface variable fills that interface, ahead of (and
+// without ambiguity against) the registered implementations.
+func TestInjection_pointerToInterfaceIsUsedFirst(t *testing.T) {
+	var n namer = &pgStore{name: "chosen"}
+	mux := http.NewServeMux()
+	_, err := Mount(mux, namerRoot{}, "/", "App",
+		WithArgs(&n, &pgStore{name: "pg"}, &memCache{}))
+	if err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/namer", http.NoBody))
+	if rec.Body.String() != "chosen" {
+		t.Errorf("GET /namer = %q, want %q", rec.Body.String(), "chosen")
+	}
+}
+
 // writerPropsPage asks for an io.Writer, which the per-request
 // http.ResponseWriter fills before any registration is considered.
 type writerPropsPage struct{}
