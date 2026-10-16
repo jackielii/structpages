@@ -77,10 +77,19 @@ Each `WithArgs` value is registered under its type, and a parameter takes the re
   props, err := usersPage{}.Props(req, fakeUsers{})
   ```
 
-  If two registrations implement the interface, `Mount` fails and names both: declare the concrete type, or narrow the interface. The per-request values in the table are always used first: a `Props(w io.Writer)` gets the response writer, whatever is registered.
+  If more than one registration implements the interface, that's an error naming them all. Declare the concrete type, narrow the interface, or pick one by registering a pointer to an interface variable, which fills that interface ahead of the implementations:
+
+  ```go
+  var users userLister = pgStore
+  structpages.WithArgs(pgStore, cacheStore, &users)
+  ```
+
+  The per-request values in the table are always used first: a `Props(w io.Writer)` gets the response writer, whatever is registered.
 - **Generic types work** — type parameters, slices and maps as dependencies, aliases, function types and complex constraints. Anywhere these docs say "type", read it as "any reflect-distinguishable type".
 
-`Mount` checks every `Props` and `ServeHTTP` parameter for ambiguity up front, so two registrations implementing one interface parameter fail at startup with the page and both types named, not on the first request to that page. `Parse` skips the check.
+`Mount` checks every `Props` and extended `ServeHTTP` parameter for ambiguity up front, so an interface parameter more than one registration implements fails at startup with the page and the types named, not on the first request to that page. `Init` and `Middlewares` run during `Mount`, so their ambiguity fails it too. Parameters of `Page` and other component methods aren't checked ahead; their ambiguity fails the request. `Parse` skips the check.
+
+The check knows the writer only as `http.ResponseWriter`. A parameter of another interface the real writer happens to implement, such as `io.StringWriter`, is filled by the writer at request time, but `Mount` fails if two registrations also implement it. Declare `http.ResponseWriter` or `io.Writer` for the writer.
 
 A parameter that matches nothing fails the request with `method X requires argument of type T, but not found`. That isn't checked at `Mount`, so a page can stay mounted in a configuration, or a test, that doesn't register its dependencies.
 

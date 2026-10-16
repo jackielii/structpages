@@ -23,12 +23,17 @@ func (args argRegistry) addArg(v any) error {
 }
 
 // getArg finds the registered value for a parameter of type pt. Values
-// are registered under their dynamic types, so an interface parameter
+// are registered under their dynamic types, so the only way to register
+// under an interface type is a pointer to an interface variable; that
+// fills an interface parameter first. Otherwise an interface parameter
 // takes the one registered value whose type implements it; more than one
 // is an error, since picking one would be a guess. A concrete parameter
 // goes through getConcreteArg. found is false when nothing matches.
 func (args argRegistry) getArg(pt reflect.Type) (v reflect.Value, found bool, err error) {
 	if pt.Kind() == reflect.Interface {
+		if pv, ok := args[reflect.PointerTo(pt)]; ok {
+			return pv.Elem(), true, nil
+		}
 		return args.implementationOf(pt)
 	}
 	v, found = args.getConcreteArg(pt)
