@@ -71,6 +71,7 @@ func TestTestTrees_Integration(t *testing.T) {
 	sort.Strings(got)
 	want := []string{
 		`orbit.go: [ref] Ref "Orbit.Nope": segment 1 ("Nope") not found as child of "Orbit"; available: Data, Home`,
+		`rail_test.go: [ref] Ref "Group.Itemm": segment 1 ("Itemm") not found as child of "Group"; available: Index, Item`,
 		`rail_test.go: [ref] Ref "Plain.Home": anchor "Plain" not found in the page tree`,
 		`routes_test.go: [ref] Ref "Orbit.Data.Nope": segment 2 ("Nope") not found as child of "Data"; available: Detail`,
 	}

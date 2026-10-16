@@ -68,7 +68,8 @@ var items = []rail.Item{
 	{Ref: "Gen"},
 	{Ref: "/at/r"},
 	{Ref: "Cross"},
-	{Ref: "Plain.Home"}, // no tree has Plain
+	{Ref: "Plain.Home"},  // no tree has Plain
+	{Ref: "Group.Itemm"}, // a typo in railTree, reported from railTree
 }
 
 func TestRail(t *testing.T) {

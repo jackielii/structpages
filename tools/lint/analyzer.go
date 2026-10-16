@@ -42,6 +42,10 @@ type checkCtx struct {
 	// caller can resolve quietly yet still learn whether resolution
 	// would have produced a diagnostic.
 	silenced int
+	// refDepth is the most leading segments of a qualified Ref that
+	// resolved during the current check, so inSomeTree can word a
+	// failure from the tree that got furthest.
+	refDepth int
 	// callee names the structpages function being checked (URLFor, ID,
 	// IDTarget or Within), so shared page-resolution diagnostics name
 	// the call they came from.
@@ -67,7 +71,10 @@ func run(pass *analysis.Pass, tree *PageTree) {
 
 // inSomeTree runs check against each candidate tree in turn and
 // reports nothing if any tree passes it cleanly. Otherwise it reruns
-// check against the preferred (first) tree, reporting its diagnostics.
+// check against one tree, reporting its diagnostics: the tree that
+// resolved the most leading segments of a qualified Ref, so a typo in
+// the last segment is reported as such rather than as a missing anchor
+// in an unrelated tree; on a tie, the preferred (first) tree.
 //
 // This mirrors the runtime, which resolves against the single tree
 // serving the request: a test tree that stubs out a section, or mounts
@@ -82,17 +89,22 @@ func (ctx *checkCtx) inSomeTree(check func()) {
 	defer func() { ctx.roots = roots }()
 	silent, silenced := ctx.silent, ctx.silenced
 	ctx.silent = true
-	for _, r := range roots {
+	best, bestDepth := 0, -1
+	for i, r := range roots {
 		ctx.roots = []*PageNode{r}
 		before := ctx.silenced
+		ctx.refDepth = 0
 		check()
 		if ctx.silenced == before {
 			ctx.silent, ctx.silenced = silent, silenced
 			return
 		}
+		if ctx.refDepth > bestDepth {
+			best, bestDepth = i, ctx.refDepth
+		}
 	}
 	ctx.silent, ctx.silenced = silent, silenced
-	ctx.roots = roots[:1]
+	ctx.roots = roots[best : best+1]
 	check()
 }
 

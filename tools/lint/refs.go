@@ -230,6 +230,7 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 		}
 	}
 	current := anchor
+	ctx.refDepth = max(ctx.refDepth, 1)
 	for i, name := range segments[1:] {
 		var next *PageNode
 		for _, c := range current.Children {
@@ -250,6 +251,7 @@ func resolveRefByQualified(ctx *checkCtx, pos token.Pos, ref, pagePath string, i
 			return nil
 		}
 		current = next
+		ctx.refDepth = max(ctx.refDepth, i+2)
 	}
 	return current
 }
