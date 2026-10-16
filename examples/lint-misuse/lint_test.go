@@ -53,6 +53,11 @@ func TestLintMisuse(t *testing.T) {
 		`pages.go:LINE:COL: [urlfor] Within: chain element 1 is a string fragment; Within takes page steps only`,
 		`pages.gsx:LINE:COL: [params] URLFor: param "nope" does not appear in pattern "/items/{slug}" (known: slug)`,
 		`pages.gsx:LINE:COL: [params] URLFor: param "unsuppressed" does not appear in pattern "/items/{slug}" (known: slug)`,
+		"pages.go:LINE:COL: [selector] Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
+			"(hx-get at pages.gsx:25:5); structpages has no default target selector since v0.9.0, " +
+			"so htmx partial requests render the full Page. Pass " +
+			"structpages.WithTargetSelector(structpages.HTMXRenderTarget) for htmx 1/2, or " +
+			"structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) for htmx 4",
 		`pages.gsx:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead`,
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/\" + \"admin\"` builds an internal URL by string concatenation; use structpages.URLFor instead",
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/items/\" + strconv.Itoa(id)` builds an internal URL by string concatenation; use structpages.URLFor instead",

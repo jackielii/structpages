@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackielii/structpages/tools/lint/internal/htmxattr"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -30,6 +31,11 @@ const structpagesPkg = "github.com/jackielii/structpages"
 // exactly one Mount call site.
 type PageTree struct {
 	Roots []*PageNode
+
+	// htmxMounts maps the position key of each structpages.Mount call
+	// whose trees' templates use htmx to the first such use (see
+	// htmxMounts in selector.go). The [selector] check reads it.
+	htmxMounts map[string]htmxattr.Use
 }
 
 // PageNode mirrors the runtime structpages.PageNode but holds
@@ -111,9 +117,10 @@ func (pn *PageNode) walk(yield func(*PageNode) bool) bool {
 func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 	tree := &PageTree{}
 	var diags []Diagnostic
-	posRoot := map[string]string{}    // Mount-call position -> root key ("" when skipped)
-	roots := map[string]*PageNode{}   // root key -> kept root
-	mountIDs := map[string][]string{} // root key -> Mount-call package variant IDs
+	posRoot := map[string]string{}      // Mount-call position -> root key ("" when skipped)
+	roots := map[string]*PageNode{}     // root key -> kept root
+	mountIDs := map[string][]string{}   // root key -> Mount-call package variant IDs
+	mountRoots := map[string][]string{} // structpages.Mount call key -> root keys it serves
 
 	builders := findTreeBuilders(pkgs)
 	for _, pkg := range pkgs {
@@ -121,8 +128,7 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 			continue
 		}
 		for _, m := range findMounts(pkg, builders) {
-			pos := pkg.Fset.Position(m.Call.Pos())
-			key := fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column)
+			key := posKey(pkg.Fset, m.Call.Pos())
 			// Record the Mount-call package variant for every call that
 			// maps to a root — the per-variant repeats of one call and
 			// other calls collapsed onto the same root alike — so the
@@ -142,6 +148,9 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 			rk := typeKey(root.Type) + "|" + root.Route
 			posRoot[key] = rk
 			mountIDs[rk] = append(mountIDs[rk], pkg.ID)
+			if m.mount != "" {
+				mountRoots[m.mount] = append(mountRoots[m.mount], rk)
+			}
 			if _, ok := roots[rk]; ok {
 				continue
 			}
@@ -149,6 +158,8 @@ func BuildTree(pkgs []*packages.Package) (*PageTree, []Diagnostic) {
 			tree.Roots = append(tree.Roots, root)
 		}
 	}
+
+	tree.htmxMounts = htmxMounts(pkgs, mountRoots, roots)
 
 	closures := mainClosures(pkgs)
 	prodMains := realMains(pkgs)

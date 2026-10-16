@@ -50,7 +50,7 @@ func TestRenderTarget_Selected(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pages{}, "/", "Test")
+	sp, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestRenderTarget_StandaloneFunctions(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pages{}, "/", "Test")
+	sp, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -247,36 +247,22 @@ func TestRenderTarget_StandaloneFunctions(t *testing.T) {
 }
 
 func TestFunctionRenderTarget_Is(t *testing.T) {
-	// Test functionRenderTarget.Is() directly
-	frt := &functionRenderTarget{
-		hxTarget: "#standalone-test-page-standalone-widget",
-		pageName: "StandaloneTestPage",
-	}
+	// Test htmxUnmatchedTarget.Is() directly
+	frt := newHTMXUnmatchedTarget("#standalone-test-page-standalone-widget", &PageNode{Name: "StandaloneTestPage"}, nil)
 
 	// Should match StandaloneWidget
 	if !frt.Is(StandaloneWidget) {
 		t.Error("Should match StandaloneWidget")
 	}
 
-	// matched should be set after match
-	if !frt.matched {
-		t.Error("matched should be set after Is() returns true")
-	}
-
 	// Should NOT match AnotherStandaloneWidget
-	frt2 := &functionRenderTarget{
-		hxTarget: "standalone-widget",
-		pageName: "StandaloneTestPage",
-	}
+	frt2 := newHTMXUnmatchedTarget("standalone-widget", &PageNode{Name: "StandaloneTestPage"}, nil)
 	if !frt2.Is(StandaloneWidget) {
 		t.Error("Should match StandaloneWidget without # prefix")
 	}
 
 	// Should NOT match page methods
-	frt3 := &functionRenderTarget{
-		hxTarget: "page",
-		pageName: "StandaloneTestPage",
-	}
+	frt3 := newHTMXUnmatchedTarget("page", &PageNode{Name: "StandaloneTestPage"}, nil)
 	if frt3.Is(standaloneTestPage.Page) {
 		t.Error("Should NOT match page method")
 	}
@@ -294,13 +280,13 @@ func TestFunctionRenderTarget_Is(t *testing.T) {
 // have matched any "*-standalone-widget").
 func TestFunctionRenderTarget_Is_PackageQualified(t *testing.T) {
 	// The authoritative id structpages.ID emits matches regardless of page.
-	frt := &functionRenderTarget{hxTarget: "structpages-standalone-widget", pageName: "SomeOtherPage"}
+	frt := newHTMXUnmatchedTarget("structpages-standalone-widget", &PageNode{Name: "SomeOtherPage"}, nil)
 	if !frt.Is(StandaloneWidget) {
 		t.Error("package-qualified id should match the standalone function")
 	}
 
 	// A same-named function from another package must NOT match.
-	frt2 := &functionRenderTarget{hxTarget: "elsewhere-standalone-widget", pageName: "SomeOtherPage"}
+	frt2 := newHTMXUnmatchedTarget("elsewhere-standalone-widget", &PageNode{Name: "SomeOtherPage"}, nil)
 	if frt2.Is(StandaloneWidget) {
 		t.Error("a different package's same-named function must not match (no cross-package collision)")
 	}
@@ -424,7 +410,7 @@ func TestRenderTarget_PropsForgetRenderComponent(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test")
+	_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -475,7 +461,7 @@ func TestRenderComponent_MethodTargetFromProps(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, &pages{}, "/", "Test")
+	sp, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -559,7 +545,7 @@ func TestRenderTarget_PageFallbackWithStaticID(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	_, err := Mount(mux, &pages{}, "/", "Test")
+	_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 	if err != nil {
 		t.Fatalf("Mount failed: %v", err)
 	}
@@ -665,7 +651,7 @@ func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
 		}
 
 		mux := http.NewServeMux()
-		_, err := Mount(mux, &pages{}, "/", "Test")
+		_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 		if err != nil {
 			t.Fatalf("Mount failed: %v", err)
 		}
@@ -695,7 +681,7 @@ func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
 		}
 
 		mux := http.NewServeMux()
-		_, err := Mount(mux, &pages{}, "/", "Test")
+		_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 		if err != nil {
 			t.Fatalf("Mount failed: %v", err)
 		}
@@ -726,10 +712,11 @@ func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
 
 		mux := http.NewServeMux()
 		var capturedErr error
-		_, err := Mount(mux, &pages{}, "/", "Test", WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
-			capturedErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}))
+		_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget),
+			WithErrorHandler(func(w http.ResponseWriter, r *http.Request, err error) {
+				capturedErr = err
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}))
 		if err != nil {
 			t.Fatalf("Mount failed: %v", err)
 		}
@@ -750,7 +737,7 @@ func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
 			t.Error("Expected error for page without Page() method")
 		}
 
-		if capturedErr != nil && !strings.Contains(capturedErr.Error(), "is targeted but not handled") {
+		if capturedErr != nil && !strings.Contains(capturedErr.Error(), "has no Page component") {
 			t.Errorf("Expected helpful error message, got: %v", capturedErr)
 		}
 	})
@@ -761,7 +748,7 @@ func TestRenderTarget_PageFallback_EdgeCases(t *testing.T) {
 		}
 
 		mux := http.NewServeMux()
-		_, err := Mount(mux, &pages{}, "/", "Test")
+		_, err := Mount(mux, &pages{}, "/", "Test", WithTargetSelector(HTMXRenderTarget))
 		if err != nil {
 			t.Fatalf("Mount failed: %v", err)
 		}

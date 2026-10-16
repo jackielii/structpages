@@ -120,6 +120,7 @@ Open [http://localhost:8080](http://localhost:8080). You should see "Hello, stru
 - [Concepts](./concepts.md) for the vocabulary the rest of these docs use.
 - [Routing](./routing.md) for the full tag syntax (HTTP methods, path params, titles).
 - [gsx Patterns](./gsx.md) for shared layouts and the Props pattern.
-- [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target`.
+- [How a Request Is Rendered](./rendering.md) for what renders, and when Props overrides it.
+- [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target` (opt in with `WithTargetSelector`).
 - [Testing](./testing.md) for rendering pages and components in unit tests.
 - [Examples](./examples/index.md) for full working apps in `examples/` you can clone.

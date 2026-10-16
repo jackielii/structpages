@@ -36,7 +36,7 @@ type productPages struct {
 
 Each page renders through a **Props method** (loads data) and a **Page method** (a gsx component), or handles the request imperatively with a **handler method** (`ServeHTTP`) — whichever fits the request shape. URLs are generated from page types (`{product{} |> url}` in gsx, `structpages.URLFor(ctx, product{})` in Go) rather than string concatenation, and the [`structpages-lint`](./lint.md) analyzer catches dangling references at build time.
 
-A request is matched to a page, its Props method loads data, and a page component renders: the whole page, or one region for an HTMX request. [Concepts](./concepts.md#request-lifecycle) walks through it.
+A request is matched to a page, its Props method loads data, and a page component renders: the whole page, or one region for an HTMX request once the mount opts in with `WithTargetSelector`. [How a Request Is Rendered](./rendering.md) walks through it.
 
 ## What's next
 
@@ -44,6 +44,7 @@ A request is matched to a page, its Props method loads data, and a page componen
 - [Concepts](./concepts.md) for the vocabulary the rest of these docs use.
 - [Routing](./routing.md) for the full tag syntax (HTTP methods, path params, titles).
 - [gsx Patterns](./gsx.md) for shared layouts and the Props pattern.
+- [How a Request Is Rendered](./rendering.md) for what renders, and when Props overrides it.
 - [HTMX Integration](./htmx.md) for partial rendering driven by `hx-target`.
 - [Testing](./testing.md) for rendering pages and components in unit tests.
 - [Examples](./examples/index.md) for full working apps in `examples/` you can clone.

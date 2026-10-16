@@ -5,9 +5,9 @@ Read them in this order; each builds on the one before. The entry file is where 
 | Directory | What it shows | Start in |
 |---|---|---|
 | [`simple/`](./simple) | Route-tagged page structs, one `Page` component each, and links built with the `url` filter. No HTMX, no DI. | `pages.gsx` |
-| [`htmx/`](./htmx) | A `Page` and a `Content` component per page: the default `HTMXRenderTarget` renders just `Content` when `hx-target` names it. | `pages.gsx` |
+| [`htmx/`](./htmx) | A `Page` and a `Content` component per page: mounted with `WithTargetSelector(structpages.HTMXRenderTarget)`, so an htmx request renders just `Content` when `hx-target` names it. | `pages.gsx` |
 | [`todo/`](./todo) | Form actions as handler methods (`ServeHTTP`) that mutate, then return `RenderComponent(...)` to re-render the list. | `pages.gsx` |
-| [`htmx-render-target/`](./htmx-render-target) | Standalone component functions as HTMX targets: `Props` branches on `target.Is(...)` and loads only that widget's data. | `pages.gsx` |
+| [`htmx-render-target/`](./htmx-render-target) | Standalone component functions as HTMX targets: `Props` asks `target.Is(...)`, loads only that widget's data and renders it with `RenderComponent`. | `pages.gsx` |
 | [`blog/`](./blog) | A larger app: per-feature packages, `WithArgs` dependency injection, page `Middlewares` for auth, a custom `WithErrorHandler`, components shared across packages. | `main.go`, then `blog/` and `admin/` |
 | [`url-validation/`](./url-validation) | Checking every generated URL at boot, plus an integration test that asserts rendered `href`s. Standard library only. | `validate.go` |
 | [`html-template/`](./html-template) | Rendering with `html/template` instead of gsx, with a `urlFor` template func and htmx 4 via `HTMXv4RenderTarget`. | `main.go` |

@@ -2,15 +2,8 @@ package structpages
 
 import "strings"
 
-// This file handles the bidirectional conversion between component method names
-// and HTML IDs/HTMX targets.
-//
-// Marshal:   Method name → HTML ID    (camelToKebab)
-// Unmarshal: HTML ID → Method name    (kebabToPascal)
-//
-// Example round-trip:
-//   TodoList → todo-list → TodoList
-//   HTMLParser → html-parser → HtmlParser
+// This file converts component method names to the kebab-case form used in
+// HTML ids and HTMX targets (camelToKebab).
 
 // camelToKebab converts a CamelCase or camelCase string to kebab-case.
 // Used by IDFor to generate HTML IDs from method names.
@@ -44,24 +37,4 @@ func camelToKebab(s string) string {
 	}
 
 	return result.String()
-}
-
-// kebabToPascal converts kebab-case to PascalCase.
-// Used by HTMXPageConfig to convert HX-Target values to method names.
-//
-// Examples:
-//   - "todo-list" -> "TodoList"
-//   - "html-parser" -> "HtmlParser"
-//   - "content" -> "Content"
-func kebabToPascal(s string) string {
-	if s == "" {
-		return s
-	}
-	parts := strings.Split(s, "-")
-	for i, part := range parts {
-		if part != "" {
-			parts[i] = strings.ToUpper(part[:1]) + part[1:]
-		}
-	}
-	return strings.Join(parts, "")
 }

@@ -39,6 +39,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	if _, err := structpages.Mount(mux, &rootPages{}, "/", "structpages blog",
+		// htmx 2.x: route HX-Target to the page's partials.
+		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithArgs(s, authSvc),
 		structpages.WithErrorHandler(errorHandler),
 	); err != nil {

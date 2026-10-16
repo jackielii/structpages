@@ -34,7 +34,7 @@ The chain reads: the **Props method** returns a **props struct**; that **props**
 | Term | Method | Job |
 |---|---|---|
 | **Page method** | `Page(props)` | the main render entry — a page component that composes the full page (layout + content) |
-| **Props method** | `Props(...)` | loads data via DI → returns the props struct |
+| **Props method** | `Props(...)` | loads data via DI → returns the props struct (or several values, each page component taking the ones it needs by type) |
 | **handler method** | `ServeHTTP(...)` | imperative entry: mutate / redirect / serve JSON, or render a partial via `RenderComponent` — the Go `http.Handler` shape |
 | **Middlewares method** | `Middlewares()` | declares middleware for the page + descendants |
 
@@ -44,11 +44,15 @@ The two render entries differ in flavor: the **Page method** renders declarative
 
 ## Request lifecycle
 
-For a rendering page: **route match → Props method** (with `RenderTarget` injected to pick the region) **→ page component render** — `Page` for full loads, a partial for HTMX requests targeting that region's id. A handler method (`ServeHTTP`) bypasses this pipeline: it responds imperatively, optionally handing a page component to `RenderComponent`.
+**The request says what it wants. The Props method is the normal page flow; returning an error breaks it.**
+
+For a rendering page: **route match → middleware → target selector** (reads the request into a `RenderTarget`: what it wants) **→ Props method** (loads data; may ask `target.Is(p.X)` to load only that region) **→ page component render**: the page component the target `Is`, else `Page`, its parameters filled by type from the props. Without `WithTargetSelector` every request wants `Page`; htmx apps opt in with `HTMXRenderTarget` (htmx 1/2) or `HTMXv4RenderTarget` (htmx 4), and then an HTMX request targeting a region's id renders that partial.
+
+The Props method breaks the flow by returning an error: `RenderComponent(c, more...)` renders those components instead, `ErrSkipPageRender` means it already responded (a redirect), and any other error goes to the error handler. A handler method (`ServeHTTP`) bypasses this pipeline: it responds imperatively, optionally handing a page component to `RenderComponent`. The full flow is in [How a Request Is Rendered](./rendering.md).
 
 ## API helpers (literal — these are the public API)
 
-[`RenderComponent`](./api.md#rendercomponent), [`RenderTarget`](./htmx.md#rendertarget-in-props), [`URLFor`](./urlfor.md#urlfor), [`ID` / `IDTarget`](./urlfor.md#id-and-idtarget) (in gsx, the [`url` / `id` / `target` filters](./gsx.md#register-the-filters)), [`Within`](./urlfor.md#active-navigation), [`Ref`](./urlfor.md#dynamic-references-with-ref), [`WithArgs`](./dependency-injection.md) (dependency injection / **args**).
+[`RenderComponent`](./api.md#rendercomponent), [`RenderTarget`](./rendering.md#what-the-request-wants-the-target-selector), [`URLFor`](./urlfor.md#urlfor), [`ID` / `IDTarget`](./urlfor.md#id-and-idtarget) (in gsx, the [`url` / `id` / `target` filters](./gsx.md#register-the-filters)), [`Within`](./urlfor.md#active-navigation), [`Ref`](./urlfor.md#dynamic-references-with-ref), [`WithArgs`](./dependency-injection.md) (dependency injection / **args**).
 
 ## Loose comparisons (analogies, not structpages terms)
 

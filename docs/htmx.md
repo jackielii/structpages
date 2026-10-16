@@ -6,7 +6,16 @@ sidebar_position: 7
 
 # HTMX Integration
 
-structpages has built-in HTMX support enabled by default through `HTMXRenderTarget`. All HTMX requests for a page go to the SAME route; the framework picks which page component to render from the `HX-Target` header.
+All htmx requests for a page go to the SAME route; the framework picks which page component to render from the `HX-Target` header. That reading is opt-in: choose the target selector for your htmx version at `Mount`.
+
+```go
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
+    structpages.WithTargetSelector(structpages.HTMXRenderTarget),   // htmx 1.x and 2.x
+    // structpages.WithTargetSelector(structpages.HTMXv4RenderTarget), // htmx 4
+)
+```
+
+Without a selector, every request wants `Page`, so a partial request silently gets the full page. The [linter's `selector` check](./lint.md) flags a `Mount` without one when its pages' templates use htmx. This page covers the htmx side; [How a Request Is Rendered](./rendering.md) defines the flow it relies on.
 
 ## The central loop
 
@@ -14,7 +23,7 @@ structpages has built-in HTMX support enabled by default through `HTMXRenderTarg
 
 1. **Composition site** — where the page component is composed in, wrap it in an element with `id={index.TodoList |> id}`.
 2. **Trigger site** — the element that fires the update points `hx-target={index.TodoList |> target}` at the page's own route.
-3. **Server site** — structpages matches the `HX-Target` header back to the page component by id, and the Props method branches on the injected `RenderTarget` with `target.Is(p.TodoList)` to load just that region's data.
+3. **Server site** — the htmx target selector matches the `HX-Target` header back to the page component by id. Props asks the injected `RenderTarget` with `target.Is(p.TodoList)` and loads just that region's data; the framework then renders `TodoList` with it.
 
 The filters are registered once in `gsx.toml` (see [gsx Patterns](./gsx.md#register-the-filters)); templ users call the functions directly (see [Using templ](./templ.md)).
 
@@ -34,22 +43,18 @@ component (p index) Content(props IndexProps) {
 ```
 
 ```go
-// Site 3 — server: Props branches on the injected RenderTarget
-func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, error) {
+// Site 3 — server: Props loads what the request wants
+func (p index) Props(target structpages.RenderTarget) (IndexProps, []Todo, error) {
     if target.Is(p.TodoList) {
         todos, err := getActiveTodos()
-        if err != nil {
-            return IndexProps{}, err
-        }
-        return IndexProps{}, structpages.RenderComponent(p.TodoList(todos))
+        return IndexProps{}, todos, err // the framework renders TodoList(todos)
     }
     todos, err := getAllTodos()
-    if err != nil {
-        return IndexProps{}, err
-    }
-    return IndexProps{Todos: todos}, nil
+    return IndexProps{Todos: todos}, nil, err // renders Page or Content
 }
 ```
+
+`TodoList(todos []Todo)` and `Content(props IndexProps)` each take their own share of Props' results by type ([Components take what they need by type](./rendering.md#components-take-what-they-need-by-type)).
 
 Because all three sites derive from the same method reference, renaming the method or moving the mount can't desynchronize them — there is no string id to drift. **Never hand-write the id at one site and generate it at another.**
 
@@ -76,17 +81,11 @@ Including the ancestor path guarantees two different mounts of the same struct n
 
 ## RenderTarget in Props
 
-The `RenderTarget` parameter tells your Props method **which page component will render**, so it can load only that region's data. Whatever selector configuration you use, `target.Is()` works the same — Props code is decoupled from the selection mechanism.
+The `RenderTarget` parameter tells Props **what the request wants**, so it can load only that region's data. `target.Is(p.UserList)` is a plain question with no side effects; it works the same whichever selector the mount uses, so Props code doesn't depend on how the request was read.
 
-The shape that holds up in real pages: **partials get partial data, not the page props.** The page props struct exists for the full-page render and is typically *composed of* per-pane sub-structs; each partial takes its own pane struct. When a partial branch matches, you build just that pane's data, hand the constructed component to `RenderComponent`, and the page-props value you return alongside is **ignored**:
+When Props returns no error, the framework renders the page's component the target `Is`, or `Page` if it `Is` none of them, filling the component's parameters by type from Props' results. The shape that holds up in real pages: **partials get partial data, not the page props.** Return one value per pane, and let each component declare only the panes it renders:
 
 ```go
-// Page props compose the panes; each partial takes its own pane struct.
-type TeamManagementProps struct {
-    UserPaneProps
-    GroupPaneProps
-}
-
 type UserPaneProps struct {
     Users           []UserWithGroups
     UserSearchQuery string
@@ -97,64 +96,51 @@ type GroupPaneProps struct {
     GroupSearchQuery string
 }
 
-func (p TeamManagementView) Props(r *http.Request, sel structpages.RenderTarget, appCtx *AppContext) (TeamManagementProps, error) {
+func (p TeamManagementView) Props(r *http.Request, t structpages.RenderTarget, appCtx *AppContext) (UserPaneProps, GroupPaneProps, error) {
     switch {
-    case sel.Is(p.GroupList):
-        groups, err := p.GroupListProps(r, appCtx)
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        // Partial data only — the TeamManagementProps{} return is ignored.
-        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(groups))
+    case t.Is(p.UserList):
+        users, err := p.userPane(r, appCtx)
+        return users, GroupPaneProps{}, err // renders UserList
 
-    case sel.Is(p.UserList):
-        userPane, err := p.UserListProps(r, appCtx)
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(userPane))
+    case t.Is(p.GroupList):
+        groups, err := p.groupPane(r, appCtx)
+        return UserPaneProps{}, groups, err // renders GroupList
 
     default:
         // Full page, boosted Content swap, or anything unrecognised:
-        // fall back to the full props — never to empty props.
-        return p.fullProps(r, appCtx)
+        // load everything — never return empty props here.
+        users, err := p.userPane(r, appCtx)
+        if err != nil {
+            return UserPaneProps{}, GroupPaneProps{}, err
+        }
+        groups, err := p.groupPane(r, appCtx)
+        return users, groups, err // renders Page
     }
 }
 
-// Per-pane helper props methods. NOT auto-invoked (only the method literally
-// named Props is) — they're plain methods feeding both the partial branches
-// above and fullProps below.
-func (p TeamManagementView) GroupListProps(r *http.Request, appCtx *AppContext) (GroupPaneProps, error) {
-    groups, err := appCtx.Store.SearchGroupsWithCounts(r.Context(), r.FormValue("group-search"))
-    if err != nil {
-        return GroupPaneProps{}, fmt.Errorf("search groups: %w", err)
-    }
-    return GroupPaneProps{Groups: groups, GroupSearchQuery: r.FormValue("group-search")}, nil
-}
-
-func (p TeamManagementView) UserListProps(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
-    users, err := appCtx.Store.SearchUsersWithGroups(r.Context(), r.FormValue("user-search"))
+// Plain helpers feeding both the partial branches and the full page.
+// Only the method literally named Props is called by the framework.
+func (p TeamManagementView) userPane(r *http.Request, appCtx *AppContext) (UserPaneProps, error) {
+    q := r.FormValue("user-search")
+    users, err := appCtx.Store.SearchUsersWithGroups(r.Context(), q)
     if err != nil {
         return UserPaneProps{}, fmt.Errorf("search users: %w", err)
     }
-    return UserPaneProps{Users: users, UserSearchQuery: r.FormValue("user-search")}, nil
+    return UserPaneProps{Users: users, UserSearchQuery: q}, nil
 }
 
-func (p TeamManagementView) fullProps(r *http.Request, appCtx *AppContext) (TeamManagementProps, error) {
-    userPane, err := p.UserListProps(r, appCtx)
+func (p TeamManagementView) groupPane(r *http.Request, appCtx *AppContext) (GroupPaneProps, error) {
+    q := r.FormValue("group-search")
+    groups, err := appCtx.Store.SearchGroupsWithCounts(r.Context(), q)
     if err != nil {
-        return TeamManagementProps{}, err
+        return GroupPaneProps{}, fmt.Errorf("search groups: %w", err)
     }
-    groupPane, err := p.GroupListProps(r, appCtx)
-    if err != nil {
-        return TeamManagementProps{}, err
-    }
-    return TeamManagementProps{UserPaneProps: userPane, GroupPaneProps: groupPane}, nil
+    return GroupPaneProps{Groups: groups, GroupSearchQuery: q}, nil
 }
 ```
 
 ```gsx
-component (p TeamManagementView) Page(props TeamManagementProps) {
+component (p TeamManagementView) Page(users UserPaneProps, groups GroupPaneProps) {
     <div class="team-management">
         <div class="user-pane">
             <input
@@ -163,7 +149,7 @@ component (p TeamManagementView) Page(props TeamManagementProps) {
                 hx-target={TeamManagementView.UserList |> target}
             />
             <div id={TeamManagementView.UserList |> id}>
-                <p.UserList pane={props.UserPaneProps}/>
+                <p.UserList pane={users}/>
             </div>
         </div>
         <div class="group-pane">
@@ -173,7 +159,7 @@ component (p TeamManagementView) Page(props TeamManagementProps) {
                 hx-target={TeamManagementView.GroupList |> target}
             />
             <div id={TeamManagementView.GroupList |> id}>
-                <p.GroupList pane={props.GroupPaneProps}/>
+                <p.GroupList pane={groups}/>
             </div>
         </div>
     </div>
@@ -188,32 +174,29 @@ component (p TeamManagementView) GroupList(pane GroupPaneProps) {
 }
 ```
 
-Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running. The composition site passes the same pane struct (`props.UserPaneProps`) the partial branch builds — full render and partial re-render share one component signature.
+Each pane updates independently: typing in the user search box re-renders only `UserList`, with only the user query running. The composition site passes the same pane struct the partial branch builds — full render and partial re-render share one component signature. Each Props result fills at most one parameter, so give the panes distinct types.
 
-### Overriding the selection
+If Props recognises a target with `Is` and then returns no error, that is still the normal flow: the component the target `Is` renders, or `Page`. Asking doesn't change what renders.
 
-Props can render a different component than the one selected — return any constructed component:
+### Breaking the normal flow
+
+To render something other than what the request wants, return `RenderComponent` with a constructed component — an empty state, an inline failure notice, another package's component:
 
 ```go
-func (p search) Props(r *http.Request, target structpages.RenderTarget) (SearchProps, error) {
+func (p search) Props(r *http.Request) ([]Result, error) {
     query := r.URL.Query().Get("q")
     if query == "" {
-        return SearchProps{}, structpages.RenderComponent(p.EmptyState())
+        return nil, structpages.RenderComponent(p.EmptyState())
     }
-    results, err := performSearch(query)
-    if err != nil {
-        return SearchProps{}, err
-    }
-    if target.Is(p.Results) {
-        return SearchProps{}, structpages.RenderComponent(p.Results(results))
-    }
-    return SearchProps{Results: results}, nil
+    return performSearch(query) // renders Results or Page, whichever the request wants
 }
 ```
 
+`RenderComponent(c, more...)` renders its arguments in order as one response, which is how one response updates several regions (htmx 4 `<hx-partial>`, htmx 2 `hx-swap-oob`). See [Breaking the flow on purpose](./rendering.md#breaking-the-flow-on-purpose) and [Updating several regions](./rendering.md#updating-several-regions).
+
 ### Standalone components shared across pages
 
-A component (a standalone `component`) can be an HTMX target without belonging to any page. `target.Is(UserStatsWidget)` matches it, and the package-prefixed id is stable regardless of which pages embed it:
+A component (a standalone `component`) can be an htmx target without belonging to any page. Its id is package-prefixed and stable regardless of which pages embed it, and `target.Is(UserStatsWidget)` recognises a request for it. It isn't one of the page's components, so the normal flow would render `Page`: Props renders it with `RenderComponent`:
 
 ```gsx
 component UserStatsWidget(stats UserStats) {
@@ -231,6 +214,10 @@ func (p dashboardPage) Props(r *http.Request, target structpages.RenderTarget, s
     return p.fullProps(r, store)
 }
 ```
+
+### Regions shared across pages
+
+The same works for another page's component. When a page's markup reuses a region of another page, a request targeting it carries that page's generated id, and `t.Is(report.DetailPage.Content)` is true on the serving page — matched by the exact id `ID` and the `id` filter produce, never loosely. Props decides what to render; if it doesn't act, `Page` renders. See [Regions shared across pages](./rendering.md#regions-shared-across-pages), including the warning about a whole document landing in a region.
 
 ## Nested swap levels (Page → Content → Detail)
 
@@ -267,20 +254,14 @@ The rule generalizes: **one page component per independently-swappable region, o
 
 ## Custom target selectors
 
-The default `HTMXRenderTarget` covers HTMX 1.x/2.x. For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — wire the v4 variant:
+The built-in selectors cover htmx. `HTMXRenderTarget` reads htmx 1.x/2.x headers (`HX-Request`, `HX-Target` as a bare id). For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — use `HTMXv4RenderTarget`; it also wants `Page` for `HX-Request-Type: full` (boosted links, `hx-select`). Both match `HX-Target` against the served page's components by the generated id, the component name with or without the page prefix, or a suffix of it.
 
-```go
-sp, err := structpages.Mount(mux, pages{}, "/", "App",
-    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
-)
-```
-
-For fully custom logic, return any value implementing `RenderTarget` (`Is(method any) bool`), typically delegating to `HTMXRenderTarget` for the cases you don't override. Only the built-in targets render a selected component on their own, so for a target of your own type `Props` returns `RenderComponent` itself, type-asserting the target to read what it carries:
+A selector can return any value implementing `RenderTarget` (`Is(component any) bool`). The framework only ever calls `Is`, so a custom target takes part in selection like the built-in ones: the page's component it `Is` renders, else `Page`. A custom selector typically handles its own case and delegates the rest to the htmx selector. A target that `Is` none of the page's components still reaches Props, which can type-assert it to read what it carries and break the flow with `RenderComponent`:
 
 ```go
 type jsonTarget struct{ data any }
 
-func (t jsonTarget) Is(method any) bool { return false }
+func (jsonTarget) Is(component any) bool { return false } // wants no page component
 
 sp, err := structpages.Mount(mux, pages{}, "/", "App",
     structpages.WithTargetSelector(func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
@@ -299,9 +280,10 @@ func (p dashboard) Props(r *http.Request, sel structpages.RenderTarget) (dashboa
 }
 ```
 
-The exact matching algorithm (including the authoritative pass against real generated ids) is documented in the [API reference](./api.md#htmxrendertarget).
+`Is` must have no side effects: the framework asks it about every component of the page, and Props may ask it too. A target that `Is` more than one of the page's components is an error. The exact matching rules are in the [API reference](./api.md#htmxrendertarget).
 
 ## See also
 
+- [How a Request Is Rendered](./rendering.md) for the full flow, including where parameter values come from.
 - `examples/htmx`, `examples/todo`, and `examples/htmx-render-target` in the [repository](https://github.com/jackielii/structpages/tree/main/examples) for complete working code.
 - [Error Handling](./error-handling.md) for HTMX-aware redirects (`HX-Location`).

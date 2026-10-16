@@ -28,26 +28,21 @@ type NcrTableProps struct {
     NPages int
 }
 
-func (p NcrAnalyticsPage) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (NcrDashboardProps, error) {
+func (p NcrAnalyticsPage) Props(r *http.Request, appCtx *AppContext, t structpages.RenderTarget) (NcrDashboardProps, NcrTableProps, error) {
     filter := p.parseFilter(r)
-    switch {
-    case sel.Is(p.NcrTable):
+    if t.Is(p.NcrTable) {
         table, err := p.tableProps(r.Context(), appCtx.Store, filter)
-        if err != nil {
-            return NcrDashboardProps{}, err
-        }
-        return NcrDashboardProps{}, structpages.RenderComponent(p.NcrTable(table))
-    case sel.Is(p.NcrContent):
-        props, err := p.fullProps(r.Context(), appCtx.Store, filter)
-        if err != nil {
-            return NcrDashboardProps{}, err
-        }
-        return NcrDashboardProps{}, structpages.RenderComponent(p.NcrContent(props))
-    default:
-        return p.fullProps(r.Context(), appCtx.Store, filter)
+        return NcrDashboardProps{}, table, err // renders NcrTable(table)
     }
+    // Page, Content and NcrContent all take the full props; the framework
+    // renders whichever the request wants.
+    props, err := p.fullProps(r.Context(), appCtx.Store, filter)
+    return props, NcrTableProps{}, err
 }
 ```
+
+The mount needs an htmx selector (`WithTargetSelector(structpages.HTMXRenderTarget)`, §6) for `HX-Target` to
+pick `NcrTable` or `NcrContent`; each component takes its share of `Props`' results by type.
 
 ### Markup
 
@@ -118,11 +113,6 @@ type TeamManagementPages struct {
     AddUser TeamManagementAddUser `route:"POST /add Add User to Group"`
 }
 
-type TeamManagementProps struct {
-    UserPaneProps
-    GroupPaneProps
-}
-
 type UserPaneProps struct {
     Users           []UserWithGroups
     UserSearchQuery string
@@ -133,30 +123,21 @@ type GroupPaneProps struct {
     GroupSearchQuery string
 }
 
-func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) (TeamManagementProps, error) {
+func (p TeamManagementView) Props(r *http.Request, appCtx *AppContext, t structpages.RenderTarget) (UserPaneProps, GroupPaneProps, error) {
     switch {
-    case sel.Is(p.GroupList):
-        pane, err := p.groupPane(r, appCtx)
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        return TeamManagementProps{}, structpages.RenderComponent(p.GroupList(pane))
-    case sel.Is(p.UserList):
-        pane, err := p.userPane(r, appCtx)
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        return TeamManagementProps{}, structpages.RenderComponent(p.UserList(pane))
+    case t.Is(p.GroupList):
+        groups, err := p.groupPane(r, appCtx)
+        return UserPaneProps{}, groups, err // renders GroupList(groups)
+    case t.Is(p.UserList):
+        users, err := p.userPane(r, appCtx)
+        return users, GroupPaneProps{}, err // renders UserList(users)
     default:
         users, err := p.userPane(r, appCtx)
         if err != nil {
-            return TeamManagementProps{}, err
+            return UserPaneProps{}, GroupPaneProps{}, err
         }
         groups, err := p.groupPane(r, appCtx)
-        if err != nil {
-            return TeamManagementProps{}, err
-        }
-        return TeamManagementProps{UserPaneProps: users, GroupPaneProps: groups}, nil
+        return users, groups, err // renders Page or Content with both panes
     }
 }
 
@@ -170,32 +151,32 @@ func (p TeamManagementView) userPane(r *http.Request, appCtx *AppContext) (UserP
 }
 ```
 
-Each pane component takes only its pane struct and is wrapped where it is composed:
+Each pane component takes only its pane struct and is wrapped where it is composed; `Content` takes both:
 
 ```gsx
-component (p TeamManagementView) Content(props TeamManagementProps) {
+component (p TeamManagementView) Content(users UserPaneProps, groups GroupPaneProps) {
     <section>
         <input
             name="user-search"
-            value={props.UserSearchQuery}
+            value={users.UserSearchQuery}
             hx-get={TeamManagementView{} |> url}
             hx-target={TeamManagementView.UserList |> target}
             hx-trigger="input changed delay:300ms, refresh-users from:body"
         />
         <div id={TeamManagementView.UserList |> id}>
-            <p.UserList pane={props.UserPaneProps}/>
+            <p.UserList pane={users}/>
         </div>
     </section>
     <section>
         <input
             name="group-search"
-            value={props.GroupSearchQuery}
+            value={groups.GroupSearchQuery}
             hx-get={TeamManagementView{} |> url}
             hx-target={TeamManagementView.GroupList |> target}
             hx-trigger="input changed delay:300ms, refresh-groups from:body"
         />
         <div id={TeamManagementView.GroupList |> id}>
-            <p.GroupList pane={props.GroupPaneProps}/>
+            <p.GroupList pane={groups}/>
         </div>
     </section>
 }
@@ -342,6 +323,7 @@ sp, err := structpages.Mount(mux, ui.TopPages{}, "/", "App",
     structpages.WithMiddlewares(loggingMiddleware, sessionMiddleware),
     structpages.WithTargetSelector(structpages.HTMXv4RenderTarget), // htmx 4 front end
     structpages.WithArgs(appCtx),
+    structpages.WithRequestArgs(currentUser), // func(*http.Request) (*User, error), once per request
 )
 if err != nil {
     log.Fatal(err)
@@ -429,9 +411,20 @@ return structpages.RenderComponent(MyPage{}.ItemList(items))
 // Standalone component (.gsx file).
 return MyPageProps{}, structpages.RenderComponent(<UserStatsWidget stats={stats}/>)
 
+// Several regions in one response, rendered in order. htmx 4: extras are wrapped in
+// <hx-partial hx-target={...}> (here inside CountPartial); htmx 2: hx-swap-oob on their root.
+return MyPageProps{}, structpages.RenderComponent(p.ItemList(items), p.CountPartial(len(items)))
+
+// An inline notice instead of the region the request wanted, with a status.
+w.WriteHeader(http.StatusServiceUnavailable)
+return MyPageProps{}, structpages.RenderComponent(p.ListUnavailable(err))
+
 // Nothing.
 return structpages.RenderComponent(gsx.Text(""))
 ```
+
+From `Props`, any of these breaks the normal flow; return `(props, nil)` instead to render the component the
+request wants.
 
 ---
 

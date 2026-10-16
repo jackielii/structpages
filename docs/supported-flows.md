@@ -50,11 +50,11 @@ component (p index) TodoList(todos []Todo) {
 }
 ```
 
-The Props method runs with a [`RenderTarget`](./htmx.md) injected, so it knows which page component will render and loads only that region's data. Initial loads render `Page`; HTMX requests targeting `index.TodoList`'s id render just the partial.
+The Props method runs with a [`RenderTarget`](./htmx.md) injected, so it knows what the request wants and loads only that region's data. When Props returns no error, the framework renders the page component the target `Is` — here `TodoList`, filled with the returned todos — or `Page`. Initial loads render `Page`; with an htmx target selector (`WithTargetSelector(structpages.HTMXRenderTarget)`, or `HTMXv4RenderTarget` for htmx 4), HTMX requests targeting `index.TodoList`'s id render just the partial. Without a selector every request renders `Page`. The full flow is in [How a Request Is Rendered](./rendering.md).
 
 ### Complex props structs
 
-Real pages often need a props struct with many fields while individual page components take only a subset:
+Real pages often need a props struct with many fields while individual page components take only a subset. Return the subset as its own value: each page component's parameters are filled by type from Props' results, so `Page` takes the props struct and `UserList` takes just the users:
 
 ```go
 type IndexProps struct {
@@ -64,40 +64,37 @@ type IndexProps struct {
     TotalCount int
 }
 
-func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, error) {
-    switch {
-    case target.Is(p.UserList):
+func (p index) Props(r *http.Request, target structpages.RenderTarget) (IndexProps, []User, error) {
+    if target.Is(p.UserList) {
         users, err := searchUsers(r.URL.Query().Get("q"))
-        if err != nil {
-            return IndexProps{}, err
-        }
-        return IndexProps{}, structpages.RenderComponent(p.UserList(users))
-
-    default: // full page
-        users, err := getAllUsers()
-        if err != nil {
-            return IndexProps{}, err
-        }
-        picklists, err := getPicklists()
-        if err != nil {
-            return IndexProps{}, err
-        }
-        return IndexProps{
-            Users:      users,
-            Picklists:  picklists,
-            Search:     r.URL.Query().Get("q"),
-            TotalCount: len(users),
-        }, nil
+        return IndexProps{}, users, err // renders UserList(users)
     }
+    // full page
+    users, err := getAllUsers()
+    if err != nil {
+        return IndexProps{}, nil, err
+    }
+    picklists, err := getPicklists()
+    if err != nil {
+        return IndexProps{}, nil, err
+    }
+    return IndexProps{
+        Users:      users,
+        Picklists:  picklists,
+        Search:     r.URL.Query().Get("q"),
+        TotalCount: len(users),
+    }, nil, nil // renders Page(props IndexProps)
 }
 ```
 
-`p.UserList(users)` is a normal Go call — compile-time checked — handed to `RenderComponent` as the response. Two principles generalize from this:
+Two principles generalize from this:
 
-- **Partials get partial data, never the full props struct.** When `target.Is(p.UserList)` matches, you build just that region's data; the `IndexProps{}` returned alongside `RenderComponent` is ignored.
+- **Partials get partial data, never the full props struct.** When `target.Is(p.UserList)` matches, you build just that region's data and return zero values for the rest. Each result fills at most one parameter, so give each share a distinct type.
 - **The default case falls back to full props, not empty props** — browser navigation, boosted swaps, and unrecognised targets all need the whole page.
 
-On larger pages the props struct is typically *composed of* per-pane sub-structs, with helper props methods feeding both the partial branches and a shared `fullProps` — see the worked example in [HTMX Integration](./htmx.md#rendertarget-in-props).
+To render something other than what the request wants — an empty state, an inline error notice, several regions at once — return `RenderComponent(p.EmptyState())` (or several components) from Props; see [Breaking the flow on purpose](./rendering.md#breaking-the-flow-on-purpose).
+
+On larger pages the data is typically split into per-pane values, with helper methods feeding both the partial branches and the full page — see the worked example in [HTMX Integration](./htmx.md#rendertarget-in-props).
 
 ## A handler method that returns a partial
 
@@ -121,7 +118,7 @@ func (a add) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 }
 ```
 
-**Pass a constructed component.** `index{}.TodoList(todos)` is a normal Go call — the compiler checks argument types and counts — and page structs are stateless, so a zero-value receiver constructs a *sibling* page's component just as well as your own.
+**Pass a constructed component.** `index{}.TodoList(todos)` is a normal Go call — the compiler checks argument types and counts — and page structs are stateless, so a zero-value receiver constructs a *sibling* page's component just as well as your own. `RenderComponent` takes several components and renders them in order as one response, for updating several regions at once ([Updating several regions](./rendering.md#updating-several-regions)).
 
 ## A handler method that redirects
 
@@ -162,6 +159,7 @@ Only the error-returning forms are buffered; what that means for writing `w` is 
 
 ## See also
 
+- [How a Request Is Rendered](./rendering.md) — the flow: target selector, Props, which component renders.
 - [HTMX Integration](./htmx.md) — `RenderTarget`, partial selection, the id loop.
 - [Error Handling](./error-handling.md) — buffering rules, typed errors, redirects, JSON.
 - [examples/todo](https://github.com/jackielii/structpages/tree/main/examples/todo) — complete working example.

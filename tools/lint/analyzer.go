@@ -15,8 +15,9 @@ import (
 func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "structpageslint",
-		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref calls against the page tree, " +
-			"and flags route string literals that should use URLFor",
+		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref / RenderTarget.Is calls against the page tree, " +
+			"flags route string literals that should use URLFor, and Mount calls serving htmx templates " +
+			"without a target selector",
 		Run: func(pass *analysis.Pass) (any, error) {
 			run(pass, tree)
 			return nil, nil
@@ -67,6 +68,7 @@ func run(pass *analysis.Pass, tree *PageTree) {
 	}
 	checkRouteLiterals(ctx)
 	checkRefLiterals(ctx)
+	checkSelectors(ctx)
 }
 
 // inSomeTree runs check against each candidate tree in turn and
@@ -149,6 +151,10 @@ func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 		checkIDOrIDTarget(ctx, args, fn.Name())
 	case "Within":
 		checkWithin(ctx, args)
+	case "Is":
+		if isRenderTargetMethod(fn) {
+			checkRenderTargetIs(ctx, args)
+		}
 	}
 }
 

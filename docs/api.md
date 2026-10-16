@@ -39,7 +39,7 @@ if err := http.ListenAndServe(":8080", mux); err != nil {
 func Parse(page any, route, title string, options ...Option) (*StructPages, error)
 ```
 
-Builds the page tree without registering routes. Use in tests and tooling that need `URLFor`/`ID`/`IDTarget` against the real page tree but don't want an HTTP server. Accepts the same options as `Mount`; mux-shaped options (middlewares) are inert.
+Builds the page tree without registering routes. Use in tests and tooling that need `URLFor`/`ID`/`IDTarget` against the real page tree but don't want an HTTP server. Accepts the same options as `Mount`; options that only matter when serving (middlewares, request args, the target selector) are inert, and pages' `RequestArgs` methods aren't called.
 
 ## StructPages methods
 
@@ -78,7 +78,15 @@ Page-argument forms, params formats, strict-mode semantics, and chain compositio
 structpages.WithArgs(store, sessionManager, logger)
 ```
 
-Register dependency-injection values, matched by type into `Props` / `ServeHTTP` / `Middlewares` / `Init` parameters. Each type registers once; see [Dependency Injection](./dependency-injection.md) for the matching rules and named-type disambiguation.
+Register dependency-injection values, matched by type into `Props` / `ServeHTTP` / component / `Middlewares` / `RequestArgs` / `Init` parameters. Each type registers once; see [Dependency Injection](./dependency-injection.md) for the matching rules and named-type disambiguation.
+
+### WithRequestArgs
+
+```go
+structpages.WithRequestArgs(currentUser) // func(*http.Request) (*User, error)
+```
+
+Register per-request values: each provider is a `func(*http.Request) (T, error)` or `func(*http.Request, *PageNode) (T, error)`, and its result fills parameters of type `T` in `Props`, extended `ServeHTTP` and component methods. A provider runs at most once per request, the first time a parameter needs it; its error stops the request like an error from `Props`. A page's `RequestArgs` method adds providers for part of the tree. See [Request args](./dependency-injection.md#request-args).
 
 ### WithErrorHandler
 
@@ -99,10 +107,11 @@ Global middleware applied to all routes. `MiddlewareFunc` is `func(next http.Han
 ### WithTargetSelector
 
 ```go
-structpages.WithTargetSelector(structpages.HTMXv4RenderTarget)
+structpages.WithTargetSelector(structpages.HTMXRenderTarget)   // htmx 1.x and 2.x
+structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) // htmx 4
 ```
 
-Replace the default `HTMXRenderTarget` — e.g. with the htmx 4 variant, or a custom selector for content negotiation. See [HTMX Integration](./htmx.md#custom-target-selectors).
+Set how every request is read: the selector returns the `RenderTarget`, what the request wants. **There is no default htmx selector**: without this option every request wants `Page`, so an htmx app must choose the selector for its htmx version. A custom `TargetSelector` can return any `RenderTarget`; the framework only calls its `Is`. See [How a Request Is Rendered](./rendering.md#what-the-request-wants-the-target-selector) and [custom target selectors](./htmx.md#custom-target-selectors).
 
 ### WithMaxIDLength
 
@@ -132,7 +141,7 @@ Called for each page with no handler and no children, which is otherwise skipped
 
 ## Page methods
 
-Pages can implement these optional methods. Parameters on `Props`, `ServeHTTP`, `Middlewares`, and `Init` are matched by **type**, in any order; injectable types are `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and anything registered via `WithArgs`.
+Pages can implement these optional methods. Parameters are matched by **type**, in any order. Per request (`Props`, extended `ServeHTTP`, components): `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, request args, and `WithArgs` values; components take `Props`' results first. Once at `Mount` (`Middlewares`, `RequestArgs`, `Init`): `*structpages.PageNode` and `WithArgs` values. See [Dependency Injection](./dependency-injection.md#what-each-method-can-receive).
 
 ### Page
 
@@ -140,7 +149,9 @@ Pages can implement these optional methods. Parameters on `Props`, `ServeHTTP`, 
 component (p myPage) Page(props MyProps) { … }
 ```
 
-The main render entry — a page component composing the full page. Pages without a `Page` method can still render by returning `RenderComponent(...)` from Props.
+The main render entry — a page component composing the full page, and what renders when the request wants none of the page's other components. Pages without a `Page` method can still render by returning `RenderComponent(...)` from Props.
+
+Any other method returning a component (`Content`, `UserList`, …) is a partial: it renders when the request's target `Is` it and `Props` returns no error. Its parameters are filled from `Props`' results by type, so each component declares only what it needs.
 
 ### Props
 
@@ -148,7 +159,9 @@ The main render entry — a page component composing the full page. Pages withou
 func (p myPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (MyProps, error)
 ```
 
-Loads data before render; the returned props struct is passed to the selected page component. Only the method literally named `Props` is auto-invoked. Gets the unbuffered writer — set headers or cookies if needed, but return errors rather than writing the body (see [Error Handling](./error-handling.md)).
+The normal page flow. Returning `(results…, nil)` renders what the request wants (the component the target `Is`, else `Page`) with those results; returning an error breaks the flow: `RenderComponent(...)` renders something else, `ErrSkipPageRender` means `Props` already responded, and any other error goes to the error handler. See [How a Request Is Rendered](./rendering.md#props-the-normal-flow-or-a-break).
+
+Only the method literally named `Props` is auto-invoked. It gets the unbuffered writer — set headers or cookies if needed, but return errors rather than writing the body (see [Error Handling](./error-handling.md)).
 
 ### ServeHTTP
 
@@ -164,6 +177,14 @@ func (p T) Middlewares(deps ...) []structpages.MiddlewareFunc
 
 Page-specific middleware, also applied to all descendants.
 
+### RequestArgs
+
+```go
+func (p T) RequestArgs(deps ...) []any
+```
+
+Request-arg providers for this page and every page below it, in the shapes `WithRequestArgs` takes. Called once at `Mount`, with `WithArgs` values injected, so providers can capture services. A page's providers shadow an ancestor's, or a mount-wide one, of the same type. See [Request args for part of the tree](./dependency-injection.md#request-args-for-part-of-the-tree).
+
 ### Init
 
 ```go
@@ -176,19 +197,22 @@ One-time setup at `Mount`; errors abort the mount. See [Dependency Injection](./
 
 ```go
 type RenderTarget interface {
-    Is(method any) bool
+    Is(component any) bool
 }
 ```
 
-Represents the page component selected for this request. Injected into Props (and DI-form `ServeHTTP`). `Is` accepts page component references (`target.Is(p.UserList)`) and standalone component functions (`target.Is(UserStatsWidget)`).
+What the request wants, as read by the target selector. Injected into `Props`, DI-form `ServeHTTP` and components. `Is` takes a component of this page (`target.Is(p.UserList)`), another page's component (`target.Is(admin.Users.List)`) or a standalone component function (`target.Is(UserStatsWidget)`), and has no side effects. When `Props` returns no error, the framework asks `Is` for each of the page's components and renders the one the target is, else `Page`; a target that is several components is an error.
+
+An element rendered with id `ID(ctx, X)` produces a request whose target `Is(X)`. See [Regions shared across pages](./rendering.md#regions-shared-across-pages).
 
 ## RenderComponent
 
 ```go
-func RenderComponent(comp interface{ Render(context.Context, io.Writer) error }) error
+func RenderComponent(comp interface{ Render(context.Context, io.Writer) error },
+    more ...interface{ Render(context.Context, io.Writer) error }) error
 ```
 
-Returns a sentinel error instructing the framework to render a specific component. Honored in the Props error path and the buffered-`ServeHTTP` error path; when returned from Props, the other return values are ignored.
+Breaks `Props`' normal flow: the framework renders `comp`, then each of `more`, in order, as one response. Honored in the Props error path and the buffered-`ServeHTTP` error path; when returned from Props, the other return values are ignored. Several components update several regions at once, for example with htmx 4 `<hx-partial>` blocks; see [Updating several regions](./rendering.md#updating-several-regions).
 
 `comp` is any component — a `gsx.Node`, a `templ.Component`, or a page partial called with its arguments — so the compiler checks those arguments at the call site:
 
@@ -201,16 +225,16 @@ return MyProps{}, structpages.RenderComponent(UserStatsWidget(stats)) // standal
 ## HTMXRenderTarget
 
 ```go
-func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error)
+structpages.WithTargetSelector(structpages.HTMXRenderTarget)
 ```
 
-The default `TargetSelector`. Non-HTMX requests (no `HX-Request: true`), or HTMX requests with no `HX-Target`, select the `Page` method. Otherwise the `HX-Target` value is matched against the page's components:
+The `TargetSelector` for htmx 1.x and 2.x; opt in with `WithTargetSelector`. Non-HTMX requests (no `HX-Request: true`), or HTMX requests with no `HX-Target`, select the `Page` method. Otherwise the `HX-Target` value is matched against the page's components:
 
 - **Pass 0 — authoritative**: compare against each component's *real generated id* — the same value `ID()` emits, including the full field-path prefix and any length-budget compaction. This is the true inverse of `ID`/`IDTarget`.
 - **Pass 1 — exact heuristics**: `<pageprefix>-<componentid>`, then bare `<componentid>`.
 - **Pass 2 — suffix match (longest wins)**: full id ends with target; target ends with full id; or target ends with `<componentid>` *only when* target starts with `<pageprefix>-` (guards against cross-page false matches).
 
-If no method matches, the raw target is carried as a function target and bound lazily when Props calls `target.Is(SomeFunc)` — this is how standalone component functions become HTMX targets.
+If no component matches, the target `Is` none of the page's components, so `Props` returning no error renders `Page`. It still answers `Is` for a standalone component function carrying that id (its package-qualified id, or the bare and page-prefixed forms) and for another page's component carrying exactly its generated id, so `Props` can recognise a region it shares and return `RenderComponent`.
 
 ### HTMXv4RenderTarget
 
@@ -228,4 +252,4 @@ htmx 4 variant. htmx 4 sends `HX-Target` as `"<tag>#<id>"` (or bare `"<tag>"`) a
 var ErrSkipPageRender = errors.New("skip page render")
 ```
 
-Return from `Props` to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-httpredirect)). Only the Props error path checks this sentinel.
+Return from `Props`, or from a request-arg provider, to skip rendering when the response was written directly (rare — prefer the [`Redirect` signal](./error-handling.md#redirects-a-control-flow-signal-not-httpredirect)). Only the Props error path checks this sentinel.

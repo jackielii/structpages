@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"reflect"
 	"slices"
+	"strings"
 )
 
 // ErrSkipPageRender is a sentinel error that can be returned from a Props method
@@ -35,6 +37,7 @@ type StructPages struct {
 	targetSelector TargetSelector
 	warnEmptyRoute func(*PageNode)
 	args           []any
+	requestArgs    []any
 	urlPrefix      string
 	maxIDLen       int
 }
@@ -137,7 +140,7 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 		onError: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		},
-		targetSelector: HTMXRenderTarget,
+		targetSelector: pageTarget,
 	}
 
 	for _, opt := range options {
@@ -145,6 +148,9 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	}
 
 	if err := sp.parse(page, route, title); err != nil {
+		return nil, err
+	}
+	if err := sp.resolveRequestArgs(); err != nil {
 		return nil, err
 	}
 	if err := sp.checkInjection(); err != nil {
@@ -190,6 +196,29 @@ func WithArgs(args ...any) func(*StructPages) {
 	}
 }
 
+// WithRequestArgs registers per-request values for the whole mount. Each
+// provider is a func(*http.Request) (T, error) or
+// func(*http.Request, *PageNode) (T, error); its result fills parameters of
+// type T in Props, extended ServeHTTP and component methods, matched by the
+// rules WithArgs uses. A provider runs at most once per request, the first
+// time a parameter needs it, and its error stops the request like an error
+// from Props. Mount fails if a provider has another shape, or if two
+// providers return the same type.
+//
+// A page's RequestArgs method registers providers for that page and the
+// pages below it; they shadow mount-wide providers of the same type.
+//
+//	sp, err := structpages.Mount(mux, pages{}, "/", "App",
+//	    structpages.WithRequestArgs(currentUser), // func(*http.Request) (*User, error)
+//	)
+//
+//	func (p accountPage) Props(u *User) (accountProps, error) { … }
+func WithRequestArgs(providers ...any) func(*StructPages) {
+	return func(r *StructPages) {
+		r.requestArgs = append(r.requestArgs, providers...)
+	}
+}
+
 // WithURLPrefix tells structpages that it is being served behind a path
 // prefix that has been stripped before requests reach the registered routes
 // (for example by http.StripPrefix or an upstream reverse proxy). The prefix
@@ -229,28 +258,27 @@ func WithMaxIDLength(n int) func(*StructPages) {
 	}
 }
 
-// WithTargetSelector sets a custom TargetSelector function that determines
-// which component to render based on the request. The default is HTMXRenderTarget,
-// which handles HTMX partial requests automatically.
+// WithTargetSelector sets the TargetSelector that reads what each request
+// wants. Its RenderTarget is passed to Props, and when Props returns no
+// error the page's component the target Is renders, or Page if none.
 //
-// The selector function receives the request and page node, and returns a RenderTarget
-// that will be passed to Props. This allows custom logic for component selection.
+// Without this option every request wants Page. For htmx, choose the
+// selector for your htmx version:
 //
-// Example - Custom selector with A/B testing:
+//	structpages.WithTargetSelector(structpages.HTMXRenderTarget)   // htmx 1.x and 2.x
+//	structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) // htmx 4
 //
-//	sp := Mount(http.NewServeMux(), index{}, "/", "My App",
-//	    WithTargetSelector(func(r *http.Request, pn *PageNode) (RenderTarget, error) {
-//	        if getABTestVariant(r) == "B" {
-//	            // Use different component for variant B
-//	            method := pn.Components["ContentB"]
-//	            return newMethodRenderTarget("ContentB", method), nil
-//	        }
-//	        // Fallback to default HTMX behavior
-//	        return HTMXRenderTarget(r, pn)
-//	    }))
+// A custom selector returns any RenderTarget; the framework only calls its
+// Is method. For example, a selector reading a query parameter:
+//
+//	structpages.WithTargetSelector(func(r *http.Request, pn *structpages.PageNode) (structpages.RenderTarget, error) {
+//	    return partialParam(r.URL.Query().Get("partial")), nil
+//	})
 func WithTargetSelector(selector TargetSelector) func(*StructPages) {
 	return func(r *StructPages) {
-		r.targetSelector = selector
+		if selector != nil {
+			r.targetSelector = selector
+		}
 	}
 }
 
@@ -378,22 +406,21 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 		// Inject current page into context for IDFor to use with standalone functions
 		ctx := currentPageCtx.WithValue(r.Context(), page)
 		r = r.WithContext(ctx)
+		rs := newRequestScope(r, page)
 
-		// 1. Select which component to render using TargetSelector
-		target, err := sp.targetSelector(r, page)
+		// 1. What the request wants.
+		target, err := sp.selectTarget(r, page)
 		if err != nil {
 			sp.onError(w, r, fmt.Errorf("error selecting target for %s: %w", page.Name, err))
 			return
 		}
 
-		// 2. Call Props with RenderTarget available for injection
-		props, err := sp.execProps(page, r, w, target)
+		// 2. Props is the normal flow; an error breaks it.
+		props, err := sp.execProps(rs, page, r, w, target)
 		if err != nil {
-			// Check if it's a render component error
 			if sp.handleRenderComponentError(w, r, err) {
 				return
 			}
-
 			if errors.Is(err, ErrSkipPageRender) {
 				return
 			}
@@ -401,72 +428,98 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 			return
 		}
 
-		// 3. Extract method from target and render with props
-		// Type-assert to get the method
-		if mrt, ok := target.(*methodRenderTarget); ok {
-			// Validate method before calling
-			if !mrt.method.Func.IsValid() {
-				// Check if Props method exists - if so, this is a Props-only page
-				if _, hasProps := page.Props["Props"]; hasProps {
-					sp.onError(w, r, fmt.Errorf("page %s: no component found and Props did not use RenderComponent", page.Name))
-				} else {
-					sp.onError(w, r, fmt.Errorf("page %s does not have a Page component method", page.Name))
-				}
-				return
-			}
-			comp, err := sp.pc.callComponentMethod(page, &mrt.method, props...)
-			if err != nil {
-				sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, mrt.method.Name, err))
-				return
-			}
-			sp.render(w, r, comp)
+		// 3. Render what the request wants: the component the target Is,
+		// else Page.
+		method, err := selectComponent(page, target)
+		if err != nil {
+			sp.onError(w, r, err)
 			return
 		}
-
-		// If we get here, target is not a method (could be function or custom)
-		// and default hx-target didn't match any component
-		// Props should have called RenderComponent
-
-		if frt, ok := target.(*functionRenderTarget); ok {
-			// Check if this is a plain string ID (not a matched function)
-			// If no Is() call matched, Props never asked about a function with this id
-			// This indicates a static ID like "body" or "comments-list" that didn't match any component method
-			if !frt.matched {
-				// Check if page has a Page() method to fallback to
-				// if the component method exists and Props returns values that fit the method's arguments, allow it
-				if pageMethod, hasPage := page.Components["Page"]; hasPage && pageMethod.Func.IsValid() {
-					// Fallback to Page() - useful for static IDs
-					comp, err := sp.pc.callComponentMethod(page, &pageMethod, props...)
-					if err != nil {
-						sp.onError(w, r, fmt.Errorf("error calling Page() fallback for %s: %w", page.Name, err))
-						return
-					}
-					sp.render(w, r, comp)
-					return
-				}
+		props = append(props, requestValues(w, r, target)...)
+		comp, err := sp.pc.callComponentMethod(rs, page, method, props...)
+		if err != nil {
+			// A request arg the component needed can break the flow
+			// like Props.
+			if sp.handleRenderComponentError(w, r, err) || errors.Is(err, ErrSkipPageRender) {
+				return
 			}
-
-			// Convert kebab-case ID to PascalCase function name
-			funcName := kebabToPascal(frt.hxTarget)
-
-			sp.onError(w, r, fmt.Errorf(
-				"page %s: Component function '%s' is targeted but not handled. "+
-					"check target.Is(%s) and return RenderComponent(%s(...))",
-				page.Name, funcName, funcName, funcName))
+			sp.onError(w, r, fmt.Errorf("error calling component %s.%s: %w", page.Name, method.Name, err))
 			return
 		}
-
-		// Generic error for other custom target types
-		sp.onError(w, r, fmt.Errorf("page %s: target is not a method and Props did not use RenderComponent", page.Name))
+		sp.render(w, r, comp)
 	})
 }
 
-func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comp component) {
+// selectComponent returns the component of page that target Is, else
+// Page. The framework asks the target itself, so the choice never depends
+// on which Is calls Props made. A target that Is more than one component
+// is an error rather than a guess.
+func selectComponent(page *PageNode, target RenderTarget) (*reflect.Method, error) {
+	var selected []string
+	for _, name := range slices.Sorted(maps.Keys(page.Components)) {
+		if target.Is(page.componentExprs[name]) {
+			selected = append(selected, name)
+		}
+	}
+	switch len(selected) {
+	case 1:
+		m := page.Components[selected[0]]
+		return &m, nil
+	case 0:
+		if m, ok := page.Components["Page"]; ok {
+			return &m, nil
+		}
+		if _, hasProps := page.Props["Props"]; hasProps {
+			return nil, fmt.Errorf("page %s has no Page component, and Props returned no error "+
+				"while the request wants none of its components; return RenderComponent from Props", page.Name)
+		}
+		return nil, fmt.Errorf("page %s has no Page component", page.Name)
+	}
+	return nil, fmt.Errorf("page %s: the render target Is more than one component (%s)",
+		page.Name, strings.Join(selected, ", "))
+}
+
+// selectTarget runs the configured TargetSelector, or pageTarget when
+// none is set.
+func (sp *StructPages) selectTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
+	if sp.targetSelector == nil {
+		return pageTarget(r, pn)
+	}
+	return sp.targetSelector(r, pn)
+}
+
+// pageTarget is the TargetSelector used without WithTargetSelector: every
+// request wants Page.
+func pageTarget(_ *http.Request, pn *PageNode) (RenderTarget, error) {
+	m := pn.Components["Page"]
+	return newMethodRenderTarget("Page", &m), nil
+}
+
+// requestValues are the per-request values Props, extended ServeHTTP and
+// component methods can take, besides the *PageNode every injected method
+// gets. Their declared types are requestArgTypes.
+func requestValues(w http.ResponseWriter, r *http.Request, target RenderTarget) []reflect.Value {
+	vs := []reflect.Value{reflect.ValueOf(w), reflect.ValueOf(r)}
+	if target != nil {
+		vs = append(vs, reflect.ValueOf(target))
+	}
+	return vs
+}
+
+// render renders comps in order into one buffered response, so a failure
+// in any of them leaves the response to the error handler.
+func (sp *StructPages) render(w http.ResponseWriter, r *http.Request, comps ...component) {
 	buf := getBuffer()
 	defer releaseBuffer(buf)
-	if err := comp.Render(r.Context(), buf); err != nil {
-		sp.onError(w, r, err)
-		return
+	for i, comp := range comps {
+		if comp == nil {
+			sp.onError(w, r, fmt.Errorf("render: component %d is nil", i+1))
+			return
+		}
+		if err := comp.Render(r.Context(), buf); err != nil {
+			sp.onError(w, r, err)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(buf.Bytes())
@@ -491,22 +544,44 @@ var requestArgTypes = []reflect.Type{
 	reflect.TypeFor[RenderTarget](),
 }
 
-// checkInjection reports every Props and extended ServeHTTP parameter in
-// the tree that more than one registration could fill, so the ambiguity
-// fails Mount instead of the first request to that page. A parameter
-// nothing fills is left to request time: a page may be mounted but unused
-// in a configuration that doesn't register its dependencies.
+// checkInjection reports every Props, extended ServeHTTP and component
+// parameter in the tree that more than one request arg or registration
+// could fill, so the ambiguity fails Mount instead of the first request to
+// that page. A component's parameters are filled from Props' results first,
+// so those count as provided. A parameter nothing fills is left to request
+// time: a page may be mounted but unused in a configuration that doesn't
+// register its dependencies.
 func (sp *StructPages) checkInjection() error {
 	var errs []error
 	for pn := range sp.pc.root.All() {
+		componentArgs := requestArgTypes
 		if m, ok := pn.Props["Props"]; ok && m.Func.IsValid() {
 			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
+			componentArgs = append(propsResultTypes(&m), requestArgTypes...)
+		}
+		for _, name := range slices.Sorted(maps.Keys(pn.Components)) {
+			m := pn.Components[name]
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, componentArgs))
 		}
 		if m, ok := serveHTTPMethod(pn); ok && isExtendedServeHTTP(&m) {
 			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// propsResultTypes are the declared types of the values Props returns,
+// without a trailing error: the values a component's parameters are filled
+// from first.
+func propsResultTypes(m *reflect.Method) []reflect.Type {
+	var ts []reflect.Type
+	for i := range m.Type.NumOut() {
+		ts = append(ts, m.Type.Out(i))
+	}
+	if n := len(ts); n > 0 && ts[n-1].AssignableTo(errorType) {
+		ts = ts[:n-1]
+	}
+	return ts
 }
 
 // serveHTTPMethod returns pn's own (not promoted) ServeHTTP method, on
@@ -577,19 +652,23 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 				wv = reflect.ValueOf(w)
 			}
 
-			// Create RenderTarget for dependency injection using targetSelector
-			var renderTarget RenderTarget
-			if sp.targetSelector != nil {
-				renderTarget, _ = sp.targetSelector(r, pn)
+			// The RenderTarget is injectable here too; a selector error
+			// leaves it out.
+			renderTarget, _ := sp.selectTarget(r, pn)
+			additionalArgs := []reflect.Value{wv, reflect.ValueOf(r)}
+			if renderTarget != nil {
+				additionalArgs = append(additionalArgs, reflect.ValueOf(renderTarget))
 			}
 
-			// Make RenderTarget available for dependency injection
-			additionalArgs := []reflect.Value{wv, reflect.ValueOf(r), reflect.ValueOf(renderTarget)}
-
-			results, err := sp.pc.callMethod(pn, &method, additionalArgs...)
+			results, err := sp.pc.callMethodIn(newRequestScope(r, pn), pn, &method, additionalArgs...)
 			if err != nil {
+				// A request arg's error counts as the handler's own: an
+				// error-returning handler honours RenderComponent.
 				if bw != nil {
 					bw.buf.Reset()
+					if sp.handleRenderComponentError(bw, r, err) {
+						return
+					}
 					sp.onError(bw, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
 				} else {
 					sp.onError(w, r, fmt.Errorf("error calling ServeHTTP method on %s: %w", pn.Name, err))
@@ -619,7 +698,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 	})
 }
 
-func (sp *StructPages) execProps(pn *PageNode,
+func (sp *StructPages) execProps(rs *requestScope, pn *PageNode,
 	r *http.Request, w http.ResponseWriter, renderTarget RenderTarget,
 ) ([]reflect.Value, error) {
 	// Look for Props method
@@ -632,13 +711,7 @@ func (sp *StructPages) execProps(pn *PageNode,
 		return nil, fmt.Errorf("Props method for page %s has invalid Func", pn.Name)
 	}
 
-	// Make RenderTarget available for injection along with r and w
-	// Note: only pass valid values to avoid zero reflect.Value issues
-	args := []reflect.Value{reflect.ValueOf(r), reflect.ValueOf(w)}
-	if renderTarget != nil {
-		args = append(args, reflect.ValueOf(renderTarget))
-	}
-	props, err := sp.pc.callMethod(pn, &propMethod, args...)
+	props, err := sp.pc.callMethodIn(rs, pn, &propMethod, requestValues(w, r, renderTarget)...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
 	}

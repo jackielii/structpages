@@ -5,21 +5,23 @@ import (
 	"strings"
 )
 
-// HTMXRenderTarget is the default TargetSelector for HTMX integration.
-// It automatically selects the appropriate component based on the HX-Target header.
+// HTMXRenderTarget is the TargetSelector for htmx 1.x and 2.x. Opt in with
+// WithTargetSelector(HTMXRenderTarget).
 //
-// When an HTMX request is detected (via HX-Request header), it matches the HX-Target
-// value against all available component IDs. For example:
-//   - HX-Target: "content" -> returns methodRenderTarget for Content() method
-//   - HX-Target: "index-page-todo-list" -> returns methodRenderTarget for TodoList() method
-//   - HX-Target: "user-stats-widget" (no method match) -> returns functionRenderTarget for lazy evaluation
-//   - No HX-Target or non-HTMX request -> returns methodRenderTarget for Page() method
+// For an htmx request (HX-Request: true) with an HX-Target, it matches the
+// target id against the served page's components:
+//   - the id the page generated for a component, via ID or the id filter
+//     ("index-todo-list" → TodoList);
+//   - the component's name with or without the page prefix ("content",
+//     "index-content" → Content), or a suffix of it ("load-more" →
+//     EventListLoadMore).
 //
-// This selector works with htmx 1.x and 2.x, where HX-Target carries the bare
-// element id. For htmx 4, use [HTMXv4RenderTarget] instead.
+// The target Is the matched component. When nothing matches, the target Is
+// none of the page's components, but still answers Is for a standalone
+// function or another page's component carrying that id, so Props can
+// recognise a region it shares. Any other request wants Page.
 //
-// This is the default TargetSelector for StructPages, making IDFor work
-// seamlessly with HTMX out of the box.
+// For htmx 4, use [HTMXv4RenderTarget] instead.
 func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	if r.Header.Get("HX-Request") == "true" {
 		hxTarget := r.Header.Get("HX-Target")
@@ -31,15 +33,12 @@ func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 				return newMethodRenderTarget(componentName, &method), nil
 			}
 
-			// No method match - assume it's a standalone function
-			// Store raw hxTarget for lazy evaluation in Is()
-			return newFunctionRenderTarget(hxTarget, pn.Name), nil
+			return newHTMXUnmatchedTarget(hxTarget, pn, pcCtx.Value(r.Context())), nil
 		}
 	}
 
-	// Default: render "Page" component
-	// If no Page method exists (Props-only page), methodRenderTarget.Is() will return false,
-	// forcing Props to use RenderComponent
+	// Not a partial request: the request wants Page. On a page without
+	// Page, the target Is nothing and Props must use RenderComponent.
 	pageMethod := pn.Components["Page"]
 	return newMethodRenderTarget("Page", &pageMethod), nil
 }
@@ -80,7 +79,7 @@ func HTMXv4RenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 				method := pn.Components[componentName]
 				return newMethodRenderTarget(componentName, &method), nil
 			}
-			return newFunctionRenderTarget(key, pn.Name), nil
+			return newHTMXUnmatchedTarget(key, pn, pcCtx.Value(r.Context())), nil
 		}
 	}
 
@@ -192,4 +191,60 @@ func matchComponentByTarget(target string, pn *PageNode, pc *parseContext) strin
 	}
 
 	return bestMatch
+}
+
+// htmxUnmatchedTarget is what the htmx selectors return when HX-Target names
+// none of the served page's own components: the request wants something
+// this page doesn't have. Is reports whether that something is a given
+// standalone function or another page's component, so Props can recognise
+// a region it shares on purpose and render it with RenderComponent. It Is
+// none of the served page's components, so a Props that returns no error
+// gets Page.
+type htmxUnmatchedTarget struct {
+	key  string        // the HX-Target id, without a leading '#'
+	page *PageNode     // the page being served
+	pc   *parseContext // nil when the selector runs outside the request pipeline
+}
+
+func newHTMXUnmatchedTarget(key string, pn *PageNode, pc *parseContext) RenderTarget {
+	return &htmxUnmatchedTarget{key: strings.TrimPrefix(key, "#"), page: pn, pc: pc}
+}
+
+// Is reports whether the requested id belongs to component, which is a
+// standalone function or a page method (expression or bound value).
+//
+// A function matches its package-qualified id, the one ID generates
+// ("<package>-<func>"), so two packages' same-named components stay
+// distinct. Its bare id and the served-page-prefixed form also match, as a
+// partial-id convenience that doesn't disambiguate by package.
+//
+// A method matches only the exact id ID generates for it on a mounted
+// page. Ids are unique per page and method, so at most one mount of the
+// receiver type can match.
+func (t *htmxUnmatchedTarget) Is(component any) bool {
+	info, err := extractMethodInfo(component)
+	if err != nil {
+		return false
+	}
+	if info.isFunction {
+		return t.isFunction(info)
+	}
+	if t.pc == nil {
+		return false
+	}
+	for _, pn := range t.pc.collectPageNodesForMethod(info) {
+		if t.pc.componentID(pn, info.methodName, true) == t.key {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *htmxUnmatchedTarget) isFunction(info *methodInfo) bool {
+	funcKebab := camelToKebab(info.methodName)
+	if info.packageName != "" && t.key == camelToKebab(info.packageName)+"-"+funcKebab {
+		return true
+	}
+	return t.key == funcKebab ||
+		strings.TrimPrefix(t.key, camelToKebab(t.page.Name)+"-") == funcKebab
 }

@@ -16,7 +16,7 @@ Struct Pages provides a way to define routing using struct tags and methods. It 
 
 - **Struct-based routing** - Define routes using struct tags
 - **gsx-first** - Examples and docs use [gsx](https://gsxhq.github.io/); any value with `Render(ctx, w)` renders, so [templ](https://templ.guide/) and `html/template` work too
-- **HTMX-friendly** - Automatic partial rendering support
+- **HTMX-friendly** - With `WithTargetSelector(structpages.HTMXRenderTarget)` (or `HTMXv4RenderTarget`), an htmx request renders just the component its `HX-Target` names
 - **Middleware** - Standard Go middleware pattern
 - **Type-safe URLs** - Generate URLs from struct references
 - **Dependency injection** - Pass dependencies to handlers via options
@@ -106,6 +106,7 @@ The full docs live at <https://jackielii.github.io/structpages/>. Good starting 
 - [Quick Start](https://jackielii.github.io/structpages/quick-start) and [Concepts](https://jackielii.github.io/structpages/concepts)
 - [Routing](https://jackielii.github.io/structpages/routing): the `route:"[method] path [Title]"` tag, path params, nesting
 - [gsx Patterns](https://jackielii.github.io/structpages/gsx) and [HTMX Integration](https://jackielii.github.io/structpages/htmx): layouts, the Props pattern, partial rendering
+- [How a Request Is Rendered](https://jackielii.github.io/structpages/rendering): the target selector, Props, and which component renders
 - [URLFor & ID](https://jackielii.github.io/structpages/urlfor): type-safe URLs and element ids
 - [Dependency Injection](https://jackielii.github.io/structpages/dependency-injection), [Error Handling](https://jackielii.github.io/structpages/error-handling), [Middleware](https://jackielii.github.io/structpages/middleware)
 - [Testing](https://jackielii.github.io/structpages/testing) and [Lint](https://jackielii.github.io/structpages/lint)
@@ -117,7 +118,7 @@ Runnable apps live in [`examples/`](./examples); [examples/README.md](./examples
 
 ## Lint Tool
 
-`structpages-lint` checks every `URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call, `url`/`id`/`target` filter and hard-coded internal URL against the page tree rebuilt from your route tags, so a renamed route fails CI instead of becoming a 404:
+`structpages-lint` checks every `URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call, `url`/`id`/`target` filter and hard-coded internal URL against the page tree rebuilt from your route tags, so a renamed route fails CI instead of becoming a 404. It also flags a `Mount` with no `WithTargetSelector` when its pages' templates use htmx:
 
 ```shell
 go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest

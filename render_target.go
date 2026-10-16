@@ -3,7 +3,6 @@ package structpages
 import (
 	"net/http"
 	"reflect"
-	"strings"
 )
 
 // Ref represents a dynamic reference to a page or method by name.
@@ -37,53 +36,39 @@ import (
 //	targetID, err := IDFor(ctx, Ref("UserManagement.UserList"))
 type Ref string
 
-// RenderTarget represents a selected component that will be rendered.
-// It's available to Props methods via dependency injection, allowing Props to
-// load only the data needed for the target component.
+// RenderTarget is what a request wants rendered, as read by the mount's
+// TargetSelector. Props can take it as a parameter to load only what the
+// request wants, or to decide to render something else.
 //
-// RenderTarget is produced by a TargetSelector function (e.g., HTMXRenderTarget).
-// The selector determines which component to render based on the request,
-// and the resulting RenderTarget is passed to Props.
+// When Props returns no error, the framework asks the target Is(m) for each
+// of the page's components m and renders the one it is, or Page when it is
+// none of them. A target that is more than one component is an error.
 //
-// Example usage in Props:
-//
-//	func (p DashboardPage) Props(r *http.Request, target RenderTarget) (DashboardProps, error) {
-//	    switch {
-//	    case target.Is(UserStatsWidget):
-//	        return DashboardProps{}, RenderComponent(UserStatsWidget(loadUserStats()))
-//	    case target.Is(p.Page):
-//	        return DashboardProps{Stats: loadAll()}, nil
+//	func (p dashboard) Props(t RenderTarget, s *Store) (Stats, []Note, error) {
+//	    if t.Is(p.Notes) {
+//	        notes, err := s.Notes()
+//	        return Stats{}, notes, err // renders Notes
 //	    }
+//	    …                              // renders Page
 //	}
 //
-// Is reports whether the target matches the given method or function
-// reference. It works with both page methods and standalone functions, and
-// takes method/function expressions for compile-time safety.
-//
-// ID/Is symmetry: an element whose id is ID(ctx, X) is matched by Is(X).
-// For a standalone function this is the PACKAGE-qualified id (e.g.
-// "overlay-mount" for overlay.Mount), so Is(overlay.Mount) matches the
-// overlay slot and not a same-named Mount from another package. This is how
-// a shared element becomes a positive render target: render it with
-// id={ ID(ctx, fn) }, then a request targeting it resolves to a target that
-// Is(fn) recognises — e.g. a multi-method page can detect "I was opened into
-// the shared slot" and render its dialog fragment instead of the full page.
-// Is also accepts the bare function id and the page-prefixed form as a
-// partial-id convenience; those do not disambiguate by package.
+// ID/Is symmetry: an element rendered with id ID(ctx, X) produces a request
+// whose target Is(X), where X is the served page's component, another page's
+// component, or a standalone function. For a standalone function this is the
+// package-qualified id ("overlay-mount" for overlay.Mount), so
+// Is(overlay.Mount) doesn't match a same-named Mount from another package.
 type RenderTarget interface {
-	// Is reports whether the target matches method, a method or function
-	// expression. See the RenderTarget doc for the matching rules.
-	//
-	// For function components, Is() has a side effect: it stores the function
-	// value when a match is found, enabling lazy evaluation of the hxTarget.
-	Is(method any) bool
+	// Is reports whether the request wants component: a method expression
+	// (Page.Content), a bound method value (p.Content) or a standalone
+	// function component. It has no side effects.
+	Is(component any) bool
 }
 
-// TargetSelector determines which component to render for a request.
-// It returns a RenderTarget that will be passed to Props.
+// TargetSelector reads what a request wants. It returns the RenderTarget
+// passed to Props and used to select the component to render.
 //
-// The default selector is HTMXRenderTarget, which handles HTMX partial requests.
-// Custom selectors can be provided via WithTargetSelector option.
+// Without WithTargetSelector, every request wants Page. For htmx, use
+// HTMXRenderTarget (htmx 1.x and 2.x) or HTMXv4RenderTarget (htmx 4).
 type TargetSelector func(r *http.Request, pn *PageNode) (RenderTarget, error)
 
 // methodRenderTarget is the concrete implementation for method components.
@@ -137,66 +122,10 @@ func (mrt *methodRenderTarget) Is(method any) bool {
 		selectedReceiverType == actualType
 }
 
-// functionRenderTarget is the concrete implementation for function components.
-type functionRenderTarget struct {
-	hxTarget string // Raw HX-Target from request (e.g., "dashboard-page-user-stats-widget")
-	pageName string // Page name for normalization (e.g., "DashboardPage")
-	matched  bool   // Set when Is() matches a function
-}
-
-func (frt *functionRenderTarget) Is(method any) bool {
-	info, err := extractMethodInfo(method)
-	if err != nil {
-		return false
-	}
-
-	// Only match against functions
-	if !info.isFunction {
-		return false
-	}
-
-	funcKebab := camelToKebab(info.methodName)
-	normalized := strings.TrimPrefix(frt.hxTarget, "#")
-
-	// Authoritative match: the id ID() generates for a standalone function is
-	// PACKAGE-prefixed (see functionID) — "<package>-<func>". Matching it
-	// exactly is what makes a standalone component a collision-free render
-	// target: two packages may each expose a "Mount" component, and their ids
-	// ("overlay-mount" vs "drawer-mount") differ, so Is(overlay.Mount) matches
-	// only the overlay slot, never the drawer's. Generate the element's id with
-	// structpages.ID(ctx, fn) and this is the match you get.
-	if info.packageName != "" && normalized == camelToKebab(info.packageName)+"-"+funcKebab {
-		frt.matched = true
-		return true
-	}
-
-	// Partial-id ergonomics: also accept the bare function id, and the
-	// page-prefixed form (for a function addressed relative to the page it
-	// renders on). These do NOT disambiguate by package — prefer the
-	// package-qualified id above when cross-package uniqueness matters.
-	pageStripped := strings.TrimPrefix(normalized, camelToKebab(frt.pageName)+"-")
-	if normalized == funcKebab || pageStripped == funcKebab {
-		frt.matched = true
-		return true
-	}
-
-	return false
-}
-
 // newMethodRenderTarget creates a RenderTarget for a method component.
 func newMethodRenderTarget(name string, method *reflect.Method) RenderTarget {
 	return &methodRenderTarget{
 		name:   name,
 		method: *method,
-	}
-}
-
-// newFunctionRenderTarget creates a RenderTarget for a function component.
-// The hxTarget is stored as-is for lazy evaluation in Is().
-func newFunctionRenderTarget(hxTarget, pageName string) RenderTarget {
-	return &functionRenderTarget{
-		hxTarget: hxTarget,
-		pageName: pageName,
-		// funcValue filled in later by Is()
 	}
 }

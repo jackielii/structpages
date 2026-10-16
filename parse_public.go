@@ -26,7 +26,7 @@ import (
 //	body := renderTo(ctx, List{}.Page(props))
 func Parse(page any, route, title string, options ...Option) (*StructPages, error) {
 	sp := &StructPages{
-		targetSelector: HTMXRenderTarget,
+		targetSelector: pageTarget,
 	}
 	for _, opt := range options {
 		opt(sp)

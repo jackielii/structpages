@@ -293,6 +293,74 @@ func checkIDFuncArg(ctx *checkCtx, expr ast.Expr, fnName string) {
 	}
 }
 
+// isRenderTargetMethod reports whether fn is the Is method of the
+// structpages.RenderTarget interface: a call through that interface,
+// or through an interface or struct embedding it. A concrete type's
+// own Is method is a different function and doesn't qualify.
+func isRenderTargetMethod(fn *types.Func) bool {
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return false
+	}
+	named, ok := types.Unalias(sig.Recv().Type()).(*types.Named)
+	if !ok || !types.IsInterface(named) {
+		return false
+	}
+	obj := named.Obj()
+	return obj.Pkg() != nil && obj.Pkg().Path() == structpagesPkg && obj.Name() == "RenderTarget"
+}
+
+// checkRenderTargetIs validates `target.Is(X)` on a
+// structpages.RenderTarget; args is [X]. Is matches the target an
+// element rendered with id ID(ctx, X) produces, so X takes the same
+// component forms as ID, and Is only ever matches a function value:
+//
+//   - X must be function-typed: a method expression (page.Content), a
+//     method value (p.Content) or a standalone function (ui.Toast).
+//     Anything else never matches — most often p.Content(), which
+//     calls the component instead of naming it.
+//   - A method's receiver must be mounted as a page, exactly as for ID
+//     (checkIDFuncArg). Standalone functions have no tree position and
+//     pass.
+//
+// An interface-typed X (an `any` variable, a type parameter) is a
+// runtime value and is not checked.
+func checkRenderTargetIs(ctx *checkCtx, args []ast.Expr) {
+	const name = "RenderTarget.Is"
+	if len(args) != 1 {
+		return
+	}
+	arg := unparen(args[0])
+	t := ctx.pass.TypesInfo.TypeOf(arg)
+	if t == nil || types.IsInterface(t) {
+		return
+	}
+	if _, isFunc := t.Underlying().(*types.Signature); !isFunc {
+		if c, ok := arg.(*ast.CallExpr); ok && isFuncCall(ctx.pass.TypesInfo, c) {
+			ctx.report(arg.Pos(), "idfor",
+				"%s: %s calls the component; pass the method or function itself (%s), not its result",
+				name, types.ExprString(arg), types.ExprString(c.Fun))
+			return
+		}
+		ctx.report(arg.Pos(), "idfor",
+			"%s: argument %s has type %s, not a method or function, so Is never matches it; "+
+				"pass the component method or function itself",
+			name, types.ExprString(arg), typeString(t))
+		return
+	}
+	if len(ctx.roots) == 0 {
+		return
+	}
+	checkIDFuncArg(ctx, arg, name)
+}
+
+// isFuncCall reports whether call is a function or method call rather
+// than a type conversion.
+func isFuncCall(info *types.Info, call *ast.CallExpr) bool {
+	tv, ok := info.Types[call.Fun]
+	return ok && !tv.IsType()
+}
+
 // isMounted reports whether named appears as the Type of any node in
 // the tree.
 func (ctx *checkCtx) isMounted(named *types.Named) bool {

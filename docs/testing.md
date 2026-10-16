@@ -41,12 +41,13 @@ func TestProductPageRenders(t *testing.T) {
 
 ## Requests through Mount
 
-To exercise routing, `Props`, DI and the target selector together, mount the tree on a fresh mux and serve requests with `httptest`. An HTMX partial is a request with `HX-Request: true` and the targeted element's id in `HX-Target` — take the id from `sp.ID`, the same value the `id` filter renders:
+To exercise routing, `Props`, DI and the target selector together, mount the tree on a fresh mux with the same options as the app — including its `WithTargetSelector`, without which every request renders `Page` — and serve requests with `httptest`. An HTMX partial is a request with `HX-Request: true` and the targeted element's id in `HX-Target` — take the id from `sp.ID`, the same value the `id` filter renders:
 
 ```go
 func TestTodoListPartial(t *testing.T) {
     mux := http.NewServeMux()
     sp, err := structpages.Mount(mux, index{}, "/", "App",
+        structpages.WithTargetSelector(structpages.HTMXRenderTarget),
         structpages.WithArgs(newFakeStore()),
     )
     if err != nil {
@@ -72,7 +73,7 @@ func TestTodoListPartial(t *testing.T) {
 }
 ```
 
-Leave the headers off to get the full page. With `HTMXv4RenderTarget` configured, htmx 4 sends `HX-Target` as `tag#id` (for example `div#` + `id`); see [HTMX Integration](./htmx.md).
+Leave the headers off to get the full page. The `<html` check is also how to catch a region request that fell through to a whole-document `Page` (see [Regions shared across pages](./rendering.md#regions-shared-across-pages)). With `HTMXv4RenderTarget` configured, htmx 4 sends `HX-Target` as `tag#id` (for example `div#` + `id`); see [HTMX Integration](./htmx.md).
 
 ## Every URL resolves
 

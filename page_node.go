@@ -51,6 +51,16 @@ type PageNode struct {
 	// the tree, otherwise "-<hash>" derived from idPath. It disambiguates
 	// the compact (leaf-only) id form used when the full path is too long.
 	idCompactSuffix string
+
+	// requestArgsMethod is the page's own RequestArgs method, if any.
+	requestArgsMethod *reflect.Method
+	// requestArgs are the request-arg providers that apply to this page,
+	// nearest first: its own RequestArgs, then each ancestor's, then
+	// WithRequestArgs. Set by Mount.
+	requestArgs []requestArgLevel
+	// componentExprs holds each component's method expression, the value
+	// the framework passes to RenderTarget.Is when selecting one.
+	componentExprs map[string]any
 }
 
 // FullRoute returns the complete route path for this page node,

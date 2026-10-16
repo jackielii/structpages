@@ -1,0 +1,206 @@
+---
+title: How a Request Is Rendered
+slug: /rendering
+sidebar_position: 4
+---
+
+# How a Request Is Rendered
+
+One sentence covers the whole model:
+
+> **The request says what it wants. `Props` is the normal page flow; returning an error breaks it.**
+
+- The **target selector** reads the request and produces a `RenderTarget`: *what the request wants*.
+- **`Props`** loads data. Returning `(results…, nil)` continues the normal flow: the framework renders what the request wants, using those results. Returning an error breaks the flow. `RenderComponent`, `ErrSkipPageRender` and real errors are all errors.
+- **The framework** renders the component the target `Is`, or `Page` if it `Is` none of them.
+
+Everything on this page follows from those three steps.
+
+## The flow
+
+```mermaid
+flowchart TD
+    subgraph mount["At Mount, once"]
+        M1["Parse the page tree"] --> M2["Check ids and<br/>parameters"]
+        M2 --> M3["Register handlers"]
+    end
+    M3 -.-> R0
+    subgraph request["Per request"]
+        R0["Middleware"] --> R1{"ServeHTTP<br/>page?"}
+        R1 -- yes --> H["Your handler"]
+        R1 -- no --> R2["Target selector:<br/>what the request wants"]
+        R2 --> R3["Props"]
+        R3 --> R4{"Props<br/>returned"}
+        R4 -- "RenderComponent" --> X1["Render those<br/>components"]
+        R4 -- "ErrSkipPageRender" --> X2["Stop"]
+        R4 -- "other error" --> X3["Error handler"]
+        R4 -- "nil error" --> R5{"Target Is<br/>which component?"}
+        R5 -- "one" --> R6["Render it"]
+        R5 -- "none" --> R7["Render Page"]
+        R5 -- "several" --> X3
+    end
+```
+
+## What the request wants: the target selector
+
+`WithTargetSelector` sets how every request of the mount is read. **There is no default htmx behaviour**: without a selector, every request wants `Page`, and `Props` decides anything else.
+
+| Option | Reads | The target `Is` |
+|---|---|---|
+| none | nothing | the page's `Page` |
+| `WithTargetSelector(HTMXRenderTarget)` | htmx 1/2: `HX-Request`, `HX-Target` (a bare id) | the page's component whose id is `HX-Target`, else `Page` when there is no `HX-Target` |
+| `WithTargetSelector(HTMXv4RenderTarget)` | htmx 4: also `HX-Request-Type`, with `HX-Target` as `tag#id` | the same, and `Page` for `HX-Request-Type: full` (boosted links, `hx-select`) |
+| `WithTargetSelector(yourFunc)` | anything | whatever your `RenderTarget`'s `Is` answers |
+
+```go
+sp, err := structpages.Mount(mux, pages{}, "/", "App",
+    structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
+)
+```
+
+When an htmx request's `HX-Target` matches none of the served page's components, the target `Is` none of them. It can still be asked about other things the id might belong to: a standalone function component, or another page's component (see [Regions shared across pages](#regions-shared-across-pages)).
+
+## `Props`: the normal flow, or a break
+
+`Props` receives the target like any other parameter and decides:
+
+| `Props` returns | What happens |
+|---|---|
+| `(results…, nil)` | **Normal flow.** The component the target `Is` renders with `results`, otherwise `Page`. |
+| `RenderComponent(c, more…)` | **Break:** render `c` and then `more`, in order, as one response. |
+| `ErrSkipPageRender` | **Break:** `Props` has already responded, for example with a redirect. |
+| any other error | **Break:** the [error handler](./error-handling.md) renders it. |
+
+A page without `Props` takes the normal flow every time.
+
+### Load only what the request wants
+
+`Props` can ask the target before loading anything. `Is` is a plain question with no side effects:
+
+```go
+func (p dashboard) Props(t structpages.RenderTarget, s *Store) (Stats, []Note, error) {
+    if t.Is(p.Notes) {
+        notes, err := s.Notes()
+        return Stats{}, notes, err // the framework renders Notes
+    }
+    stats, err := s.Stats()
+    if err != nil {
+        return Stats{}, nil, err
+    }
+    notes, err := s.Notes()
+    return stats, notes, err // the framework renders Page
+}
+```
+
+### Components take what they need by type
+
+A component's parameters are filled by type from `Props`' results, so one `Props` can serve several components, each declaring only its share:
+
+```gsx
+component (p dashboard) Page(s Stats, notes []Note) { … }
+component (p dashboard) Notes(notes []Note) { … }   // HX-Target: Notes' id
+component (p dashboard) Summary(s Stats) { … }      // HX-Target: Summary's id
+```
+
+Each result fills at most one parameter. Return zero values for what the request doesn't want.
+
+### Breaking the flow on purpose
+
+When the request wants one thing and you need to render another, return `RenderComponent`. It isn't a special case for standalone functions: it's how `Props` overrides the normal flow, for any reason.
+
+```go
+func (p dashboard) Props(t structpages.RenderTarget, s *Store) (Stats, []Note, error) {
+    if t.Is(p.Notes) {
+        notes, err := s.Notes()
+        if err != nil {
+            // The request wanted Notes; render an inline notice instead.
+            return Stats{}, nil, structpages.RenderComponent(p.NotesUnavailable(err))
+        }
+        return Stats{}, notes, nil
+    }
+    …
+}
+```
+
+- **Render a different component:** `RenderComponent(p.NotesUnavailable(err))`, `RenderComponent(p.Page(stats, nil))`, or any component from another package. Components are built at the call site, so their arguments are type-checked.
+- **Set a status as well:** call `w.WriteHeader(http.StatusUnprocessableEntity)` before returning `RenderComponent(...)`; the body is written afterwards.
+- **Treat it as a failure:** return the error, and the error handler renders it.
+
+## Updating several regions
+
+`RenderComponent` takes several components and renders them in order as one response. With htmx, that means updating several regions at once.
+
+**htmx 4.** Wrap each extra region in `<hx-partial>`, with its target generated by the `target` filter. In a `.gsx` file, element literals work directly in `Props`:
+
+```gsx
+func (p dashboard) Props(r *http.Request, s *Store) (Stats, []Note, error) {
+    if r.Method == http.MethodPost {
+        notes, err := s.AddNote(r.FormValue("text"))
+        if err != nil {
+            return Stats{}, nil, err
+        }
+        return Stats{}, nil, structpages.RenderComponent(
+            p.Notes(notes),
+            <hx-partial hx-target={p.NoteCount |> target} hx-swap="innerHTML">
+                <p.NoteCount n={len(notes)} />
+            </hx-partial>,
+        )
+    }
+    …
+}
+```
+
+The first component is the main swap into the request's own target. Each `<hx-partial>` is swapped into its own target. A response made only of partials skips the main swap.
+
+**`.go` files** can't use element literals, so put the wrapper in a component and pass the components:
+
+```go
+return Stats{}, nil, structpages.RenderComponent(p.Notes(notes), p.NoteCountPartial(len(notes)))
+```
+
+**htmx 2.** Out-of-band swaps are marked on the component's root element instead: `<span id={p.NoteCount |> id} hx-swap-oob="true">`.
+
+**`ServeHTTP` handlers** can render several components to the writer one after the other.
+
+## Regions shared across pages
+
+The rule that ties ids to targets:
+
+> **An element rendered with id `ID(ctx, X)` produces a request whose target `Is(X)`.**
+
+That holds for the served page's own components, for standalone functions, and for **other pages' components**. So when a page's markup reuses another page's region, its `Props` can recognise that region and decide what to render:
+
+```go
+func (p aceSection) Props(t structpages.RenderTarget, s *Store) (aceProps, error) {
+    if t.Is(report.DetailPage.Content) { // a region this page shares on purpose
+        return aceProps{}, structpages.RenderComponent(p.Region(load(s)))
+    }
+    …
+}
+```
+
+Another page's component matches only by its exact generated id, the one `ID` and the `id` filter produce. If `Props` doesn't act on it, the normal flow applies, and `Page` renders.
+
+::: warning A whole document in a region
+When an htmx request targets a region the served page doesn't have, and `Props` doesn't decide, `Page` renders. That's the normal flow. If `Page` is a whole document (`<html>`, a layout), htmx swaps it *inside* the region. The server can't tell this mistake apart from a page whose `Page` is meant to be a fragment, so catch it where the facts are:
+- on the client, an htmx listener can warn when a response starting with `<html>` or `<body>` is about to land in a target other than `body`;
+- in tests, check that partial responses don't contain `<html`.
+:::
+
+## Where parameter values come from
+
+`Props`, extended `ServeHTTP` and component methods are all filled by type, from these sources in order:
+
+1. **`Props`' results** (for components only), each used at most once.
+2. **Per-request values:** `http.ResponseWriter`, `*http.Request`, `RenderTarget`, `*PageNode`.
+3. **Request args:** the page's own `RequestArgs`, then each ancestor's, then `WithRequestArgs`. Each runs at most once per request.
+4. **`WithArgs` values**, registered once at `Mount`.
+
+Two values that could fill the same parameter fail `Mount`. A parameter nothing fills fails the request that needs it. See [Dependency Injection](./dependency-injection.md) for the matching rules and request args.
+
+## Migrating from v0.8
+
+- **htmx apps must choose a selector.** Add `structpages.WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2, or `HTMXv4RenderTarget` for htmx 4, to `Mount`. Without it, partial requests render the full `Page`, and nothing reports an error. The linter's `selector` check flags a `Mount` without one when its pages' templates use htmx.
+- **"Targeted but not handled" is gone.** If `Props` recognises a target with `Is` and then returns no error, that's the normal flow: `Page` renders. Return `RenderComponent` to render what you recognised.
+- **Component parameters are checked at `Mount`,** like `Props`' parameters. A parameter two values could fill fails `Mount`.
+- **Components can take per-request values and request args** as well as `Props`' results.

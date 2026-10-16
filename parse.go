@@ -141,6 +141,10 @@ func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) err
 			item.Components = make(map[string]reflect.Method)
 		}
 		item.Components[method.Name] = *method
+		if item.componentExprs == nil {
+			item.componentExprs = make(map[string]any)
+		}
+		item.componentExprs[method.Name] = method.Func.Interface()
 		return nil
 	}
 
@@ -155,6 +159,8 @@ func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) err
 	switch method.Name {
 	case "Middlewares":
 		item.Middlewares = method
+	case "RequestArgs":
+		item.requestArgsMethod = method
 	case "Init":
 		return p.callInitMethod(item, method)
 	}
@@ -175,11 +181,24 @@ func (p *parseContext) callInitMethod(item *PageNode, method *reflect.Method) er
 	return nil
 }
 
-// callMethod calls the method with receiver value v and arguments args.
-// It uses type matching to fill method parameters from both provided args and p.args registry.
+// callMethod calls method on pn's value, filling its parameters by type
+// from args and the WithArgs registry. It is for calls outside a request
+// (Init, Middlewares, RequestArgs); callMethodIn also uses request args.
 func (p *parseContext) callMethod(
 	pn *PageNode, method *reflect.Method, args ...reflect.Value,
 ) ([]reflect.Value, error) {
+	return p.callMethodIn(nil, pn, method, args...)
+}
+
+// callMethodIn calls method on pn's value during the request rs, filling
+// its parameters by type from args, then rs's request args, then the
+// WithArgs registry.
+func (p *parseContext) callMethodIn(
+	rs *requestScope, pn *PageNode, method *reflect.Method, args ...reflect.Value,
+) ([]reflect.Value, error) {
+	if !method.Func.IsValid() {
+		return nil, fmt.Errorf("method %s on page %s has no function value", method.Name, pn.Name)
+	}
 	// Prepare receiver
 	v, err := p.prepareReceiver(pn.Value, method)
 	if err != nil {
@@ -194,7 +213,7 @@ func (p *parseContext) callMethod(
 	in[0] = v // first argument is the receiver
 
 	// Fill remaining arguments
-	if err := p.fillMethodArgs(in, method, availableArgs); err != nil {
+	if err := p.fillMethodArgs(rs, in, method, availableArgs); err != nil {
 		return nil, err
 	}
 
@@ -244,6 +263,7 @@ func (p *parseContext) buildAvailableArgs(pn *PageNode, args []reflect.Value) ma
 
 // fillMethodArgs fills the method arguments using type matching
 func (p *parseContext) fillMethodArgs(
+	rs *requestScope,
 	in []reflect.Value,
 	method *reflect.Method,
 	availableArgs map[reflect.Type][]reflect.Value,
@@ -258,6 +278,17 @@ func (p *parseContext) fillMethodArgs(
 		if found {
 			in[i] = arg
 			continue
+		}
+
+		if rs != nil {
+			val, ok, err := rs.get(argType)
+			if err != nil {
+				return fmt.Errorf("method %s: %w", formatMethod(method), err)
+			}
+			if ok {
+				in[i] = val
+				continue
+			}
 		}
 
 		// If not found in available args, try the registry
@@ -275,10 +306,11 @@ func (p *parseContext) fillMethodArgs(
 }
 
 // checkMethodArgs reports a parameter of method on pn that more than one
-// registration could fill. It models fillMethodArgs by type, ahead of any
-// call: each provided value fills one parameter, an exact type match before
-// an assignable one, and only the rest reach the registry. A parameter the
-// registry can't fill is not reported; that stays a request-time error.
+// request arg or registration could fill. It models fillMethodArgs by type,
+// ahead of any call: each provided value fills one parameter, an exact type
+// match before an assignable one; the rest go to pn's request args, nearest
+// first, and only then to the registry. A parameter nothing fills is not
+// reported; that stays a request-time error.
 func (p *parseContext) checkMethodArgs(pn *PageNode, method *reflect.Method, provided []reflect.Type) error {
 	unused := append(slices.Clip(provided), reflect.TypeFor[*PageNode](), reflect.TypeFor[PageNode]())
 	for i := 1; i < method.Type.NumIn(); i++ {
@@ -289,6 +321,13 @@ func (p *parseContext) checkMethodArgs(pn *PageNode, method *reflect.Method, pro
 		}
 		if j >= 0 {
 			unused = slices.Delete(unused, j, j+1)
+			continue
+		}
+		a, _, err := requestArgFor(pn.requestArgs, argType)
+		if err != nil {
+			return fmt.Errorf("page %s: method %s: %w", pn.Name, formatMethod(method), err)
+		}
+		if a != nil {
 			continue
 		}
 		if _, _, err := p.args.getArg(argType); err != nil {
@@ -329,10 +368,10 @@ func (p *parseContext) findMatchingArg(
 	return reflect.Value{}, false
 }
 
-func (p *parseContext) callComponentMethod(pn *PageNode, method *reflect.Method,
+func (p *parseContext) callComponentMethod(rs *requestScope, pn *PageNode, method *reflect.Method,
 	args ...reflect.Value,
 ) (component, error) {
-	results, err := p.callMethod(pn, method, args...)
+	results, err := p.callMethodIn(rs, pn, method, args...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling component method %s: %w", formatMethod(method), err)
 	}

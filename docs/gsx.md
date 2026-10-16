@@ -114,37 +114,44 @@ func (d dashboardPage) Props(r *http.Request, w http.ResponseWriter, store *Stor
 func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error)
 ```
 
-The injectable types are: `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, and any type registered via `WithArgs`.
+The injectable types are: `*http.Request`, `http.ResponseWriter`, `structpages.RenderTarget`, `*structpages.PageNode`, any type a [request arg](./dependency-injection.md#request-args) provides, and any type registered via `WithArgs`. Page components can take the same values, after Props' results.
 
 ## Partials load only their data
 
-When a page has independently-updatable regions, inject `RenderTarget` and branch with `target.Is`. **Construct the component and hand it to `RenderComponent`** — a normal Go call the compiler checks:
+When a page has independently-updatable regions, inject `RenderTarget` and ask `target.Is` what the request wants. Return each region's data as its own value: when Props returns no error, the framework renders the page component the target `Is` (or `Page`), filling its parameters by type from Props' results.
 
 ```go
 type dashboardPage struct{}
 
-func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (DashboardData, error) {
+func (d dashboardPage) Props(r *http.Request, target structpages.RenderTarget, store *Store) (User, Stats, error) {
     if target.Is(d.StatsWidget) {
         stats, err := store.GetStats(r.Context())
-        if err != nil {
-            return DashboardData{}, err
-        }
-        return DashboardData{}, structpages.RenderComponent(d.StatsWidget(stats))
+        return User{}, stats, err // renders StatsWidget(stats)
     }
     // Full page — load everything
     user, err := store.GetUser(r)
     if err != nil {
-        return DashboardData{}, err
+        return User{}, Stats{}, err
     }
     stats, err := store.GetStats(r.Context())
-    if err != nil {
-        return DashboardData{}, err
-    }
-    return DashboardData{User: user, Stats: stats}, nil
+    return user, stats, err // renders Page(user, stats)
 }
 ```
 
-Partial page components take ONLY their specific data (`StatsWidget(stats Stats)`), not the full props struct. The full pattern, including how `HX-Target` selects the partial, is in [HTMX Integration](./htmx.md).
+```gsx
+component (d dashboardPage) Page(user User, stats Stats) {
+    <Layout title="Dashboard">
+        <h1>Hello, { user.Name }</h1>
+        <div id={dashboardPage.StatsWidget |> id}>
+            <d.StatsWidget stats={stats}/>
+        </div>
+    </Layout>
+}
+
+component (d dashboardPage) StatsWidget(stats Stats) { … }
+```
+
+Partial page components take ONLY their specific data (`StatsWidget(stats Stats)`), not the full props struct. Each result fills at most one parameter, so give each share its own type. To render something other than what the request wants, Props returns `RenderComponent(d.StatsUnavailable(err))` — a constructed component, a normal Go call the compiler checks. The htmx side, including the `WithTargetSelector` option that makes `HX-Target` select the partial, is in [HTMX Integration](./htmx.md); the full flow is in [How a Request Is Rendered](./rendering.md).
 
 ## Cross-page rendering
 
