@@ -1,4 +1,6 @@
 import { defineConfig } from 'vitepress'
+// Renders ```mermaid fences as diagrams (the request flow in rendering.md).
+import { withMermaid } from 'vitepress-plugin-mermaid'
 import gsxGrammar from './grammars/gsx.tmLanguage.json'
 // The gsx grammar embeds Go, JavaScript and CSS. VitePress loads only the
 // languages a fence names, so the embedded ones are registered explicitly.
@@ -8,7 +10,7 @@ import cssLang from '@shikijs/langs/css'
 
 const repo = 'https://github.com/jackielii/structpages'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'structpages',
   description: 'Struct-based routing for Go web apps.',
   base: '/structpages/',
@@ -45,6 +47,7 @@ export default defineConfig({
           { text: 'Introduction', link: '/intro' },
           { text: 'Quick Start', link: '/quick-start' },
           { text: 'Concepts', link: '/concepts' },
+          { text: 'How a Request Is Rendered', link: '/rendering' },
         ],
       },
       {
@@ -101,4 +104,4 @@ export default defineConfig({
       copyright: `MIT License. Copyright © ${new Date().getFullYear()} Jackie Li.`,
     },
   },
-})
+}))
