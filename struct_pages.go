@@ -147,6 +147,9 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 	if err := sp.parse(page, route, title); err != nil {
 		return nil, err
 	}
+	if err := sp.checkInjection(); err != nil {
+		return nil, err
+	}
 
 	// Register all pages
 	middlewares := append([]MiddlewareFunc{withPcCtx(sp.pc), extractURLParams}, sp.middlewares...)
@@ -478,9 +481,38 @@ var (
 	errHandlerType = reflect.TypeOf((*httpErrHandler)(nil)).Elem()
 )
 
-func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
-	v := pn.Value
-	st, pt := v.Type(), v.Type()
+// requestArgTypes are the declared types of the values every Props and
+// extended ServeHTTP call receives per request, besides the *PageNode every
+// injected method gets. A parameter one of them can fill never reaches the
+// registry.
+var requestArgTypes = []reflect.Type{
+	reflect.TypeFor[http.ResponseWriter](),
+	reflect.TypeFor[*http.Request](),
+	reflect.TypeFor[RenderTarget](),
+}
+
+// checkInjection reports every Props and extended ServeHTTP parameter in
+// the tree that more than one registration could fill, so the ambiguity
+// fails Mount instead of the first request to that page. A parameter
+// nothing fills is left to request time: a page may be mounted but unused
+// in a configuration that doesn't register its dependencies.
+func (sp *StructPages) checkInjection() error {
+	var errs []error
+	for pn := range sp.pc.root.All() {
+		if m, ok := pn.Props["Props"]; ok && m.Func.IsValid() {
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
+		}
+		if m, ok := serveHTTPMethod(pn); ok && isExtendedServeHTTP(&m) {
+			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// serveHTTPMethod returns pn's own (not promoted) ServeHTTP method, on
+// the value or the pointer receiver.
+func serveHTTPMethod(pn *PageNode) (reflect.Method, bool) {
+	st, pt := pn.Value.Type(), pn.Value.Type()
 	if st.Kind() == reflect.Pointer {
 		st = st.Elem()
 	} else {
@@ -490,8 +522,23 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 	if !ok || isPromotedMethod(&method) {
 		method, ok = pt.MethodByName("ServeHTTP")
 		if !ok || isPromotedMethod(&method) {
-			return nil
+			return reflect.Method{}, false
 		}
+	}
+	return method, true
+}
+
+// isExtendedServeHTTP reports whether method is the ServeHTTP form that
+// takes parameters beyond the writer and request, filled by injection.
+func isExtendedServeHTTP(method *reflect.Method) bool {
+	return method.Type.NumIn() > 3 // receiver, http.ResponseWriter, *http.Request
+}
+
+func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
+	v := pn.Value
+	method, ok := serveHTTPMethod(pn)
+	if !ok {
+		return nil
 	}
 
 	if v.Type().Implements(handlerType) {
@@ -517,7 +564,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 		})
 	}
 	// extended ServeHTTP method with extra arguments
-	if method.Type.NumIn() > 3 { // receiver, http.ResponseWriter, *http.Request
+	if isExtendedServeHTTP(&method) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var wv reflect.Value // ResponseWriter, will be buffered if handler returns error
 			var bw *buffered

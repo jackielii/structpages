@@ -3,6 +3,8 @@ package structpages
 import (
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 )
 
 type argRegistry map[reflect.Type]reflect.Value
@@ -20,8 +22,51 @@ func (args argRegistry) addArg(v any) error {
 	return nil
 }
 
-// note that p.args are always pointers
-func (args argRegistry) getArg(pt reflect.Type) (reflect.Value, bool) {
+// getArg finds the registered value for a parameter of type pt. A
+// registration of exactly that type wins (a registered pointer also fills
+// its value type). Failing that, an interface parameter takes the one
+// registered value whose type implements it; more than one is an error,
+// since picking one would be a guess. found is false when nothing matches.
+func (args argRegistry) getArg(pt reflect.Type) (v reflect.Value, found bool, err error) {
+	if pt.Kind() == reflect.Interface {
+		if iv, ok := args[pt]; ok {
+			return iv, true, nil
+		}
+		return args.implementationOf(pt)
+	}
+	v, found = args.getConcreteArg(pt)
+	return v, found, nil
+}
+
+// implementationOf returns the single registered value implementing
+// iface.
+func (args argRegistry) implementationOf(iface reflect.Type) (reflect.Value, bool, error) {
+	var impls []reflect.Type
+	for t := range args {
+		if t.Implements(iface) {
+			impls = append(impls, t)
+		}
+	}
+	switch len(impls) {
+	case 0:
+		return reflect.Value{}, false, nil
+	case 1:
+		return args[impls[0]], true, nil
+	}
+	names := make([]string, len(impls))
+	for i, t := range impls {
+		names[i] = t.String()
+	}
+	slices.Sort(names)
+	return reflect.Value{}, false, fmt.Errorf(
+		"%s is implemented by more than one registered value (%s); "+
+			"declare the parameter as the concrete type, or narrow the interface",
+		iface, strings.Join(names, ", "))
+}
+
+// getConcreteArg finds the registered value for a non-interface
+// parameter type. Note that p.args are always pointers.
+func (args argRegistry) getConcreteArg(pt reflect.Type) (reflect.Value, bool) {
 	st := pt
 	needsElem, needsPtr := false, false
 	if pt.Kind() != reflect.Pointer {

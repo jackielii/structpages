@@ -261,12 +261,39 @@ func (p *parseContext) fillMethodArgs(
 		}
 
 		// If not found in available args, try the registry
-		val, ok := p.args.getArg(argType)
+		val, ok, err := p.args.getArg(argType)
+		if err != nil {
+			return fmt.Errorf("method %s: %w", formatMethod(method), err)
+		}
 		if !ok {
 			return fmt.Errorf("method %s requires argument of type %s, but not found",
 				formatMethod(method), argType.String())
 		}
 		in[i] = val
+	}
+	return nil
+}
+
+// checkMethodArgs reports a parameter of method on pn that more than one
+// registration could fill. It models fillMethodArgs by type, ahead of any
+// call: each provided value fills one parameter, an exact type match before
+// an assignable one, and only the rest reach the registry. A parameter the
+// registry can't fill is not reported; that stays a request-time error.
+func (p *parseContext) checkMethodArgs(pn *PageNode, method *reflect.Method, provided []reflect.Type) error {
+	unused := append(slices.Clip(provided), reflect.TypeFor[*PageNode](), reflect.TypeFor[PageNode]())
+	for i := 1; i < method.Type.NumIn(); i++ {
+		argType := method.Type.In(i)
+		j := slices.Index(unused, argType)
+		if j < 0 {
+			j = slices.IndexFunc(unused, func(t reflect.Type) bool { return t.AssignableTo(argType) })
+		}
+		if j >= 0 {
+			unused = slices.Delete(unused, j, j+1)
+			continue
+		}
+		if _, _, err := p.args.getArg(argType); err != nil {
+			return fmt.Errorf("page %s: method %s: %w", pn.Name, formatMethod(method), err)
+		}
 	}
 	return nil
 }
