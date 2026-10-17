@@ -1,11 +1,12 @@
 package structpages
 
 import (
-	"context"
+	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -212,134 +213,78 @@ func TestRenderingExamples_customSelector(t *testing.T) {
 	}
 }
 
-// exRetargetNavigation is the docs' middleware: a boosted request whose
-// target is none of the served page's components is navigation from
-// another page's region, so the whole page goes to body.
-func exRetargetNavigation(next http.Handler, pn *PageNode) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, hasPage := pn.Components["Page"]
-		if r.Method == http.MethodGet && hasPage &&
-			r.Header.Get("HX-Boosted") == "true" &&
-			r.Header.Get("HX-Request-Type") == "partial" &&
-			!exWantsOwnComponent(r, pn) {
-			w.Header().Set("HX-Retarget", "body")
-			w.Header().Set("HX-Reswap", "innerMorph")
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// exWantsOwnComponent reports whether the request's target is one of pn's
-// components other than Page.
-func exWantsOwnComponent(r *http.Request, pn *PageNode) bool {
-	t, err := HTMXv4RenderTarget(r, pn)
-	if err != nil {
-		return false
-	}
-	for name, m := range pn.Components {
-		if name != "Page" && t.Is(m.Func.Interface()) {
-			return true
-		}
-	}
-	return false
-}
-
-func TestRenderingExamples_retargetNavigation(t *testing.T) {
-	mux := http.NewServeMux()
-	sp, err := Mount(mux, exRoot{}, "/", "App", WithArgs(&exStore{}),
-		WithTargetSelector(HTMXv4RenderTarget), WithMiddlewares(exRetargetNavigation))
-	if err != nil {
-		t.Fatal(err)
-	}
-	notes, err := sp.ID(exDashboard.Notes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := []struct {
-		name, method, path, target, reqType, boosted string
-		retarget                                     bool
-	}{
-		{"boosted link from another page's region", "GET", "/dashboard", "div#report-region", "partial", "true", true},
-		{"boosted link targeting this page's own region", "GET", "/dashboard", "ul#" + notes, "partial", "true", false},
-		{"boosted link to body", "GET", "/dashboard", "body", "full", "true", false},
-		{"region reload, not boosted", "GET", "/dashboard", "div#report-region", "partial", "", false},
-		{"boosted form in a region posting to an action", "POST", "/notes", "div#report-region", "partial", "true", false},
-	}
-	for _, c := range cases {
-		req := httptest.NewRequest(c.method, c.path, http.NoBody)
-		req.Header.Set("HX-Request", "true")
-		req.Header.Set("HX-Target", c.target)
-		req.Header.Set("HX-Request-Type", c.reqType)
-		if c.boosted != "" {
-			req.Header.Set("HX-Boosted", c.boosted)
-		}
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, req)
-		if got := rec.Header().Get("HX-Retarget") == "body"; got != c.retarget {
-			t.Errorf("%s: retargeted = %v, want %v", c.name, got, c.retarget)
-		}
-	}
-}
-
-// exBorrowedRegions is the docs' development middleware: it reports a
-// partial request that isn't navigation and targets another page's
-// component, which the served page doesn't have.
-func exBorrowedRegions(report func(served *PageNode, owner *PageNode, component string)) MiddlewareFunc {
-	var (
-		once   sync.Once
-		owners map[string]componentOwner
-	)
-	return func(next http.Handler, pn *PageNode) http.Handler {
+// guardRegions, isDocument and teeWriter are the docs' test guard
+// ("Catching it: decide from the response"), verbatim.
+func guardRegions(t testing.TB) MiddlewareFunc {
+	return func(next http.Handler, _ *PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			once.Do(func() { owners = exComponentOwners(r.Context(), pn) })
-			key := r.Header.Get("HX-Target")
-			if _, id, ok := strings.Cut(key, "#"); ok {
-				key = id
+			target := r.Header.Get("HX-Target")
+			if r.Header.Get("HX-Request") != "true" || r.Header.Get("HX-Request-Type") == "full" ||
+				target == "" || target == "body" {
+				next.ServeHTTP(w, r)
+				return
 			}
-			if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
-				if o, ok := owners[key]; ok && o.page != pn {
-					report(pn, o.page, o.component)
-				}
+			tw := &teeWriter{ResponseWriter: w}
+			next.ServeHTTP(tw, r)
+			if w.Header().Get("HX-Retarget") != "body" && isDocument(tw.body.String()) {
+				t.Errorf("%s %s: a whole document answers an htmx request for %q", r.Method, r.URL, target)
 			}
-			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-type componentOwner struct {
-	page      *PageNode
-	component string
+var (
+	firstHead = regexp.MustCompile(`(?i)<head(\s[^>]*)?>[\s\S]*?</head>`)
+	firstTag  = regexp.MustCompile(`(?i)<([a-z][^/>\x20\t\r\n\f]*)`)
+)
+
+func isDocument(body string) bool {
+	if loc := firstHead.FindStringIndex(body); loc != nil {
+		body = body[:loc[0]] + body[loc[1]:]
+	}
+	m := firstTag.FindStringSubmatch(body)
+	return m != nil && (strings.EqualFold(m[1], "html") || strings.EqualFold(m[1], "body"))
 }
 
-// exComponentOwners maps every component id in the tree to its page.
-func exComponentOwners(ctx context.Context, pn *PageNode) map[string]componentOwner {
-	root := pn
-	for root.Parent != nil {
-		root = root.Parent
-	}
-	owners := map[string]componentOwner{}
-	for n := range root.All() {
-		for name, m := range n.Components {
-			if id, err := ID(ctx, m.Func.Interface()); err == nil {
-				owners[id] = componentOwner{page: n, component: name}
-			}
-		}
-	}
-	return owners
+type teeWriter struct {
+	http.ResponseWriter
+	body bytes.Buffer
 }
 
-func TestRenderingExamples_borrowedRegions(t *testing.T) {
-	var reports []string
+func (w *teeWriter) Write(p []byte) (int, error) {
+	w.body.Write(p)
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *teeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// recordingTB records the guard's failures instead of failing the test.
+type recordingTB struct {
+	testing.TB
+	errs []string
+}
+
+func (r *recordingTB) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
+
+// exRows is a region page whose controls target it by selector
+// (hx-target:inherited="closest tbody"): its Page is a fragment.
+type exRows struct{}
+
+func (exRows) Page() component { return testComponent{"<tbody><tr><td>row</td></tr></tbody>"} }
+
+func TestRenderingExamples_guardRegions(t *testing.T) {
+	type root struct {
+		Dashboard exDashboard `route:"/dashboard Dashboard"`
+		Report    exReport    `route:"/report Report"`
+		Save      exSaveNote  `route:"POST /notes Save"`
+		Rows      exRows      `route:"/rows Rows"`
+	}
+	rec := &recordingTB{TB: t}
 	mux := http.NewServeMux()
-	sp, err := Mount(mux, exRoot{}, "/", "App", WithArgs(&exStore{}),
-		WithTargetSelector(HTMXv4RenderTarget),
-		WithMiddlewares(exBorrowedRegions(func(served, owner *PageNode, component string) {
-			reports = append(reports, served.Name+" <- "+owner.Name+"."+component)
-		})))
-	if err != nil {
-		t.Fatal(err)
-	}
-	reportContent, err := sp.ID(exReport.Page)
+	sp, err := Mount(mux, root{}, "/", "App", WithArgs(&exStore{}),
+		WithTargetSelector(HTMXv4RenderTarget), WithMiddlewares(guardRegions(rec)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,10 +292,45 @@ func TestRenderingExamples_borrowedRegions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []string{"div#" + reportContent, "ul#" + notes, "div#eos-bell-panel"} {
-		serve(t, mux, htmxRequest("/dashboard", target))
+	summary, err := sp.ID(exReport.Summary)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if want := []string{"Dashboard <- Report.Page"}; strings.Join(reports, ";") != strings.Join(want, ";") {
-		t.Errorf("reports = %q, want %q", reports, want)
+	cases := []struct {
+		name, method, path, target, reqType string
+		flagged                             bool
+	}{
+		{"link from another page's region gets the whole page", "GET", "/dashboard", "div#report-region", "partial", true},
+		{"own region", "GET", "/dashboard", "ul#" + notes, "partial", false},
+		{"borrowed id that Props handles with Is", "GET", "/dashboard", "div#" + summary, "partial", false},
+		{"region control targeting by selector", "GET", "/rows", "tbody", "partial", false},
+		{"action answering for another page's region", "POST", "/notes", "div#" + summary, "partial", false},
+		{"boosted link to body", "GET", "/dashboard", "body", "full", false},
+	}
+	for _, c := range cases {
+		rec.errs = nil
+		req := httptest.NewRequest(c.method, c.path, http.NoBody)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", c.target)
+		req.Header.Set("HX-Request-Type", c.reqType)
+		mux.ServeHTTP(httptest.NewRecorder(), req)
+		if got := len(rec.errs) > 0; got != c.flagged {
+			t.Errorf("%s: flagged = %v (%q), want %v", c.name, got, rec.errs, c.flagged)
+		}
+	}
+}
+
+func TestRenderingExamples_isDocument(t *testing.T) {
+	for body, want := range map[string]bool{
+		"<!doctype html><html><body>x</body></html>":  true,
+		"<head><title>t</title></head><body>x</body>": true,
+		"<tbody><tr><td>row</td></tr></tbody>":        false,
+		"<div>fragment with <html> later</div>":       false,
+		"<template><html></html></template>":          false,
+		"":                                            false,
+	} {
+		if got := isDocument(body); got != want {
+			t.Errorf("isDocument(%q) = %v, want %v", body, got, want)
+		}
 	}
 }

@@ -110,104 +110,99 @@ The last row of the table is the one to watch. It happens in two ways, and they 
 **1. A link inside another page's region navigates here.** Page A has a region with `hx-target:inherited`, and a boosted link inside it goes to the dashboard. The request arrives with `HX-Target` set to A's region. The user meant to navigate, so the right content is the dashboard's `Page`, but htmx will put it into A's region. No `Props` can fix that: the dashboard never had A's region.
 
 - **Fix the markup:** a navigation link must not inherit a region's target. Put `hx-target:inherited` on the region's own controls (tabs, filters, pagination), not on a container that also holds navigation links, or give the link `hx-target="body"`.
-- **Safety net, as middleware:** a boosted GET to a page with a `Page` is navigation. When its target is none of the served page's components, send the page to `body`. The middleware runs before `Props`, so it sets the response headers on the writer:
-
-```go
-// retargetNavigation: a boosted GET whose target isn't one of this page's
-// components came from another page's region. Swap the page into body
-// instead. Only pages with a Page are navigated to: action handlers answer
-// boosted forms with fragments for the region, so they're left alone.
-// htmx 4; for htmx 2, drop the HX-Request-Type check, use
-// HTMXRenderTarget, and swap with innerHTML (innerMorph is htmx 4).
-func retargetNavigation(next http.Handler, pn *structpages.PageNode) http.Handler {
-    _, hasPage := pn.Components["Page"]
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.Method == http.MethodGet && hasPage &&
-            r.Header.Get("HX-Boosted") == "true" &&
-            r.Header.Get("HX-Request-Type") == "partial" &&
-            !wantsOwnComponent(r, pn) {
-            w.Header().Set("HX-Retarget", "body")
-            w.Header().Set("HX-Reswap", "innerMorph") // or innerHTML
-        }
-        next.ServeHTTP(w, r)
-    })
-}
-
-// wantsOwnComponent reports whether the request targets one of pn's
-// components other than Page, asking the selector the mount uses.
-func wantsOwnComponent(r *http.Request, pn *structpages.PageNode) bool {
-    t, err := structpages.HTMXv4RenderTarget(r, pn)
-    if err != nil {
-        return false
-    }
-    for name, m := range pn.Components {
-        if name != "Page" && t.Is(m.Func.Interface()) {
-            return true
-        }
-    }
-    return false
-}
-
-structpages.WithMiddlewares(retargetNavigation)
-```
-
-  It only touches boosted GETs to pages with a `Page`, so region reloads, other partial requests, and boosted forms posting to action handlers are unaffected. If a page's `Props` recognises another page's region on a boosted request and renders it with `RenderComponent`, it can undo the retarget with `w.Header().Del("HX-Retarget")`.
 
 **2. The page reuses another page's region id.** The dashboard renders a region with `report.Detail.Summary`'s id, and a reload inside it targets that id. The page does own this region in practice; it borrowed the id.
 
 - **Fix the page:** give the region the page's own id (`id={p.Summary |> id}`), so it's one of the page's components and the normal flow renders it with no `Is` at all.
 - **Or, when the reuse is deliberate,** recognise it in `Props` with `t.Is(report.Detail.Summary)` and return `RenderComponent`, as the example above does.
 
-**Seeing it happen.** Neither case is an error, so the error handler never sees them. But case 2 has an exact signature: the request isn't navigation, and its target is another page's generated component id. Fragment pages answering fixed ids (`#notifications-panel`) never produce it. A development middleware can report it, naming the served page and the region's owner:
+#### Catching it: decide from the response
+
+Neither case is an error, so the error handler never sees them. And the request alone can't tell them apart from correct ones:
+
+- A region's own controls may address it by a selector, such as `hx-target:inherited="closest tbody"`. That target names none of the page's components, and the page correctly answers with a `<tbody>` fragment.
+- A page's `Props` may handle a borrowed id on purpose with `t.Is(Other.Region)`.
+- An action handler may answer with another page's region after a write: a form posts to it with `hx-target={PermitPage.Fields |> target}`, and it returns `RenderComponent(…Fields(…))`.
+
+A middleware that judges by the target, before `Props` runs, either misses the bug or breaks these. What every misplaced response has in common is visible only in the response: **a whole document answers a request for a region.** Check for that, in three places.
+
+**When writing: the linter.** The [`region` check](./lint.md) flags case 2 for ids it can see in the templates.
+
+**In tests: mount with a guard.** Have the helper that mounts test trees add a middleware that fails the test when an htmx request whose target isn't `body` is answered with a whole document. `isDocument` is htmx 4's own test: with the first `<head>` removed, the first tag is `html` or `body`.
 
 ```go
-// borrowedRegions reports a partial request that targets another page's
-// component: a region the served page renders with a borrowed id.
-func borrowedRegions(report func(served, owner *structpages.PageNode, component string)) structpages.MiddlewareFunc {
-    var (
-        once   sync.Once
-        owners map[string]componentOwner // component id → its page
-    )
-    return func(next http.Handler, pn *structpages.PageNode) http.Handler {
+// guardRegions fails t when an htmx request whose target isn't body is
+// answered with a document htmx would swap into that target.
+func guardRegions(t testing.TB) structpages.MiddlewareFunc {
+    return func(next http.Handler, _ *structpages.PageNode) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            once.Do(func() { owners = componentOwners(r.Context(), pn) })
-            key := r.Header.Get("HX-Target")
-            if _, id, ok := strings.Cut(key, "#"); ok { // htmx 4 sends tag#id
-                key = id
+            target := r.Header.Get("HX-Target")
+            if r.Header.Get("HX-Request") != "true" || r.Header.Get("HX-Request-Type") == "full" ||
+                target == "" || target == "body" {
+                next.ServeHTTP(w, r)
+                return
             }
-            if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
-                if o, ok := owners[key]; ok && o.page != pn {
-                    report(pn, o.page, o.component)
-                }
+            tw := &teeWriter{ResponseWriter: w}
+            next.ServeHTTP(tw, r)
+            if w.Header().Get("HX-Retarget") != "body" && isDocument(tw.body.String()) {
+                t.Errorf("%s %s: a whole document answers an htmx request for %q", r.Method, r.URL, target)
             }
-            next.ServeHTTP(w, r)
         })
     }
 }
 
-type componentOwner struct {
-    page      *structpages.PageNode
-    component string
+var (
+    firstHead = regexp.MustCompile(`(?i)<head(\s[^>]*)?>[\s\S]*?</head>`)
+    firstTag  = regexp.MustCompile(`(?i)<([a-z][^/>\x20\t\r\n\f]*)`)
+)
+
+func isDocument(body string) bool {
+    if loc := firstHead.FindStringIndex(body); loc != nil {
+        body = body[:loc[0]] + body[loc[1]:]
+    }
+    m := firstTag.FindStringSubmatch(body)
+    return m != nil && (strings.EqualFold(m[1], "html") || strings.EqualFold(m[1], "body"))
 }
 
-func componentOwners(ctx context.Context, pn *structpages.PageNode) map[string]componentOwner {
-    root := pn
-    for root.Parent != nil {
-        root = root.Parent
-    }
-    owners := map[string]componentOwner{}
-    for n := range root.All() {
-        for name, m := range n.Components {
-            if id, err := structpages.ID(ctx, m.Func.Interface()); err == nil {
-                owners[id] = componentOwner{page: n, component: name}
-            }
-        }
-    }
-    return owners
+type teeWriter struct {
+    http.ResponseWriter
+    body bytes.Buffer
 }
+
+func (w *teeWriter) Write(p []byte) (int, error) {
+    w.body.Write(p)
+    return w.ResponseWriter.Write(p)
+}
+
+func (w *teeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 ```
 
-It runs before `Props`, so it also reports a borrowed region that `Props` handles on purpose with `Is`; allow-list those. The [linter's `region` check](./lint.md) catches the same mistake when the code is written, for ids it can see in the templates. In tests, send each region's own requests (its reload, its links) and check that the responses don't contain `<html`. On the client, an htmx listener can flag a response starting with `<html>` or `<body>` that is about to land in a target other than `body`.
+Then send each region's own requests in tests: its reload, its tabs, its pagination.
+
+**In the browser: a listener.** htmx 4 fires `htmx:after:request` after it reads the response and before it applies `HX-Retarget`/`HX-Reswap`, so a listener can see a document bound for a region and send it to `body` instead. That covers case 1, a link that inherited a region's target, as well as any case 2 the linter and tests missed. Logging with `console.error` makes browser tests fail on it:
+
+```js
+// isDocument is htmx 4's test for a response it parses as a whole document.
+function isDocument(text) {
+  const rest = text.replace(/<head(\s[^>]*)?>[\s\S]*?<\/head>/i, "");
+  const tag = rest.match(/<([a-z][^\/>\x20\t\r\n\f]*)/i)?.[1]?.toLowerCase();
+  return tag === "html" || tag === "body";
+}
+
+document.addEventListener("htmx:after:request", (evt) => {
+  const ctx = evt.detail?.ctx;
+  if (!ctx || ctx.select || !isDocument(ctx.text ?? "")) return;
+  if ((ctx.hx?.reswap ?? ctx.swap ?? "").split(" ")[0] === "none") return;
+  const retarget = ctx.hx?.retarget;
+  if (retarget ? retarget === "body" : ctx.target === document.body) return;
+  console.error("htmx: a whole document answered a request for a region", ctx.request?.action);
+  ctx.hx ||= {};
+  ctx.hx.retarget = "body";
+  ctx.hx.reswap = "innerMorph";
+});
+```
+
+Requests with `hx-select` are skipped, since they pick a fragment out of the document on purpose. For htmx 2, the same check fits in `htmx:beforeSwap`, setting `evt.detail.target` to `document.body`.
 
 ### Recognised, but not rendered
 

@@ -146,7 +146,25 @@ templ's `templ (p P) M()` lower to. The call is flagged when all of these hold:
   region deliberately (typically with `RenderComponent`). Nothing else counts: a `t.Is(Q.M)` in a `ServeHTTP` that
   takes the `RenderTarget` by injection doesn't, and neither does a hand-written comparison of the `HX-Target`
   header, such as a `partialTarget` helper reading `r.Header`, even when it handles the region. Move such code to `t.Is(Q.M)`, which is what `Is` is for, or suppress the finding
-  with `structpages:lint:ignore region`.
+  with `structpages:lint:ignore region`:
+
+  ```go
+  // Not seen as handling the region: the linter can't follow header comparisons.
+  func (p acePage) Props(r *http.Request) (aceProps, error) {
+      if partialTarget(r) == detailContentID {
+          return aceProps{}, structpages.RenderComponent(detail.DetailPage{}.Content(…))
+      }
+      …
+  }
+
+  // Handled: Props asks the RenderTarget about DetailPage.Content.
+  func (p acePage) Props(t structpages.RenderTarget) (aceProps, error) {
+      if t.Is(detail.DetailPage.Content) {
+          return aceProps{}, structpages.RenderComponent(detail.DetailPage{}.Content(…))
+      }
+      …
+  }
+  ```
 
 Standalone function components are never flagged: they belong to no page. Neither are components on a type that
 isn't a mounted page, such as a shared component type, because the enclosing method has to be on a page.
