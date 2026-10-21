@@ -75,6 +75,8 @@ url, err := structpages.URLFor(ctx,
 )
 ```
 
+Each value is escaped for the part of the URL its placeholder sits in, so pass it raw. A path value can't add a segment (`a/b` becomes `a%2Fb`), and a query or fragment value can't add a parameter or end the query: `&`, `=`, `+`, `#` and `%` all stay data, so `q: "A&B"` reads back as `A&B`. Don't `url.QueryEscape` a value first, or it gets escaped twice and the handler reads `A%26B`. The part changes only at the template's own `?` and `#`, never at one in a value. Text you write into the template itself is used as is, so query text you've already encoded goes there: `[]any{MyList{}, "?" + values.Encode()}`.
+
 In markup the same form builds pagination links, one per page:
 
 ```gsx
@@ -114,6 +116,8 @@ href, err := structpages.URLFor(ctx, siblingPage{})
 ```
 
 Only the current route's params auto-fill; sibling routes with different param names do not.
+
+Auto-filled values come from `r.PathValue`, already decoded, and are escaped again like passed values: on a request for `/items/a%2Fb`, `{id}` fills as `a%2Fb`.
 
 ## Dynamic references with Ref
 

@@ -740,33 +740,33 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 	return current, nil
 }
 
-// getSegmentsCached returns cached segments for a pattern, parsing and caching if not already cached
-// Returns a copy of the cached segments to avoid mutation issues
-func (p *parseContext) getSegmentsCached(pattern string) ([]segment, error) {
-	// Try read lock first for cache hit
-	p.segmentCacheMu.RLock()
-	if cached, ok := p.segmentCache[pattern]; ok {
-		p.segmentCacheMu.RUnlock()
-		// Return a copy to avoid mutations affecting the cache
-		result := make([]segment, len(cached))
-		copy(result, cached)
-		return result, nil
-	}
-	p.segmentCacheMu.RUnlock()
-
-	// Cache miss - parse and store
-	segments, err := parseSegments(pattern)
+// cacheRouteSegments parses a mounted route and caches its segments.
+// Only Mount adds to the cache, once per route, so it stays bounded by
+// the page tree: URLFor templates composed at request time, such as
+// []any{page, "?" + v.Encode()}, can be distinct per request and are
+// never cached.
+func (p *parseContext) cacheRouteSegments(route string) ([]segment, error) {
+	segments, err := parseSegments(route)
 	if err != nil {
 		return nil, err
 	}
-
 	p.segmentCacheMu.Lock()
-	p.segmentCache[pattern] = segments
+	p.segmentCache[route] = segments
 	p.segmentCacheMu.Unlock()
+	return segments, nil
+}
 
-	// Return a copy to avoid mutations affecting the cache
-	result := make([]segment, len(segments))
-	copy(result, segments)
+// segmentsFor returns a pattern's segments: a copy of the cached segments
+// of a mounted route, so callers can fill them in, or else freshly parsed.
+func (p *parseContext) segmentsFor(pattern string) ([]segment, error) {
+	p.segmentCacheMu.RLock()
+	cached, ok := p.segmentCache[pattern]
+	p.segmentCacheMu.RUnlock()
+	if !ok {
+		return parseSegments(pattern)
+	}
+	result := make([]segment, len(cached))
+	copy(result, cached)
 	return result, nil
 }
 

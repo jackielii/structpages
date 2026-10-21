@@ -17,21 +17,16 @@ var (
 	currentPageCtx = ctxkey.New[*PageNode]("structpages.currentPage", nil)
 )
 
-// encodePathSegment converts a value to string and URL-encodes it for use in path segments.
-// For wildcard segments ({path...}), slashes are preserved as they're part of the path.
-func encodePathSegment(value any, isWildcard bool) string {
-	s := fmt.Sprint(value)
-	if isWildcard {
-		// For wildcards, split on slashes, escape each part, then rejoin
-		// This preserves slashes while properly encoding each path segment
-		parts := strings.Split(s, "/")
-		for i, part := range parts {
-			parts[i] = url.PathEscape(part)
-		}
-		return strings.Join(parts, "/")
-	}
-	return url.PathEscape(s)
-}
+// urlPart is the part of a URL a template segment sits in. Each part escapes
+// placeholder values its own way: a path value must not add a segment, and a
+// query or fragment value must not add a parameter or end the part.
+type urlPart uint8
+
+const (
+	partPath urlPart = iota
+	partQuery
+	partFragment
+)
 
 func withPcCtx(pc *parseContext) MiddlewareFunc {
 	return func(next http.Handler, node *PageNode) http.Handler {
@@ -96,6 +91,10 @@ func extractURLParams(next http.Handler, node *PageNode) http.Handler {
 // Positional and key/value-pairs forms also work (see formatPathSegments
 // in url_for.go for the full detection order) but require the call site
 // to track parameter position or name conventions.
+//
+// Pass values unescaped: each is escaped for the part of the URL its
+// placeholder sits in (path, query or fragment), so "A&B" in "?q={q}"
+// reads back as "A&B". Template strings are used as is.
 //
 // You can pass []any as the page to join multiple path segments
 // together — strings are concatenated as-is, which is the form used to
@@ -167,12 +166,12 @@ func applyURLPrefix(prefix, path string) string {
 //
 //nolint:gocognit,gocyclo // This function handles multiple cases for flexible argument passing
 func formatPathSegments(ctx context.Context, pattern string, args ...any) (string, error) {
-	// Use cached segment parsing if parseContext is available
+	// Mounted routes are parsed once at Mount; see cacheRouteSegments
 	pc := pcCtx.Value(ctx)
 	var segments []segment
 	var err error
 	if pc != nil {
-		segments, err = pc.getSegmentsCached(pattern)
+		segments, err = pc.segmentsFor(pattern)
 	} else {
 		segments, err = parseSegments(pattern)
 	}
@@ -209,15 +208,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				}
 			}
 			if allFilled {
-				s := ""
-				for _, segment := range segments {
-					if segment.param {
-						s += segment.value
-					} else {
-						s += segment.name
-					}
-				}
-				return s, nil
+				return joinSegments(segments), nil
 			}
 		}
 		return pattern, fmt.Errorf("pattern %s: no arguments provided", pattern)
@@ -238,7 +229,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := arg[name]; ok {
-				segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
+				segments[idx].value = fmt.Sprint(value)
 				segments[idx].filled = true
 			}
 			// If value not in args map, it should keep the pre-filled value from context
@@ -256,7 +247,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			for i, arg := range args {
 				// Always override with provided args when count matches exactly
 				idx := indicies[i]
-				segments[idx].value = encodePathSegment(arg, segments[idx].wildcard)
+				segments[idx].value = fmt.Sprint(arg)
 				segments[idx].filled = true
 			}
 		case len(args)%2 == 0 && len(args) >= 2:
@@ -290,7 +281,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 				for _, idx := range indicies {
 					name := segments[idx].name
 					if value, ok := m[name]; ok {
-						segments[idx].value = encodePathSegment(value, segments[idx].wildcard)
+						segments[idx].value = fmt.Sprint(value)
 						segments[idx].filled = true
 					} else if !segments[idx].filled {
 						// Only error if no value from context either
@@ -316,7 +307,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			argIdx := 0
 			for _, idx := range indicies {
 				if !segments[idx].filled && argIdx < len(args) {
-					segments[idx].value = encodePathSegment(args[argIdx], segments[idx].wildcard)
+					segments[idx].value = fmt.Sprint(args[argIdx])
 					segments[idx].filled = true
 					argIdx++
 				}
@@ -324,29 +315,72 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 		}
 	}
 
-	s := ""
-	for _, segment := range segments {
-		if segment.param {
-			s += segment.value
+	return joinSegments(segments), nil
+}
+
+// joinSegments assembles the URL, escaping each placeholder's value for the
+// part of the URL it sits in. Values are held unescaped until here, whether
+// passed by the caller or taken from the current request (r.PathValue
+// results, already decoded).
+func joinSegments(segments []segment) string {
+	var sb strings.Builder
+	for _, seg := range segments {
+		if seg.param {
+			sb.WriteString(seg.escape())
 		} else {
-			s += segment.name
+			sb.WriteString(seg.name)
 		}
 	}
-
-	return s, nil
+	return sb.String()
 }
 
 type segment struct {
 	name     string
 	param    bool
 	wildcard bool
-	value    string
-	filled   bool // true if value has been explicitly set (even to empty string)
+	part     urlPart // the part of the URL the segment sits in
+	value    string  // unescaped; joinSegments escapes it for part
+	filled   bool    // true if value has been explicitly set (even to empty string)
+}
+
+// escape URL-encodes a placeholder value for the part of the URL it fills.
+// Path values are escaped per segment; wildcards ({path...}) keep their
+// slashes, escaping each segment between them. Query and fragment values are
+// escaped as a single query component, so &, =, + and # stay data.
+func (seg segment) escape() string {
+	if seg.part != partPath {
+		// QueryEscape encodes a literal + as %2B, so every + it emits stands
+		// for a space; %20 keeps spaces encoded the same way in every part.
+		return strings.ReplaceAll(url.QueryEscape(seg.value), "+", "%20")
+	}
+	if seg.wildcard {
+		parts := strings.Split(seg.value, "/")
+		for i, part := range parts {
+			parts[i] = url.PathEscape(part)
+		}
+		return strings.Join(parts, "/")
+	}
+	return url.PathEscape(seg.value)
 }
 
 func parseSegments(pattern string) (segments []segment, err error) {
 	if pattern == "" {
 		return
+	}
+	// The part advances on the template's own ? and #, never on a value's:
+	// the first ? starts the query, the first # starts the fragment.
+	part := partPath
+	static := func(text string) {
+		segments = append(segments, segment{name: text, part: part})
+		for _, c := range text {
+			switch {
+			case c == '#':
+				part = partFragment
+				return
+			case c == '?' && part == partPath:
+				part = partQuery
+			}
+		}
 	}
 	rest := pattern
 	for i := 0; ; i++ {
@@ -355,11 +389,11 @@ func parseSegments(pattern string) (segments []segment, err error) {
 		}
 		start := strings.Index(rest, "{")
 		if start == -1 {
-			segments = append(segments, segment{name: rest})
+			static(rest)
 			break
 		}
 		if start > 0 {
-			segments = append(segments, segment{name: rest[:start]})
+			static(rest[:start])
 		}
 		rest = rest[start+1:] // move over the '{'
 		end := strings.Index(rest, "}")
@@ -369,12 +403,12 @@ func parseSegments(pattern string) (segments []segment, err error) {
 		name := rest[:end]
 		rest = rest[end+1:]
 		if name == "$" { // skip {$} segments
-			segments = append(segments, segment{name: "{$}"})
+			segments = append(segments, segment{name: "{$}", part: part})
 			continue
 		}
 		wildcard := strings.HasSuffix(name, "...")
 		name = strings.TrimSuffix(name, "...")
-		segments = append(segments, segment{name: name, param: true, wildcard: wildcard})
+		segments = append(segments, segment{name: name, param: true, wildcard: wildcard, part: part})
 	}
 	return segments, nil
 }

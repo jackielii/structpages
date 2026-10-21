@@ -379,8 +379,9 @@ func (sp *StructPages) registerPageItem(mux Mux, page *PageNode, mw []Middleware
 	// Pre-parse route segments for performance (done once at Mount time)
 	fullRoute := page.FullRoute()
 	if page.routeSegments == nil {
-		if segments, err := sp.pc.getSegmentsCached(fullRoute); err == nil {
-			// Store without copying since we own this PageNode
+		if segments, err := sp.pc.cacheRouteSegments(fullRoute); err == nil {
+			// Shared with the cache: both only read it; segmentsFor and
+			// getRouteSegments hand out copies
 			page.routeSegments = segments
 		}
 	}

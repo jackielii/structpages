@@ -198,8 +198,8 @@ func TestUrlFor(t *testing.T) {
 		},
 		{
 			name:     "with args",
-			page:     []any{product{}, "?page={page}{extra}"},
-			args:     []any{"page", "1", "extra", "&sort=asc"},
+			page:     []any{product{}, "?page={page}", "&sort=asc"},
+			args:     []any{"page", "1"},
 			expected: "/product?page=1&sort=asc",
 		},
 		{
@@ -1237,7 +1237,7 @@ func TestURLFor_withQueryStringComposition(t *testing.T) {
 			name:     "query string with encoded special chars",
 			parts:    []any{"/search", "?q={query}&filter={filter}"},
 			args:     []any{"foo&bar", "a=b"},
-			expected: "/search?q=foo&bar&filter=a=b", // & and = allowed in query values
+			expected: "/search?q=foo%26bar&filter=a%3Db", // & and = in a value stay data
 		},
 		{
 			name:     "mixed path params and query params",

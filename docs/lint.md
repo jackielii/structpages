@@ -77,6 +77,7 @@ linter can't tell where the tree is mounted, so its pages get no tree-based chec
 | `ref` | `structpages.Ref(...)` strings that don't resolve to a page-tree node — including refs stored in struct fields and vars (e.g. a nav table). |
 | `idfor` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted as a page, or whose method is missing on a chain leaf. The same for the argument of `RenderTarget.Is`, which matches the target an `ID(ctx, X)` element produces: a method expression or method value (`p.Content`) whose receiver isn't mounted, or an argument that isn't a function at all, such as `t.Is(p.Content())`, which calls the component instead of naming it, or a `Ref`/string, which structpages' own target selectors never match (a custom `RenderTarget` might). |
 | `params` | `URLFor` param keys that don't appear in the route pattern (including placeholders in a `?q={q}` fragment) — literal `map[string]any` keys and the constant keys of the key/value form, `URLFor(ctx, p, "id", x)` / `url("id", x)`. |
+| `escape` | A `URLFor` value already escaped with `net/url` — `url.QueryEscape(x)`, `url.PathEscape(x)` or `v.Encode()` passed positionally, as a key/value pair or in a literal map, `url("q", url.QueryEscape(q))` in gsx. `URLFor` escapes every value for its place in the URL, so it would be escaped twice. Pass the value raw; put an encoded `url.Values` in the template instead, `[]any{page, "?" + v.Encode()}`. Needs no page tree. |
 | `url-attr` | URL-bearing HTML attributes in `.gsx` and `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, `fmt.Sprint*` calls, or gsx `` f`/path/@{x}` `` templates. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — e.g. `return "/admin/queues"` — where you should resolve by page type via `URLFor`. Deliberately narrow: exact concrete-route matches only; comparisons (`==`/`switch`), `Ref(...)` args and the route argument of a `Mount`/`Parse` call (or of a helper forwarding to one), which defines the route, are skipped; `_test.go` and generated files are skipped. |
 | `selector` | A `structpages.Mount` call with no `structpages.WithTargetSelector(...)` option whose tree serves htmx templates. There is no default target selector since v0.9.0, so every htmx partial request to that tree renders the full `Page`. Pass `WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2 or `WithTargetSelector(structpages.HTMXv4RenderTarget)` for htmx 4. See [How `selector` decides](#how-selector-decides). |
@@ -199,7 +200,7 @@ Limits:
 ### gsx templates
 
 gsx lowers the `url`, `id` and `target` filters to real `structpages.URLFor` / `ID` / `IDTarget` calls in
-the generated `.x.go`, so `urlfor`, `ref`, `params` and `idfor` check every `{ page{} |> url("id", x) }`
+the generated `.x.go`, so `urlfor`, `ref`, `params`, `escape` and `idfor` check every `{ page{} |> url("id", x) }`
 exactly like hand-written Go. Findings are reported at the `.gsx` line through gsx's `//line` directives.
 `url-attr` parses the `.gsx` sources directly with gsx's own parser.
 
