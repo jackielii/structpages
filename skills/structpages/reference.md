@@ -111,8 +111,11 @@ Detected in this order:
 - **Auto-fill**: unfilled placeholders that are path params of the current request's route are taken from
   the request. Params of other routes are not.
 
-Explicitly passed path values are escaped per segment; `{path...}` wildcards keep their slashes.
-Auto-filled values are taken from `r.PathValue` (already decoded) and inserted as is. `{$}` is removed and
+Pass values raw: each is escaped for the part of the URL its placeholder sits in. Path values are escaped per
+segment, and `{path...}` wildcards keep their slashes. Query and fragment values are escaped as one component,
+so `&`, `=`, `+` and `#` stay data. Don't `url.QueryEscape` first, since that escapes twice. Template text is used as
+is, so put pre-encoded query text there (`"?" + values.Encode()`). Auto-filled values come from `r.PathValue`
+(already decoded) and are escaped the same way. `{$}` is removed and
 `WithURLPrefix` is prepended.
 
 ## ID and IDTarget
@@ -364,6 +367,7 @@ concrete page passed to it, through chains of helpers and across packages.
 | `urlfor` | `URLFor` targets: unmounted or ambiguous type, unknown chain child, typed value after a fragment |
 | `ref` | `Ref` strings (including ones stored in variables or struct fields) that resolve to no node |
 | `params` | `URLFor` param keys that are not placeholders in the pattern (fragment included): literal map keys, and constant keys of the key/value form, `url("itemId", 7)` |
+| `escape` | `URLFor` values pre-escaped with `url.QueryEscape`/`url.PathEscape`/`Values.Encode()`, which URLFor escapes again: pass raw; an encoded query goes in the template (`"?" + v.Encode()`) |
 | `idfor` | `ID`/`IDTarget` method expressions whose receiver is not mounted, or whose method is missing on a chain leaf; `RenderTarget.Is` arguments whose receiver is not mounted, or that aren't a function at all (`t.Is(p.Content())` calls instead of naming; a `Ref`/string never matches) |
 | `selector` | a `Mount` with no `WithTargetSelector` whose pages' `.gsx`/`.templ` templates use htmx (`hx-get`…`hx-select`, `<hx-partial>`). Flagged only when every option is a direct `structpages` call (inline or a literal slice); a variable or `opts...` spread isn't. `_test.go` skipped |
 | `route-literal` | `.go` string literals equal to a concrete mounted route (comparisons, `Ref` args, tests and generated files skipped) |
@@ -371,7 +375,7 @@ concrete page passed to it, through chains of helpers and across packages.
 
 gsx templates get two passes. gsx lowers `|> url`, `|> id` and `|> target` to real
 `URLFor`/`ID`/`IDTarget` calls in the generated `.x.go`, which the analyzer checks like hand-written Go
-(`urlfor`, `ref`, `params`, `idfor`). Findings point at the `.gsx` through gsx's `//line` directives.
+(`urlfor`, `ref`, `params`, `escape`, `idfor`). Findings point at the `.gsx` through gsx's `//line` directives.
 `url-attr` parses the `.gsx` itself. Keep the `.x.go` files generated before linting.
 
 The key/value check follows URLFor's own rules. With as many args as placeholders the call is positional,

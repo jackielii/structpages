@@ -117,11 +117,21 @@ func (ctx *checkCtx) inSomeTree(check func()) {
 //
 // The region check is the exception: it reports a bug that occurs in
 // any tree that mounts both pages involved, so it looks for one such
-// tree rather than for one tree that passes (see checkRegion).
+// tree rather than for one tree that passes (see checkRegion). The
+// escape check needs no tree at all.
 func visitCall(ctx *checkCtx, call *ast.CallExpr) {
 	ctx.inSomeTree(func() { checkCall(ctx, call) })
-	if fn, args, ok := structpagesCall(ctx.pass.TypesInfo, call); ok && (fn.Name() == "ID" || fn.Name() == "IDTarget") {
+	fn, args, ok := structpagesCall(ctx.pass.TypesInfo, call)
+	if !ok {
+		return
+	}
+	switch fn.Name() {
+	case "ID", "IDTarget":
 		checkRegion(ctx, call, args, fn.Name())
+	case "URLFor":
+		if len(args) > 0 {
+			checkPreEscaped(ctx, call, args[1:])
+		}
 	}
 }
 

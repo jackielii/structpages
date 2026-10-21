@@ -1,6 +1,8 @@
 package lint
 
 import (
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,8 +14,16 @@ import (
 // the [urlfor] diagnostics the analyzer reports.
 func urlforDiags(t *testing.T, buildFlags ...string) []string {
 	t.Helper()
+	return categoryDiags(t, "testdata/buildtags", "urlfor", buildFlags...)
+}
+
+// categoryDiags loads the testdata module in dir under the given build flags
+// and returns the analyzer's diagnostics of one category, each prefixed with
+// its file:line.
+func categoryDiags(t *testing.T, dir, category string, buildFlags ...string) []string {
+	t.Helper()
 	cfg := &packages.Config{
-		Dir: "testdata/buildtags",
+		Dir: dir,
 		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
 			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
 			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
@@ -41,8 +51,9 @@ func urlforDiags(t *testing.T, buildFlags ...string) []string {
 			Pkg:       pkg.Types,
 			TypesInfo: pkg.TypesInfo,
 			Report: func(d analysis.Diagnostic) {
-				if strings.HasPrefix(d.Message, "[urlfor]") {
-					diags = append(diags, d.Message)
+				if strings.HasPrefix(d.Message, "["+category+"]") {
+					p := pkg.Fset.Position(d.Pos)
+					diags = append(diags, fmt.Sprintf("%s:%d: %s", filepath.Base(p.Filename), p.Line, d.Message))
 				}
 			},
 			ResultOf: map[*analysis.Analyzer]any{},
