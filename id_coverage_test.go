@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/jackielii/structpages/internal/idconflicta"
 )
 
 // A singly-mounted tree for exercising bound-method-value resolution and
@@ -97,23 +95,23 @@ func TestID_ChainEdgeErrors(t *testing.T) {
 	}
 }
 
-// TestID_BoundMethodAmbiguous covers the isBound name-matching path when the
-// same type name is mounted twice (the two cross-package Widget types from
-// idConflictRoot in id_cross_package_test.go): a bound method value resolves
-// by type name, matches both, and errors with both distinct ids listed.
+// TestID_BoundMethodAmbiguous covers the isBound path when one type is
+// mounted under two parents (ambBRoot in id_ambiguity_test.go): a bound
+// method value matches both mounts, and errors with both distinct ids
+// listed, as the method expression does.
 func TestID_BoundMethodAmbiguous(t *testing.T) {
-	pc, err := parsePageTree("/", &idConflictRoot{})
+	pc, err := parsePageTree("/", &ambBRoot{})
 	if err != nil {
 		t.Fatalf("parsePageTree: %v", err)
 	}
 	ctx := pcCtx.WithValue(context.Background(), pc)
 
-	var inst idconflicta.Widget // bound value; List is a bound method value
-	_, err = ID(ctx, inst.List)
+	var inst ambSameName // bound value; Overlays is a bound method value
+	_, err = ID(ctx, inst.Overlays)
 	if err == nil {
-		t.Fatal("expected ambiguity error for bound method on a doubly-mounted type name")
+		t.Fatal("expected ambiguity error for bound method on a doubly-mounted type")
 	}
-	for _, want := range []string{"a-widget-list", "b-widget-list"} {
+	for _, want := range []string{"foundations-entry-detail-overlays", "components-entry-detail-overlays"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not contain %q", err.Error(), want)
 		}

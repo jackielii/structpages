@@ -268,10 +268,7 @@ func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodI
 	matches := pc.collectPageNodesForMethod(info)
 	switch len(matches) {
 	case 0:
-		if info.isBound {
-			return nil, fmt.Errorf("no page node found with type name %q", info.receiverTypeName)
-		}
-		return nil, fmt.Errorf("no page node found for type %s", pointerType(info.receiverType).String())
+		return nil, fmt.Errorf("no page node found for type %s", info.receiverString())
 	case 1:
 		return matches[0], nil
 	}
@@ -326,15 +323,13 @@ func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
 	var out []*PageNode
 	for node := range p.root.All() {
 		nodeType := node.Value.Type()
+		if !info.receiverIs(nodeType) {
+			continue
+		}
 		if info.isBound {
-			if !sameTypeName(nodeType, info.receiverTypeName) {
-				continue
-			}
 			if _, found := nodeType.MethodByName(info.methodName); !found {
 				continue
 			}
-		} else if pointerType(nodeType) != pointerType(info.receiverType) {
-			continue
 		}
 		out = append(out, node)
 	}
@@ -342,22 +337,16 @@ func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
 }
 
 // pageNodeMatchesMethod reports whether pn's value type is the
-// receiver type for info (either by reflect.Type or by type name
-// for bound method values).
+// receiver type for info and has its method.
 func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 	if pn == nil {
 		return false
 	}
 	nodeType := pn.Value.Type()
-	if info.isBound {
-		if !sameTypeName(nodeType, info.receiverTypeName) {
-			return false
-		}
-	} else if pointerType(nodeType) != pointerType(info.receiverType) {
+	if !info.receiverIs(nodeType) {
 		return false
 	}
-	// Confirm the method exists on this type — guards against
-	// matching a same-named type that doesn't have the method.
+	// Confirm the method exists on this type.
 	_, found := pointerType(nodeType).MethodByName(info.methodName)
 	return found
 }
