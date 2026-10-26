@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"reflect"
 	"runtime"
 	"strings"
@@ -15,7 +16,8 @@ import (
 type methodInfo struct {
 	methodName       string
 	receiverType     reflect.Type // nil for bound methods and standalone functions
-	receiverTypeName string       // for bound methods
+	receiverPkgPath  string       // for bound methods: the receiver type's package path
+	receiverTypeName string       // for bound methods: the receiver type's name, "T[...]" if generic
 	packageName      string       // short package name, for standalone functions
 	isBound          bool
 	isFunction       bool // true for standalone functions (not methods)
@@ -60,21 +62,24 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	funcType := v.Type()
 
 	// Check if this is a bound method (instance.Method)
-	// Bound methods have "-fm" suffix in the name (receiver already bound)
+	// Bound methods have "-fm" suffix in the name (receiver already bound);
+	// a package path may contain "-fm" too, so only the suffix counts
 	// The number of input parameters varies based on the method's arguments
 	// Method pattern in the name: "package.(*Type).Method-fm"
-	isBound := strings.Contains(fullName, "-fm")
+	isBound := strings.HasSuffix(fullName, "-fm")
 
 	var info *methodInfo
 
 	if isBound {
-		// Extract receiver type name from function name
-		typeName := extractReceiverTypeNameFromFuncName(fullName)
+		// A bound method value's func is a closure over its receiver, which
+		// reflect can't reach, so the receiver type comes from its name
+		pkgPath, typeName := boundReceiverFromFuncName(fullName)
 		if typeName == "" {
 			return nil, fmt.Errorf("cannot extract receiver type from bound method: %s", fullName)
 		}
 		info = &methodInfo{
 			methodName:       methodName,
+			receiverPkgPath:  pkgPath,
 			receiverTypeName: typeName,
 			isBound:          true,
 			isFunction:       false,
@@ -202,43 +207,80 @@ func isMethodPattern(fullName string) bool {
 	return strings.Contains(remainder, ".")
 }
 
-// extractReceiverTypeNameFromFuncName extracts the receiver type name from a function name.
+// boundReceiverFromFuncName extracts the receiver type's package path and
+// name from a bound method value's function name.
 // Examples:
-//   - "github.com/user/pkg.(*TypeName).Method-fm" -> "TypeName"
-//   - "github.com/user/pkg.TypeName.Method-fm" -> "TypeName"
-//   - "main.(*MyType).Method-fm" -> "MyType"
-func extractReceiverTypeNameFromFuncName(fullName string) string {
-	// Find the last package separator
+//   - "github.com/user/pkg.(*TypeName).Method-fm" -> "github.com/user/pkg", "TypeName"
+//   - "github.com/user/pkg.TypeName.Method-fm" -> "github.com/user/pkg", "TypeName"
+//   - "github.com/user/pkg.Gen[...].Method-fm" -> "github.com/user/pkg", "Gen[...]"
+//   - "main.(*MyType).Method-fm" -> "main", "MyType"
+//
+// Symbol names escape the package path's last element: a "." there is
+// written "%2e" ("gopkg.in/yaml%2ev3"), so the path is unescaped to
+// compare with reflect.Type.PkgPath.
+func boundReceiverFromFuncName(fullName string) (pkgPath, typeName string) {
+	// The package path ends at the first dot after its last slash
 	lastSlash := strings.LastIndex(fullName, "/")
-	remainder := fullName
-	if lastSlash != -1 {
-		remainder = fullName[lastSlash+1:]
-	}
-
-	// Look for the pattern: "package.(*Type).Method" or "package.Type.Method"
-	// First, find the package name and skip it
-	dotIdx := strings.Index(remainder, ".")
+	dotIdx := strings.Index(fullName[lastSlash+1:], ".")
 	if dotIdx == -1 {
-		return ""
+		return "", ""
 	}
-	remainder = remainder[dotIdx+1:]
+	dotIdx += lastSlash + 1
+	pkgPath, err := url.PathUnescape(fullName[:dotIdx])
+	if err != nil {
+		return "", ""
+	}
+	remainder := fullName[dotIdx+1:]
 
-	// Check for pointer receiver: (*Type)
+	// Pointer receiver: (*Type).Method
 	if strings.HasPrefix(remainder, "(*") {
 		closeParenIdx := strings.Index(remainder, ")")
 		if closeParenIdx == -1 {
-			return ""
+			return "", ""
 		}
-		return remainder[2:closeParenIdx]
+		return pkgPath, remainder[2:closeParenIdx]
 	}
 
-	// Value receiver: Type.Method
-	dotIdx = strings.Index(remainder, ".")
+	// Value receiver: Type.Method, or Type[...].Method for a generic type,
+	// whose type arguments may hold dots
+	end := 0
+	if i := strings.IndexAny(remainder, ".["); i != -1 && remainder[i] == '[' {
+		closeIdx := strings.Index(remainder, "]")
+		if closeIdx == -1 {
+			return "", ""
+		}
+		end = closeIdx + 1
+	}
+	dotIdx = strings.Index(remainder[end:], ".")
 	if dotIdx == -1 {
-		return ""
+		return "", ""
 	}
+	return pkgPath, remainder[:end+dotIdx]
+}
 
-	return remainder[:dotIdx]
+// receiverIs reports whether t, or the type t points to, is the receiver
+// type of the method info describes. A bound method value names its
+// receiver by package path and type name, ignoring type arguments: its
+// name says "T[...]" where reflect says "T[int]". A promoted method's
+// receiver is the embedded type that declares it, not the embedding one.
+func (info *methodInfo) receiverIs(t reflect.Type) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if info.isBound {
+		return t.PkgPath() == info.receiverPkgPath &&
+			genericBase(t.Name()) == genericBase(info.receiverTypeName)
+	}
+	return pointerType(t) == pointerType(info.receiverType)
+}
+
+// receiverString names the receiver type by package path for error
+// messages, the same way for bound values and method expressions.
+func (info *methodInfo) receiverString() string {
+	if info.isBound {
+		return info.receiverPkgPath + "." + info.receiverTypeName
+	}
+	return info.receiverType.PkgPath() + "." + info.receiverType.Name()
 }
 
 // pointerType normalizes a type to its pointer variant.
@@ -300,16 +342,6 @@ func formatMethod(method *reflect.Method) string {
 		receiver = receiver.Elem()
 	}
 	return fmt.Sprintf("%s.%s", receiver.String(), method.Name)
-}
-
-// sameTypeName reports whether t's name is name, ignoring type arguments:
-// a bound method value of a generic type names its receiver "T[...]",
-// while reflect names it "T[int]".
-func sameTypeName(t reflect.Type, name string) bool {
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return genericBase(t.Name()) == genericBase(name)
 }
 
 func genericBase(name string) string {

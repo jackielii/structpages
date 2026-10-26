@@ -95,31 +95,10 @@ func (mrt *methodRenderTarget) Is(method any) bool {
 	}
 
 	// For methods, compare both name and receiver type
-	var selectedReceiverType reflect.Type
-	if mrt.method.Type.NumIn() > 0 {
-		selectedReceiverType = mrt.method.Type.In(0)
-		if selectedReceiverType.Kind() == reflect.Pointer {
-			selectedReceiverType = selectedReceiverType.Elem()
-		}
+	if mrt.method.Type.NumIn() == 0 {
+		return false
 	}
-
-	// For bound methods, compare by receiver type name
-	if info.isBound {
-		if selectedReceiverType == nil {
-			return false
-		}
-		return mrt.method.Name == info.methodName &&
-			sameTypeName(selectedReceiverType, info.receiverTypeName)
-	}
-
-	// For unbound methods, compare by receiver type
-	actualType := info.receiverType
-	if actualType.Kind() == reflect.Pointer {
-		actualType = actualType.Elem()
-	}
-
-	return mrt.method.Name == info.methodName &&
-		selectedReceiverType == actualType
+	return mrt.method.Name == info.methodName && info.receiverIs(mrt.method.Type.In(0))
 }
 
 // newMethodRenderTarget creates a RenderTarget for a method component.

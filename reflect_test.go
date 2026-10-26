@@ -5,61 +5,88 @@ import (
 	"testing"
 )
 
-// Test extractReceiverTypeNameFromFuncName with various edge cases
-func TestExtractReceiverTypeNameFromFuncName(t *testing.T) {
+// Test boundReceiverFromFuncName with various edge cases
+func TestBoundReceiverFromFuncName(t *testing.T) {
 	tests := []struct {
 		name     string
 		funcName string
-		expected string
+		pkgPath  string
+		typeName string
 	}{
 		{
 			name:     "pointer receiver with full path",
 			funcName: "github.com/user/pkg.(*TypeName).Method-fm",
-			expected: "TypeName",
+			pkgPath:  "github.com/user/pkg",
+			typeName: "TypeName",
 		},
 		{
 			name:     "value receiver with full path",
 			funcName: "github.com/user/pkg.TypeName.Method-fm",
-			expected: "TypeName",
+			pkgPath:  "github.com/user/pkg",
+			typeName: "TypeName",
+		},
+		{
+			name:     "generic receiver",
+			funcName: "github.com/user/pkg.Gen[...].Method-fm",
+			pkgPath:  "github.com/user/pkg",
+			typeName: "Gen[...]",
+		},
+		{
+			name:     "dot in the last path element is escaped",
+			funcName: "gopkg.in/yaml%2ev3.(*Node).Method-fm",
+			pkgPath:  "gopkg.in/yaml.v3",
+			typeName: "Node",
+		},
+		{
+			name:     "dot in an earlier path element",
+			funcName: "example.com/a.b/pkg.T.Method-fm",
+			pkgPath:  "example.com/a.b/pkg",
+			typeName: "T",
 		},
 		{
 			name:     "pointer receiver in main",
 			funcName: "main.(*MyType).Method-fm",
-			expected: "MyType",
+			pkgPath:  "main",
+			typeName: "MyType",
 		},
 		{
 			name:     "value receiver in main",
 			funcName: "main.MyType.Method-fm",
-			expected: "MyType",
+			pkgPath:  "main",
+			typeName: "MyType",
 		},
 		{
 			name:     "no dots in name",
 			funcName: "NoDotsAtAll",
-			expected: "",
+		},
+		{
+			name:     "no dot after the last slash",
+			funcName: "example.com/nodot",
 		},
 		{
 			name:     "pointer receiver without closing paren",
 			funcName: "main.(*BrokenType.Method",
-			expected: "",
 		},
 		{
 			name:     "value receiver without method",
 			funcName: "main.TypeNameOnly",
-			expected: "",
 		},
 		{
 			name:     "only package name",
 			funcName: "main.",
-			expected: "",
+		},
+		{
+			name:     "malformed escape",
+			funcName: "example.com/bad%zz.T.Method-fm",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractReceiverTypeNameFromFuncName(tt.funcName)
-			if result != tt.expected {
-				t.Errorf("extractReceiverTypeNameFromFuncName(%q) = %q, want %q",
-					tt.funcName, result, tt.expected)
+			pkgPath, typeName := boundReceiverFromFuncName(tt.funcName)
+			if typeName != tt.typeName || (typeName != "" && pkgPath != tt.pkgPath) {
+				t.Errorf("boundReceiverFromFuncName(%q) = %q, %q, want %q, %q",
+					tt.funcName, pkgPath, typeName, tt.pkgPath, tt.typeName)
 			}
 		})
 	}

@@ -248,10 +248,7 @@ func (t *htmxUnmatchedTarget) Is(component any) bool {
 // pageNodeHasType reports whether pn's value has the receiver type info
 // names.
 func pageNodeHasType(pn *PageNode, info *methodInfo) bool {
-	if info.isBound {
-		return sameTypeName(pn.Value.Type(), info.receiverTypeName)
-	}
-	return pointerType(pn.Value.Type()) == pointerType(info.receiverType)
+	return info.receiverIs(pn.Value.Type())
 }
 
 func (t *htmxUnmatchedTarget) isFunction(info *methodInfo) bool {
