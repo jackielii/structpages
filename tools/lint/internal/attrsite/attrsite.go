@@ -56,3 +56,34 @@ type Request struct {
 	Stages int
 	Source string
 }
+
+// Value is an element attribute value as the template writes it: its
+// literal text and Go expressions, in order. A gsx f`…@{x}…` template
+// has a part per text run and interpolation; an expression attribute
+// (attr={x}) has one part.
+type Value struct {
+	// Name is the attribute name as authored.
+	Name string
+	// Tag is the tag of the element carrying the attribute.
+	Tag string
+	// Component reports that Tag is a component tag: its attributes
+	// are props, not HTML attributes of an element.
+	Component bool
+	Parts     []Part
+}
+
+// Part is one piece of an attribute value: literal text or a Go
+// expression.
+type Part struct {
+	// Text is the text of a literal part.
+	Text string
+	// Expr reports that the part is a Go expression. Site, Staged,
+	// Stages and Source locate the call or expression producing it, as
+	// for Attr; Src is where it starts in the template.
+	Expr   bool
+	Site   Site
+	Staged bool
+	Stages int
+	Source string
+	Src    Site
+}

@@ -18,7 +18,8 @@ func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 		Doc: "checks structpages.URLFor / ID / IDTarget / Key / KeyTarget / Within / Ref / RenderTarget.Is calls " +
 			"against the page tree, " +
 			"flags route string literals that should use URLFor, Mount calls serving htmx templates " +
-			"without a target selector, and pages rendering regions with another page's component id",
+			"without a target selector, pages rendering regions with another page's component id, " +
+			"and instance ids built by appending to a generated id instead of with Key / KeyTarget",
 		Run: func(pass *analysis.Pass) (any, error) {
 			run(pass, tree)
 			return nil, nil
@@ -72,6 +73,7 @@ func run(pass *analysis.Pass, tree *PageTree) {
 	checkRouteLiterals(ctx)
 	checkRefLiterals(ctx)
 	checkSelectors(ctx)
+	checkKeyed(ctx)
 }
 
 // inSomeTree runs check against each candidate tree in turn and

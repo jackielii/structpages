@@ -265,6 +265,7 @@ func (p SeriesPage) Props(r *http.Request, t structpages.RenderTarget, s *Store)
 - `KeyOf` returns `""` for an unkeyed target, including a request for the same component by its plain `ID`. Read it after `t.Is` has named the component: a keyed-looking id that names no component `Is` nothing but still carries its key.
 - A keyed id matches exactly. The part before `--` must be an id the page tree generates; the loose name and suffix forms an unkeyed `HX-Target` can use don't apply. A keyed id of another page's component or of a standalone function works as in [Regions shared across pages](#regions-shared-across-pages): the target `Is` that component and carries the key.
 - With htmx's morph swaps, keyed ids also give each instance a stable identity across updates, as React's keys do for its reconciler.
+- Don't build an instance's id by appending to a generated id (`` f`@{SeriesPage.Row |> id}-@{s.ID}` ``). It is no component's id, so a request targeting it doesn't match `Row`, and Props can't read the key back. The [linter's `keyed` check](./lint.md#how-keyed-decides) flags such ids in `id` and `hx-target` attributes. A constant suffix, such as `` f`@{SeriesPage.Row |> key(k)}-title` `` for a sub-element's id, is fine.
 
 ## Nested swap levels (Page → Content → Detail)
 

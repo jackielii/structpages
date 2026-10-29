@@ -417,11 +417,19 @@ func (ctx *checkCtx) lineDirectiveAt(pos token.Pos) (attrsite.Site, bool) {
 			}
 		}
 	}
-	if last == nil || !strings.HasPrefix(last.Text, "/*line ") ||
-		strings.Trim(ctx.text(last.End(), pos), " \t") != "" {
+	if last == nil || strings.Trim(ctx.text(last.End(), pos), " \t") != "" {
 		return attrsite.Site{}, false
 	}
-	spec := strings.TrimSuffix(strings.TrimPrefix(last.Text, "/*line "), "*/")
+	return parseLineDirective(last.Text)
+}
+
+// parseLineDirective returns the line and column a
+// `/*line file:line:col*/` comment names.
+func parseLineDirective(text string) (attrsite.Site, bool) {
+	if !strings.HasPrefix(text, "/*line ") {
+		return attrsite.Site{}, false
+	}
+	spec := strings.TrimSuffix(strings.TrimPrefix(text, "/*line "), "*/")
 	// file:line:col, where file may itself contain colons.
 	rest, colStr, ok := cutLast(spec, ":")
 	if !ok {
