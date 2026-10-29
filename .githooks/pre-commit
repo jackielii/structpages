@@ -1,17 +1,20 @@
 #!/bin/sh
 # Pre-commit hook to run goimports, gofmt, go vet, staticcheck, and golangci-lint
 
-# Run goimports on all Go files
+# Run goimports on all Go files but generated ones: gsx (*.x.go) and templ
+# (*_templ.go) output must stay as the generator wrote it, since
+# structpages-lint maps a _templ.go to its .templ only when the file is
+# exactly what templ generates.
 echo "Running goimports..."
-find . -name "*.go" -not -name "*.x.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs goimports -w
+find . -name "*.go" -not -name "*.x.go" -not -name "*_templ.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs goimports -w
 if [ $? -ne 0 ]; then
     echo "goimports failed"
     exit 1
 fi
 
-# Run gofmt on all Go files
+# Run gofmt on all Go files but generated ones
 echo "Running gofmt..."
-find . -name "*.go" -not -name "*.x.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -w -s
+find . -name "*.go" -not -name "*.x.go" -not -name "*_templ.go" -not -path "./vendor/*" -not -path "./.git/*" | xargs gofmt -w -s
 if [ $? -ne 0 ]; then
     echo "gofmt failed"
     exit 1

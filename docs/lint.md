@@ -183,9 +183,11 @@ The attribute is matched exactly:
   only if the result is byte-for-byte the `_templ.go` on disk. The one exception is the
   `// templ: version:` comment line, which may differ or be missing (`templ generate -include-version=false`): it
   is a comment, so it changes no code. If anything else differs (another
-  templ version that generates different code, `-include-timestamp`, a hand edit), the file's positions can't be
-  trusted, and its attributes are skipped by `region` without a finding. To have them checked, regenerate with
-  the templ version the linter is built with (the `github.com/a-h/templ` version in the linter's `go.mod`).
+  templ version that generates different code, `-include-timestamp`, a hand edit, or a formatter run over the
+  generated file: `goimports` regroups its imports), the file's positions can't be trusted, and its attributes are
+  skipped by `region` and `keyed` without a finding. To have them checked, regenerate with the templ version the
+  linter is built with (the `github.com/a-h/templ` version in the linter's `go.mod`), and leave `*_templ.go` out of
+  any `goimports` or `gofmt -s` run, as you would gsx's `*.x.go`.
 
 Limits:
 
