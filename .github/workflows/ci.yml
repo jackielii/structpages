@@ -132,3 +132,18 @@ jobs:
         working-directory: ./examples/${{ matrix.example }}
         run: go test ./...
 
+  test-lint-tool:
+    name: Test tools/lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Test
+        working-directory: ./tools/lint
+        run: go test ./...
