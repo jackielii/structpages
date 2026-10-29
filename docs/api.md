@@ -47,6 +47,8 @@ Builds the page tree without registering routes. Use in tests and tooling that n
 func (sp *StructPages) URLFor(page any, args ...any) (string, error)
 func (sp *StructPages) ID(v any) (string, error)
 func (sp *StructPages) IDTarget(v any) (string, error)
+func (sp *StructPages) Key(v any, key string) (string, error)
+func (sp *StructPages) KeyTarget(v any, key string) (string, error)
 func (sp *StructPages) PageContext(ctx context.Context) context.Context
 ```
 
@@ -60,11 +62,13 @@ Use the method forms outside request context (initialization, boot-time validati
 func URLFor(ctx context.Context, page any, args ...any) (string, error)
 func ID(ctx context.Context, v any) (string, error)
 func IDTarget(ctx context.Context, v any) (string, error)
+func Key(ctx context.Context, v any, key string) (string, error)
+func KeyTarget(ctx context.Context, v any, key string) (string, error)
 func CurrentPage(ctx context.Context) *PageNode
 func Within(ctx context.Context, page any) (bool, error)
 ```
 
-Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated).
+Page-argument forms, params formats, strict-mode semantics, and chain composition are covered in [URLFor & ID](./urlfor.md). Id-generation semantics (full field-path ids, multi-mount behavior, length budget) are covered in [HTMX Integration](./htmx.md#how-ids-are-generated). `Key` and `KeyTarget` generate the id of one instance of a component rendered once per item; see [Keyed components](./htmx.md#keyed-components-one-instance-of-many).
 
 `CurrentPage` returns the `*PageNode` of the route currently being served, or `nil` outside a request (a bare context, or one wrapped only by `PageContext`). It is set before a matched Props/Component page renders, so handlers, `Props`, and the components they render can identify the current page without threading it through every call — e.g. shared layout chrome deciding active-nav state. Pages served by their own `ServeHTTP` do not set it.
 
@@ -205,6 +209,12 @@ What the request wants, as read by the target selector. Injected into `Props`, D
 
 An element rendered with id `ID(ctx, X)` produces a request whose target `Is(X)`. See [Regions shared across pages](./rendering.md#regions-shared-across-pages).
 
+```go
+func KeyOf(t RenderTarget) string
+```
+
+The key of the instance the request targets: an element rendered with id `Key(ctx, X, k)` produces a request whose target `Is(X)` and whose `KeyOf` is `k`. `""` when the target isn't keyed. The htmx selectors' targets carry the key; a custom target carries one with a `Key() string` method. See [Keyed components](./htmx.md#keyed-components-one-instance-of-many).
+
 ## RenderComponent
 
 ```go
@@ -230,11 +240,12 @@ structpages.WithTargetSelector(structpages.HTMXRenderTarget)
 
 The `TargetSelector` for htmx 1.x and 2.x; opt in with `WithTargetSelector`. Non-HTMX requests (no `HX-Request: true`), or HTMX requests with no `HX-Target`, select the `Page` method. Otherwise the `HX-Target` value is matched against the page's components:
 
+- **Keyed ids**: an id `Key()` emits (`<component id>--<escaped key>`) matches only exactly: the component id must be one of the page's real generated ids. The target `Is` that component and carries the key for `KeyOf`. A keyed id never goes through the passes below.
 - **Pass 0 — authoritative**: compare against each component's *real generated id* — the same value `ID()` emits, including the full field-path prefix and any length-budget compaction. This is the true inverse of `ID`/`IDTarget`.
 - **Pass 1 — exact heuristics**: `<pageprefix>-<componentid>`, then bare `<componentid>`.
 - **Pass 2 — suffix match (longest wins)**: full id ends with target; target ends with full id; or target ends with `<componentid>` *only when* target starts with `<pageprefix>-` (guards against cross-page false matches).
 
-If no component matches, the target `Is` none of the page's components, so `Props` returning no error renders `Page`. It still answers `Is` for a standalone component function carrying that id (its package-qualified id, or the bare and page-prefixed forms) and for another page's component carrying exactly its generated id, so `Props` can recognise a region it shares and return `RenderComponent`.
+If no component matches, the target `Is` none of the page's components, so `Props` returning no error renders `Page`. It still answers `Is` for a standalone component function carrying that id (its package-qualified id, or for an unkeyed id the bare and page-prefixed forms) and for another page's component carrying exactly its generated id, so `Props` can recognise a region it shares and return `RenderComponent`. For a keyed id it also carries the key.
 
 ### HTMXv4RenderTarget
 

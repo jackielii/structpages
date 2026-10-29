@@ -90,9 +90,11 @@ The `url` filter comes from a `gsx.toml` at the module root that registers struc
 
 ```toml
 [filters]
-url    = "github.com/jackielii/structpages.URLFor"
-id     = "github.com/jackielii/structpages.ID"
-target = "github.com/jackielii/structpages.IDTarget"
+url       = "github.com/jackielii/structpages.URLFor"
+id        = "github.com/jackielii/structpages.ID"
+target    = "github.com/jackielii/structpages.IDTarget"
+key       = "github.com/jackielii/structpages.Key"
+keytarget = "github.com/jackielii/structpages.KeyTarget"
 ```
 
 Generate and run with `go tool gsx generate . && go run .` (pin the CLI with
@@ -118,7 +120,7 @@ Runnable apps live in [`examples/`](./examples); [examples/README.md](./examples
 
 ## Lint Tool
 
-`structpages-lint` checks every `URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call, `url`/`id`/`target` filter and hard-coded internal URL against the page tree rebuilt from your route tags, so a renamed route fails CI instead of becoming a 404. It also flags a `Mount` with no `WithTargetSelector` when its pages' templates use htmx:
+`structpages-lint` checks every `URLFor`/`ID`/`IDTarget`/`Key`/`KeyTarget`/`Within`/`Ref` call, `url`/`id`/`target`/`key`/`keytarget` filter and hard-coded internal URL against the page tree rebuilt from your route tags, so a renamed route fails CI instead of becoming a 404. It also flags a `Mount` with no `WithTargetSelector` when its pages' templates use htmx:
 
 ```shell
 go get -tool github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest

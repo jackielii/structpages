@@ -68,6 +68,7 @@ go tool gsx fmt -w .
    - `render_target.go`: `RenderTarget` interface, `methodRenderTarget`, `TargetSelector` type
    - `struct_pages_render_component.go`: variadic `RenderComponent`, rendered in order into one buffered response
    - `id_for.go`: `ID` (raw HTML id) and `IDTarget` (`#`-prefixed CSS selector) for HTMX `hx-target`
+   - `key.go`: `Key`/`KeyTarget` (one instance's id: component id, `--`, escaped key) and `KeyOf` (the key a target carries). The built-in targets hold the key in a field and have no `Key` method, so Props' dynamic-type injection is unchanged; a custom target opts in with `Key() string`. `idSegment` keeps generated ids free of `--`. The htmx selectors (`htmxTarget`) match a keyed id only exactly and skip the loose passes for it
 
 4. **URL Generation**: Type-safe URL generation via `URLFor`
    - `url_for.go`: `URLFor`, segment parsing, automatic param extraction from current request route

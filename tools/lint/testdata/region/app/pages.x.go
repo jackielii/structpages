@@ -144,80 +144,115 @@ func (p ace) Page() _gsxrt.Node {
 			_gsxgw.AttrValue(string(_gsxv13))
 			_gsxgw.S("\">in control flow</div>")
 		}
-		_gsxgw.S("</main>")
-		return _gsxgw.Err()
-	})
-}
-
-//line pages.gsx:31:1
-func (p ace) Content() _gsxrt.Node {
-	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:32:2
-		_gsxgw.S("<p>ace</p>")
-		return _gsxgw.Err()
-	})
-}
-
-//line pages.gsx:35:1
-func (p detail) Page() _gsxrt.Node {
-	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:36:2
+//line pages.gsx:28:3
 		_gsxgw.S("<div")
-		_gsxv14, _gsxerr := /*line pages.gsx:36:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:36:11*/ detail.Content))
+		_gsxv14, _gsxerr := /*line pages.gsx:28:30*/ _gsxf0.Key(ctx, ( /*line pages.gsx:28:12*/ detail.Content) /*line pages.gsx:28:34*/, "k")
 		if _gsxerr != nil {
 			return _gsxerr
 		}
 		_gsxgw.S(" id=\"")
 		_gsxgw.AttrValue(string(_gsxv14))
+		_gsxgw.S("\">keyed</div>")
+//line pages.gsx:29:3
+		_gsxgw.S("<div")
+		_gsxv15, _gsxerr := /*line pages.gsx:29:37*/ _gsxf0.KeyTarget(ctx, ( /*line pages.gsx:29:19*/ detail.Content) /*line pages.gsx:29:47*/, "k")
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" hx-target=\"")
+		_gsxgw.AttrValue(string(_gsxv15))
+		_gsxgw.S("\">keyed target</div>")
+//line pages.gsx:30:3
+		_gsxgw.S("<div")
+		_gsxv16, _gsxerr := /*line pages.gsx:30:37*/ _gsxf0.Key(ctx, ( /*line pages.gsx:30:19*/ detail.Content) /*line pages.gsx:30:41*/, "k")
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" hx-target=\"")
+		_gsxgw.AttrValue(string(_gsxv16))
+		_gsxgw.S("\">Key as hx-target</div>")
+//line pages.gsx:31:3
+		_gsxgw.S("<div")
+		_gsxv17, _gsxerr := /*line pages.gsx:31:12*/ structpages.Key(ctx, detail.Content, "k")
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv17))
+		_gsxgw.S("\">hand-written Key</div></main>")
+		return _gsxgw.Err()
+	})
+}
+
+//line pages.gsx:35:1
+func (p ace) Content() _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:36:2
+		_gsxgw.S("<p>ace</p>")
+		return _gsxgw.Err()
+	})
+}
+
+//line pages.gsx:39:1
+func (p detail) Page() _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:40:2
+		_gsxgw.S("<div")
+		_gsxv18, _gsxerr := /*line pages.gsx:40:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:40:11*/ detail.Content))
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv18))
 		_gsxgw.S("\">")
-//line pages.gsx:37:3
+//line pages.gsx:41:3
 		_gsxgw.Node(ctx, p.Content())
 		_gsxgw.S("</div>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:41:1
+//line pages.gsx:45:1
 func (p detail) Content() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:42:2
+//line pages.gsx:46:2
 		_gsxgw.S("<p>detail</p>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:45:1
+//line pages.gsx:49:1
 func (p handled) Page() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:46:2
+//line pages.gsx:50:2
 		_gsxgw.S("<div")
-		_gsxv15, _gsxerr := /*line pages.gsx:46:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:46:11*/ detail.Content))
+		_gsxv19, _gsxerr := /*line pages.gsx:50:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:50:11*/ detail.Content))
 		if _gsxerr != nil {
 			return _gsxerr
 		}
 		_gsxgw.S(" id=\"")
-		_gsxgw.AttrValue(string(_gsxv15))
+		_gsxgw.AttrValue(string(_gsxv19))
 		_gsxgw.S("\">handled in Props</div>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:49:1
+//line pages.gsx:53:1
 func (w widget) Body() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:50:2
+//line pages.gsx:54:2
 		_gsxgw.S("<div")
-		_gsxv16, _gsxerr := /*line pages.gsx:50:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:50:11*/ detail.Content))
+		_gsxv20, _gsxerr := /*line pages.gsx:54:29*/ _gsxf0.ID(ctx, ( /*line pages.gsx:54:11*/ detail.Content))
 		if _gsxerr != nil {
 			return _gsxerr
 		}
 		_gsxgw.S(" id=\"")
-		_gsxgw.AttrValue(string(_gsxv16))
+		_gsxgw.AttrValue(string(_gsxv20))
 		_gsxgw.S("\">shared component</div>")
 		return _gsxgw.Err()
 	})

@@ -72,6 +72,35 @@ func (sp *StructPages) IDTarget(v any) (string, error) {
 	return idFor(sp.pc, nil, v, false)
 }
 
+// Key generates the raw HTML id of one keyed instance of a component (see
+// the package-level [Key]). It works without context by using the
+// structpages's parseContext directly.
+//
+// Example:
+//
+//	sp.Key(p.Row, "s3")
+//	// → "team-management-view-row--s3"
+func (sp *StructPages) Key(v any, key string) (string, error) {
+	if err := checkKeyArgs(v, key); err != nil {
+		return "", err
+	}
+	id, err := sp.ID(v)
+	if err != nil {
+		return "", err
+	}
+	return id + keySep + escapeKey(key), nil
+}
+
+// KeyTarget is [StructPages.Key] as a CSS selector (with "#" prefix), for
+// hx-target.
+func (sp *StructPages) KeyTarget(v any, key string) (string, error) {
+	id, err := sp.Key(v, key)
+	if err != nil {
+		return "", err
+	}
+	return "#" + id, nil
+}
+
 // URLFor returns the URL for a given page type. If args is provided, it'll replace
 // the path segments. Supported format is similar to http.ServeMux.
 //

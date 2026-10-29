@@ -25,6 +25,10 @@ component (p ace) Page() {
 		{ if p.d == (detail{}) {
 			<div id={detail.Content |> id}>in control flow</div>
 		} }
+		<div id={detail.Content |> key("k")}>keyed</div>
+		<div hx-target={detail.Content |> keytarget("k")}>keyed target</div>
+		<div hx-target={detail.Content |> key("k")}>Key as hx-target</div>
+		<div id={structpages.Key(ctx, detail.Content, "k")}>hand-written Key</div>
 	</main>
 }
 
