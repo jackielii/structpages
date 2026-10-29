@@ -1,0 +1,32 @@
+package tapp
+
+import "github.com/jackielii/structpages"
+
+templ (p list) Page(rows []row) {
+	{{ baseID, err := structpages.ID(ctx, list.Row) }}
+	{{ if err != nil {
+	return err
+} }}
+	<ul>
+		for _, r := range rows {
+			{{ instanceID := baseID + "-" + r.ID }}
+			<li id={ baseID + "-" + r.ID }>concatenation</li>
+			<li hx-target={ "#" + baseID + "-" + r.ID }>"#" and ID</li>
+			<li
+				id={ baseID +
+					"-" + r.ID }
+			>multi-line</li>
+			<li id={ instanceID }>variable holding the concatenation</li>
+			<li id={ baseID + "-document" }>fixed role</li>
+			<li id={ baseID + "-" + roleTitle }>constant role</li>
+			<li id={ baseID }>ID</li>
+			<li data-row={ baseID + "-" + r.ID }>other attribute</li>
+			// structpages:lint:ignore keyed
+			<li id={ baseID + "-" + r.ID }>suppressed</li>
+		}
+	</ul>
+}
+
+templ (p list) Row() {
+	<p>row</p>
+}

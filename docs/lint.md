@@ -82,6 +82,7 @@ linter can't tell where the tree is mounted, so its pages get no tree-based chec
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — e.g. `return "/admin/queues"` — where you should resolve by page type via `URLFor`. Deliberately narrow: exact concrete-route matches only; comparisons (`==`/`switch`), `Ref(...)` args and the route argument of a `Mount`/`Parse` call (or of a helper forwarding to one), which defines the route, are skipped; `_test.go` and generated files are skipped. |
 | `selector` | A `structpages.Mount` call with no `structpages.WithTargetSelector(...)` option whose tree serves htmx templates. There is no default target selector since v0.9.0, so every htmx partial request to that tree renders the full `Page`. Pass `WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2 or `WithTargetSelector(structpages.HTMXv4RenderTarget)` for htmx 4. See [How `selector` decides](#how-selector-decides). |
 | `region` | A page that renders a region carrying another page's component id: in a component method of mounted page `P`, an element whose `id` is `ID(ctx, Q.M)` or `Key(ctx, Q.M, k)`, or whose `hx-target` is `IDTarget(ctx, Q.M)` or `KeyTarget(ctx, Q.M, k)`, for another page `Q` mounted in the same tree. A request that targets the region and comes back to `P` asks for a component `P` doesn't have, so `P` swaps its whole Page into the region. An element whose own request goes to another page (a lazy load from `Q`, a form posting to `Q`) is fine. See [How `region` decides](#how-region-decides). |
+| `keyed` | An element `id` or `hx-target` that appends a runtime value to a generated id: the hand-built id of one instance of a component, such as `` id=f`@{Page.Row \|> id}-@{row.ID}` ``, `` hx-target=f`@{Page.Row \|> target}-@{row.ID}` ``, or `id={rowID + "-" + row.ID}` with `rowID` from `ID`. No component has that id, so the htmx target selectors can't match a request targeting it to `Page.Row`, and `Props` can't read the key back. Generate it with `Key` / `KeyTarget`: `` @{Page.Row \|> key(row.ID)} `` / `keytarget`, whose key `Props` reads with `KeyOf`. A constant suffix, such as the `-document` of a sub-element's id, isn't flagged. Needs no page tree. See [How `keyed` decides](#how-keyed-decides). |
 | `mount` | A `Mount`/`Parse` page argument, or a `route`-tagged field, whose type isn't a named struct, so the linter can't rebuild that part of the tree and skips it. Reported while the tree is built, before suppression directives are read, so it can't be suppressed: fix the type. |
 
 The `*StructPages` methods `sp.URLFor(page, ...)`, `sp.ID(v)`, `sp.IDTarget(v)`, `sp.Key(v, k)` and `sp.KeyTarget(v, k)` are checked the same way as
@@ -196,6 +197,51 @@ Limits:
 - The attribute's code is compared with the generated call token by token, so layout, line breaks and comments
   inside the value don't matter. In gsx, a filter is joined only when it is the attribute's sole pipeline stage
   (`{X |> id}`): after other stages its argument is no longer the component.
+
+### How `keyed` decides
+
+The check reads the value of every `id` and `hx-target` attribute (in any htmx spelling) on an HTML element in
+the `.gsx` and `.templ` sources: a gsx `` f`…` `` template part by part, and an expression value (`id={…}`)
+split at string concatenation. Each expression is joined exactly to the code generated for it, as for
+[`region`](#how-region-decides). A part is a generated id when it is a call of `ID`, `IDTarget`, `Key` or
+`KeyTarget` (a gsx filter, a hand-written call, or a `*StructPages` method), or a local variable assigned
+once, from such a call, and never again: `{{ rowID, err := structpages.ID(ctx, Page.Row) }}`. A local
+variable assigned once from another expression stands for that expression, so
+`{{ id := rowID + "-" + row.ID }}` followed by `id={id}` is seen too.
+
+What follows the generated id decides it:
+
+- A compile-time constant, literal text or a named constant, is the same in every render. The id is a
+  sub-element's (`-document`, `-title`), not an instance's, and isn't flagged.
+- Anything else (a variable, a field, a call) is a runtime value. The id differs per render, which makes it
+  an instance's id, and it is flagged.
+
+Where it counts:
+
+- In an `id`, the whole value is the id: the generated id must start it, and a runtime value anywhere after
+  it counts. `` id=f`@{Page.Row |> id}-@{row.ID}-title` `` is flagged; the fix keeps the role:
+  `` id=f`@{Page.Row |> key(row.ID)}-title` ``.
+- In an `hx-target`, the value is a selector and the generated `#id` one part of it. Only a runtime value
+  inside the id's token counts: after literal identifier characters that extend the id (letters, digits,
+  `-`, `_`, CSS escapes), before any character that ends it (a space, `[`, `:`, `.`, `>`, …).
+  `` hx-target=f`@{Page.Row |> target}-@{row.ID}` `` is flagged,
+  `` hx-target=f`@{Page.Row |> target} [data-id="@{row.ID}"]` `` isn't. A runtime value right after the
+  target, `` f`@{Page.Row |> target}@{sel}` ``, may start another part of the selector, so it isn't flagged.
+  `ID` and `Key` count in an `hx-target` only after a literal `#`.
+- A `Key` or `KeyTarget` id followed by a runtime value is flagged too: `KeyOf` reads the appended text back
+  as part of the key. Pass the whole key to `key(…)`.
+
+Limits:
+
+- An id built in Go outside the template and passed in as a value (a prop, a `Props` result, a helper's
+  return) isn't seen, and neither is one built with `fmt.Sprintf`.
+- In an `id`, text before the generated id isn't looked at.
+- Attributes on a component tag (`<ui.Box id={…}/>`) are props, so they aren't checked.
+- A `.templ` file is checked only when its `_templ.go` is what the templ version the linter is built with
+  generates, as for `region`.
+
+Suppress a finding with `// structpages:lint:ignore keyed` on the attribute's line or the line above, in the
+`.gsx` or `.templ` file.
 
 ### gsx templates
 

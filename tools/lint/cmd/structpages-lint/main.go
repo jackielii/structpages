@@ -3,8 +3,9 @@
 // reconstructed from struct tags, flags route string literals that
 // should be resolved through URLFor — in Go code and in the URL attributes of .templ and
 // .gsx templates — flags Mount calls that serve htmx templates without
-// a target selector, and flags pages whose .gsx regions carry another
-// page's component id.
+// a target selector, flags pages whose .gsx regions carry another
+// page's component id, and flags instance ids built by appending a
+// runtime value to a generated id instead of with Key / KeyTarget.
 //
 // Usage:
 //
