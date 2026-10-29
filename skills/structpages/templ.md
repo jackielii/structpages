@@ -14,6 +14,7 @@ project; new work in this repository uses gsx.
 | `href={Detail{} \|> url(params)}` | `href={ structpages.URLFor(ctx, Detail{}, params) }` |
 | `id={Index.List \|> id}` | `id={ structpages.ID(ctx, Index.List) }` |
 | `hx-target={Index.List \|> target}` | `hx-target={ structpages.IDTarget(ctx, Index.List) }` |
+| `id={Index.Row \|> key(row.ID)}` | `id={ structpages.Key(ctx, Index.Row, row.ID) }` |
 | `RenderComponent(<Widget n={n}/>)` | `RenderComponent(Widget(n))` |
 | `RenderComponent(p.List(items), <hx-partial …>…</hx-partial>)` | `RenderComponent(p.List(items), p.CountPartial(n))`, the `<hx-partial>` wrapper inside a templ component |
 

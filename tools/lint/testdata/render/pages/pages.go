@@ -3,6 +3,8 @@
 package pages
 
 import (
+	"context"
+
 	"ex/admin"
 	"ex/ui"
 
@@ -56,4 +58,14 @@ func (p index) Props(t structpages.RenderTarget, any any, e embedsTarget, n narr
 	case t.Is(ui.Widget.Body): // suppressed
 	}
 	return ui.Comp{}, nil
+}
+
+// keys generates keyed ids, whose components resolve as ID's do.
+func keys(ctx context.Context, sp *structpages.StructPages) {
+	structpages.Key(ctx, index.Content, "k")           // a mounted page
+	structpages.KeyTarget(ctx, ui.Toast, "k")          // standalone function
+	structpages.Key(ctx, ui.Widget.Body, "k")          // want: unmounted method expression
+	structpages.KeyTarget(ctx, ui.Widget{}.Body, "k")  // want: unmounted method value
+	sp.Key([]any{index{}, "Missing"}, "k")             // want: no such method
+	sp.KeyTarget(structpages.Ref("Home.Missing"), "k") // want: no such method
 }

@@ -14,26 +14,21 @@ import (
 //     ("index-todo-list" → TodoList);
 //   - the component's name with or without the page prefix ("content",
 //     "index-content" → Content), or a suffix of it ("load-more" →
-//     EventListLoadMore).
+//     EventListLoadMore);
+//   - the keyed id the page generated for one instance of a component,
+//     via Key or the key filter ("index-row--s3" → Row, and [KeyOf] returns
+//     "s3"). A keyed id matches exactly, never by name or suffix.
 //
 // The target Is the matched component. When nothing matches, the target Is
 // none of the page's components, but still answers Is for a standalone
-// function or another page's component carrying that id, so Props can
-// recognise a region it shares. Any other request wants Page.
+// function or another page's component carrying that id (keyed or not),
+// so Props can recognise a region it shares. Any other request wants Page.
 //
 // For htmx 4, use [HTMXv4RenderTarget] instead.
 func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	if r.Header.Get("HX-Request") == "true" {
-		hxTarget := r.Header.Get("HX-Target")
-		if hxTarget != "" {
-			// Try to match against registered method components
-			componentName := matchComponentByTarget(hxTarget, pn, pcCtx.Value(r.Context()))
-			if componentName != "" {
-				method := pn.Components[componentName]
-				return newMethodRenderTarget(componentName, &method), nil
-			}
-
-			return newHTMXUnmatchedTarget(hxTarget, pn, pcCtx.Value(r.Context())), nil
+		if id := r.Header.Get("HX-Target"); id != "" {
+			return htmxTarget(id, pn, pcCtx.Value(r.Context())), nil
 		}
 	}
 
@@ -74,12 +69,8 @@ func HTMXRenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 func HTMXv4RenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	if r.Header.Get("HX-Request") == "true" &&
 		r.Header.Get("HX-Request-Type") != "full" {
-		if key := htmxv4TargetKey(r.Header.Get("HX-Target")); key != "" {
-			if componentName := matchComponentByTarget(key, pn, pcCtx.Value(r.Context())); componentName != "" {
-				method := pn.Components[componentName]
-				return newMethodRenderTarget(componentName, &method), nil
-			}
-			return newHTMXUnmatchedTarget(key, pn, pcCtx.Value(r.Context())), nil
+		if id := htmxv4TargetID(r.Header.Get("HX-Target")); id != "" {
+			return htmxTarget(id, pn, pcCtx.Value(r.Context())), nil
 		}
 	}
 
@@ -87,16 +78,58 @@ func HTMXv4RenderTarget(r *http.Request, pn *PageNode) (RenderTarget, error) {
 	return newMethodRenderTarget("Page", &pageMethod), nil
 }
 
-// htmxv4TargetKey extracts the matching key from an htmx 4 HX-Target value.
+// htmxv4TargetID extracts what to match from an htmx 4 HX-Target value.
 // The header format is "<tag>#<id>" when the swap target has an id, or just
 // "<tag>" when it doesn't. Prefer the id when available (more specific);
 // otherwise use the tag so components like Form can match `hx-target="form"`.
-func htmxv4TargetKey(target string) string {
+func htmxv4TargetID(target string) string {
 	tag, id, ok := strings.Cut(target, "#")
 	if ok && id != "" {
 		return id
 	}
 	return tag
+}
+
+// htmxTarget is the RenderTarget of an htmx request, served by page pn,
+// whose target element has the given id (or, in htmx 4, only a tag).
+//
+// A keyed id (see [Key]) matches exactly: the component id before the
+// key must be one the page tree generates. For one of pn's components
+// the target Is that component; for another page's component or a
+// standalone function it is unmatched but Is that component. Either way
+// it carries the key for [KeyOf]. Keys only come from generated ids, so
+// a keyed id never goes through the loose passes of
+// matchComponentByTarget, which would match a key that ends in a
+// component's name ("list-row--content") to that component.
+func htmxTarget(id string, pn *PageNode, pc *parseContext) RenderTarget {
+	id = strings.TrimPrefix(id, "#")
+	if componentID, key, ok := splitKeyedID(id); ok {
+		if name := componentByID(componentID, pn, pc); name != "" {
+			return &methodRenderTarget{name: name, method: pn.Components[name], key: key}
+		}
+		return &htmxUnmatchedTarget{id: componentID, key: key, page: pn, pc: pc}
+	}
+	if name := matchComponentByTarget(id, pn, pc); name != "" {
+		method := pn.Components[name]
+		return newMethodRenderTarget(name, &method)
+	}
+	return newHTMXUnmatchedTarget(id, pn, pc)
+}
+
+// componentByID returns the name of pn's component whose generated id is
+// id, or "" when none is (or pc is nil). Ids are unique per (node,
+// method) (checkIDUniqueness), so the first equal id is the only match
+// and iteration order is irrelevant.
+func componentByID(id string, pn *PageNode, pc *parseContext) string {
+	if pc == nil {
+		return ""
+	}
+	for name := range pn.Components {
+		if pc.componentID(pn, name, true) == id {
+			return name
+		}
+	}
+	return ""
 }
 
 // matchComponentByTarget finds a component that matches the given HX-Target ID.
@@ -127,15 +160,9 @@ func matchComponentByTarget(target string, pn *PageNode, pc *parseContext) strin
 	// Remove leading # if present
 	target = strings.TrimPrefix(target, "#")
 
-	// Pass 0: authoritative match against the real generated id. Ids are
-	// unique per (node, method) (checkIDUniqueness), so the first equal id
-	// is the only match and iteration order is irrelevant.
-	if pc != nil {
-		for componentName := range pn.Components {
-			if pc.componentID(pn, componentName, true) == target {
-				return componentName
-			}
-		}
+	// Pass 0: authoritative match against the real generated id.
+	if name := componentByID(target, pn, pc); name != "" {
+		return name
 	}
 
 	// The exact id of another page's component names that component, not
@@ -209,13 +236,14 @@ func matchComponentByTarget(target string, pn *PageNode, pc *parseContext) strin
 // none of the served page's components, so a Props that returns no error
 // gets Page.
 type htmxUnmatchedTarget struct {
-	key  string        // the HX-Target id, without a leading '#'
+	id   string        // the HX-Target id without a leading '#', or a keyed id's component id
+	key  string        // a keyed id's key; "" for an unkeyed id
 	page *PageNode     // the page being served
 	pc   *parseContext // nil when the selector runs outside the request pipeline
 }
 
-func newHTMXUnmatchedTarget(key string, pn *PageNode, pc *parseContext) RenderTarget {
-	return &htmxUnmatchedTarget{key: strings.TrimPrefix(key, "#"), page: pn, pc: pc}
+func newHTMXUnmatchedTarget(id string, pn *PageNode, pc *parseContext) RenderTarget {
+	return &htmxUnmatchedTarget{id: strings.TrimPrefix(id, "#"), page: pn, pc: pc}
 }
 
 // Is reports whether the requested id belongs to component, which is a
@@ -223,8 +251,9 @@ func newHTMXUnmatchedTarget(key string, pn *PageNode, pc *parseContext) RenderTa
 //
 // A function matches its package-qualified id, the one ID generates
 // ("<package>-<func>"), so two packages' same-named components stay
-// distinct. Its bare id and the served-page-prefixed form also match, as a
-// partial-id convenience that doesn't disambiguate by package.
+// distinct. For an unkeyed id, its bare id and the served-page-prefixed
+// form also match, as a partial-id convenience that doesn't disambiguate
+// by package; a keyed id matches exactly.
 //
 // A method matches only the exact id ID generates for it on a mounted
 // page. A method of the served page's own type never matches: a request
@@ -241,7 +270,7 @@ func (t *htmxUnmatchedTarget) Is(component any) bool {
 	if t.pc == nil || pageNodeHasType(t.page, info) {
 		return false
 	}
-	ref, ok := t.pc.componentOwner(t.key)
+	ref, ok := t.pc.componentOwner(t.id)
 	return ok && ref.method == info.methodName && pageNodeHasType(ref.page, info)
 }
 
@@ -253,9 +282,12 @@ func pageNodeHasType(pn *PageNode, info *methodInfo) bool {
 
 func (t *htmxUnmatchedTarget) isFunction(info *methodInfo) bool {
 	funcKebab := camelToKebab(info.methodName)
-	if info.packageName != "" && t.key == camelToKebab(info.packageName)+"-"+funcKebab {
+	if info.packageName != "" && t.id == idSegment(info.packageName)+"-"+funcKebab {
 		return true
 	}
-	return t.key == funcKebab ||
-		strings.TrimPrefix(t.key, camelToKebab(t.page.Name)+"-") == funcKebab
+	if t.key != "" {
+		return false
+	}
+	return t.id == funcKebab ||
+		strings.TrimPrefix(t.id, camelToKebab(t.page.Name)+"-") == funcKebab
 }

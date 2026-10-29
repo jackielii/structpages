@@ -30,9 +30,11 @@ the nearest one walking up from the package):
 
 ```toml
 [filters]
-url    = "github.com/jackielii/structpages.URLFor"
-id     = "github.com/jackielii/structpages.ID"
-target = "github.com/jackielii/structpages.IDTarget"
+url       = "github.com/jackielii/structpages.URLFor"
+id        = "github.com/jackielii/structpages.ID"
+target    = "github.com/jackielii/structpages.IDTarget"
+key       = "github.com/jackielii/structpages.Key"
+keytarget = "github.com/jackielii/structpages.KeyTarget"
 ```
 
 ## 2. Define your pages

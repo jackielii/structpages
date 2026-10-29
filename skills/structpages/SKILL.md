@@ -4,7 +4,8 @@ description: >
   Guide for building Go web applications with the structpages framework (struct-based routing + gsx + HTMX).
   Use when writing routes, pages, page groups, Props methods, handler methods (ServeHTTP), page components,
   partials, HTMX partial rendering and nested swap levels, URL and element-id generation (the gsx
-  `url`/`id`/`target` filters, URLFor/ID/IDTarget), RenderTarget/RenderComponent patterns, middleware or
+  `url`/`id`/`target`/`key` filters, URLFor/ID/IDTarget/Key/KeyOf, keyed rows), RenderTarget/RenderComponent
+  patterns, middleware or
   dependency injection with structpages, or running and reading structpages-lint. Also use when the user asks
   about structpages patterns, conventions, vocabulary, or debugging structpages issues. Covers templ and
   html/template users too.
@@ -30,20 +31,25 @@ repository uses; this guide is written for it. templ and `html/template` also wo
 
 ### gsx setup: register the filters once
 
-structpages exposes `URLFor`, `ID` and `IDTarget` as ordinary functions with a leading `ctx`. Register them
+structpages exposes `URLFor`, `ID`, `IDTarget`, `Key` and `KeyTarget` as ordinary functions with a leading `ctx`. Register them
 as gsx pipeline filters in the project's `gsx.toml` (gsx uses the nearest `gsx.toml` walking up to the
 repository root):
 
 ```toml
 [filters]
-url    = "github.com/jackielii/structpages.URLFor"
-id     = "github.com/jackielii/structpages.ID"
-target = "github.com/jackielii/structpages.IDTarget"
+url       = "github.com/jackielii/structpages.URLFor"
+id        = "github.com/jackielii/structpages.ID"
+target    = "github.com/jackielii/structpages.IDTarget"
+key       = "github.com/jackielii/structpages.Key"
+keytarget = "github.com/jackielii/structpages.KeyTarget"
 ```
 
 gsx passes the render `ctx` and the piped value as the first two arguments, and the filter's error is
 returned from `Render`. So `{ page |> url(params) }` is `structpages.URLFor(ctx, page, params)`,
 `{ X |> id }` is `structpages.ID(ctx, X)` and `{ X |> target }` is `structpages.IDTarget(ctx, X)`.
+`{ X |> key(k) }` and `{ X |> keytarget(k) }` are `structpages.Key(ctx, X, k)` and
+`structpages.KeyTarget(ctx, X, k)`: the id of one instance of a component rendered per item (see Keyed
+components below).
 
 ```gsx
 <a href={Detail{} |> url(map[string]any{"itemId": it.ID})}>{ it.Name }</a>
@@ -65,6 +71,7 @@ already accept `(T, error)` and hoist the error out of `Render`. Full rules in Â
 | **component** | a standalone `component Foo(...)`: mount-independent, package-prefixed id |
 | **page component** | a method component `component (p Page) Foo(...)`: mount-aware, includes `Page` and `Content`. Composed inside another page component, or returned alone as a partial |
 | **partial** | a page component (or component) rendered alone as an HTMX response; a role, not a kind |
+| **key** | the identity of one instance of a component rendered per item (a row, a card), like React's `key`. In the instance's id (`key` filter); Props reads it back with `KeyOf(t)` |
 | **Props method** | `Props(...)`: loads data through DI and returns the **props** (one or more values) handed by type to the page component that renders |
 | **handler method** | `ServeHTTP(...)`: mutate, redirect, serve JSON, or render via `RenderComponent` |
 | **Middlewares method** | `Middlewares(...)`: middleware for the page and its descendants |
@@ -358,6 +365,33 @@ wrapper in a component); htmx 2 marks the extra component's root `hx-swap-oob="t
 A custom `TargetSelector` may return any `RenderTarget`; the framework only calls `Is`, so a custom target
 selects components like the built-in ones. `Is` must have no side effects.
 
+### Keyed components: one instance of many
+
+A page component rendered once per item gets one id per instance with the `key` filter: the component's
+id, `--`, and the escaped key. A request targeting one instance `Is` the component, and `KeyOf(t)` returns
+the key, so Props loads only that item. The key is a string: format it yourself, parse it back in Props.
+
+```gsx
+<tr id={Index.Row |> key(row.ID.String())}>
+    <td><button hx-get={Index{} |> url} hx-target={Index.Row |> keytarget(row.ID.String())}
+                hx-swap="outerHTML">Reload</button></td>
+</tr>
+```
+
+```go
+case t.Is(p.Row):
+    id, err := uuid.Parse(structpages.KeyOf(t))
+    if err != nil {
+        return nil, Row{}, err
+    }
+    row, err := s.Row(r.Context(), id) // the key is client input: check the caller may see it
+    return nil, row, err               // renders Row(row Row)
+```
+
+Never hand-build an instance id (`` f`@{Index.Row |> id}-@{row.ID}` ``): the htmx selectors can't select it,
+and Props can't read the key back. `KeyOf` is `""` for an unkeyed target. A keyed id matches only exactly,
+and also works for another page's component or a standalone component (Props recognises it with `t.Is`).
+
 ### Nested swap levels
 
 Give each independently swappable region its own page component, outer wrapping inner:
@@ -465,7 +499,8 @@ page (not a `ServeHTTP` page).
 ## 9. Lint: structpages-lint
 
 `structpages-lint` rebuilds the page tree from the `route` tags and `Mount` calls and checks every
-`URLFor`/`ID`/`IDTarget`/`Within`/`Ref` call against it. That covers every `|> url`/`id`/`target` in `.gsx` too,
+`URLFor`/`ID`/`IDTarget`/`Key`/`KeyTarget`/`Within`/`Ref` call against it. That covers every
+`|> url`/`id`/`target`/`key`/`keytarget` in `.gsx` too,
 since gsx lowers them to those calls. It also flags hard-coded internal URLs in `href`/`hx-*`/`action`
 attributes and route-shaped string literals in Go, `RenderTarget.Is` arguments that aren't a mounted
 method or a function (`t.Is(p.Content())` calls instead of naming), and a `Mount` with no
@@ -492,7 +527,8 @@ reference.md Â§Lint lists the categories, the gsx specifics and the suppression 
 
 1. Read path params with `r.PathValue("itemId")`.
 2. Never hand-build an in-app URL or a partial's id: use `url`, `id`, `target` (or `URLFor`/`ID`/`IDTarget`
-   in Go) from page types and method references.
+   in Go) from page types and method references, and `key`/`keytarget` (`Key`/`KeyTarget`) for one
+   instance of a component rendered per item.
 3. No `must()`, no `urlFor`/`idFor` wrappers, no `gsx.RawJS` around generated values: holes and filters
    take `(T, error)` directly.
 4. Partials take only their region's data (one `Props` result per region, filled by type); the default

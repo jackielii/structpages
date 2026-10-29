@@ -10,16 +10,18 @@ structpages renders any value with `Render(context.Context, io.Writer) error`, s
 
 ## Register the filters
 
-structpages exposes `URLFor`, `ID` and `IDTarget` as ordinary functions with a leading `ctx`. Register them once as gsx pipeline filters in the project's `gsx.toml` (gsx uses the nearest one walking up to the repository root):
+structpages exposes `URLFor`, `ID`, `IDTarget`, `Key` and `KeyTarget` as ordinary functions with a leading `ctx`. Register them once as gsx pipeline filters in the project's `gsx.toml` (gsx uses the nearest one walking up to the repository root):
 
 ```toml
 [filters]
-url    = "github.com/jackielii/structpages.URLFor"
-id     = "github.com/jackielii/structpages.ID"
-target = "github.com/jackielii/structpages.IDTarget"
+url       = "github.com/jackielii/structpages.URLFor"
+id        = "github.com/jackielii/structpages.ID"
+target    = "github.com/jackielii/structpages.IDTarget"
+key       = "github.com/jackielii/structpages.Key"
+keytarget = "github.com/jackielii/structpages.KeyTarget"
 ```
 
-gsx passes the render `ctx` and the piped value as the first two arguments and returns the filter's error from `Render`. So `{ page |> url(params) }` is `structpages.URLFor(ctx, page, params)`, `{ X |> id }` is `structpages.ID(ctx, X)` and `{ X |> target }` is `structpages.IDTarget(ctx, X)`. Holes accept `(T, error)` directly, so don't write a `must()` helper or `urlFor`/`idFor` wrappers.
+gsx passes the render `ctx` and the piped value as the first two arguments and returns the filter's error from `Render`. So `{ page |> url(params) }` is `structpages.URLFor(ctx, page, params)`, `{ X |> id }` is `structpages.ID(ctx, X)`, `{ X |> target }` is `structpages.IDTarget(ctx, X)`, and `{ X |> key(k) }` / `{ X |> keytarget(k) }` are `structpages.Key(ctx, X, k)` / `structpages.KeyTarget(ctx, X, k)` for one instance of a component rendered per item ([keyed components](./htmx.md#keyed-components-one-instance-of-many)). Holes accept `(T, error)` directly, so don't write a `must()` helper or `urlFor`/`idFor` wrappers.
 
 ## Page components and layout composition
 

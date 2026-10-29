@@ -24,9 +24,10 @@ const regionCategory = "region"
 // checkRegion flags a page that borrows another page's region identity.
 // In a component method of mounted page P, an element whose
 //
-//   - id is ID(ctx, Q.M), or
+//   - id is ID(ctx, Q.M) or Key(ctx, Q.M, k), or
 //   - hx-target (any htmx spelling: hx-target:inherited, data-hx-target)
-//     is IDTarget(ctx, Q.M), outside an <hx-partial>,
+//     is IDTarget(ctx, Q.M) or KeyTarget(ctx, Q.M, k), outside an
+//     <hx-partial>,
 //
 // for another page Q mounted in the same tree as P, carries Q.M's id
 // into P's markup. A request that targets it and comes back to P asks
@@ -42,7 +43,8 @@ const regionCategory = "region"
 //     are reported as coming back to P.
 //
 // Q.M is the method expression or bound method value passed to
-// ID/IDTarget, or the trailing element of its []any chain form, owned
+// ID/IDTarget/Key/KeyTarget, or the trailing element of its []any chain
+// form, owned
 // the way structpages.ID resolves it at runtime (see runtimeOwner). It
 // isn't flagged when P's Props recognises the region with t.Is(Q.M), or
 // when the element takes a spread of attributes whose names are only
@@ -53,9 +55,14 @@ const regionCategory = "region"
 // through templ's source map for .templ. Calls in other files have no
 // attribute to check.
 //
-// args starts at the component argument, as for checkIDOrIDTarget.
+// args starts at the component argument, as for checkIDOrIDTarget; Key
+// and KeyTarget take the instance key after it.
 func checkRegion(ctx *checkCtx, call *ast.CallExpr, args []ast.Expr, fnName string) {
-	if len(args) != 1 || len(ctx.roots) == 0 {
+	nargs := 1
+	if fnName == "Key" || fnName == "KeyTarget" {
+		nargs = 2
+	}
+	if len(args) != nargs || len(ctx.roots) == 0 {
 		return
 	}
 	owner, ok := regionComponent(ctx, args[0])
@@ -67,11 +74,11 @@ func checkRegion(ctx *checkCtx, call *ast.CallExpr, args []ast.Expr, fnName stri
 		return
 	}
 	switch fnName {
-	case "ID":
+	case "ID", "Key":
 		if !strings.EqualFold(attr.Name, "id") {
 			return
 		}
-	case "IDTarget":
+	case "IDTarget", "KeyTarget":
 		// An <hx-partial> is an out-of-band swap in a response: its
 		// hx-target places content and no request targets it.
 		if htmxattr.Base(attr.Name) != "hx-target" || htmxattr.IsElement(attr.Tag) {

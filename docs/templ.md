@@ -6,7 +6,7 @@ sidebar_position: 6.5
 
 # templ and html/template
 
-structpages only needs a component with `Render(context.Context, io.Writer) error`, so any renderer works. Every pattern in [gsx Patterns](./gsx.md) — Props, partials, cross-page rendering, [testing with `PageContext`](./testing.md) — applies as is; only the markup differs. The `url`, `id` and `target` filters are gsx-only: other renderers call `URLFor`, `ID` and `IDTarget` themselves.
+structpages only needs a component with `Render(context.Context, io.Writer) error`, so any renderer works. Every pattern in [gsx Patterns](./gsx.md) — Props, partials, cross-page rendering, [testing with `PageContext`](./testing.md) — applies as is; only the markup differs. The `url`, `id`, `target`, `key` and `keytarget` filters are gsx-only: other renderers call `URLFor`, `ID`, `IDTarget`, `Key` and `KeyTarget` themselves.
 
 ## templ
 
@@ -22,9 +22,10 @@ structpages only needs a component with `Render(context.Context, io.Writer) erro
 | `href={Detail{} \|> url(params)}` | `href={ structpages.URLFor(ctx, Detail{}, params) }` |
 | `id={Index.List \|> id}` | `id={ structpages.ID(ctx, Index.List) }` |
 | `hx-target={Index.List \|> target}` | `hx-target={ structpages.IDTarget(ctx, Index.List) }` |
+| `id={Index.Row \|> key(row.ID)}` | `id={ structpages.Key(ctx, Index.Row, row.ID) }` |
 | `RenderComponent(<Widget n={n}/>)` | `RenderComponent(Widget(n))` |
 
-templ has no pipeline filters, so call `URLFor`, `ID` and `IDTarget` directly. Attribute expressions accept `(string, error)` and return the error from `Render` — the same hoisting gsx does — so no `must()` helper and no `urlFor`/`idFor` wrapper is needed. `href` takes a plain string; `templ.SafeURL` is not needed for URLs from `URLFor`.
+templ has no pipeline filters, so call `URLFor`, `ID`, `IDTarget`, `Key` and `KeyTarget` directly. Attribute expressions accept `(string, error)` and return the error from `Render` — the same hoisting gsx does — so no `must()` helper and no `urlFor`/`idFor` wrapper is needed. `href` takes a plain string; `templ.SafeURL` is not needed for URLs from `URLFor`.
 
 ```templ
 templ (p index) Content(props IndexProps) {

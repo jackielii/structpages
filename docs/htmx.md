@@ -219,6 +219,53 @@ func (p dashboardPage) Props(r *http.Request, target structpages.RenderTarget, s
 
 The same works for another page's component. When a page's markup reuses a region of another page, a request targeting it carries that page's generated id, and `t.Is(report.DetailPage.Content)` is true on the serving page — matched by the exact id `ID` and the `id` filter produce, never loosely. Props decides what to render; if it doesn't act, `Page` renders. See [Regions shared across pages](./rendering.md#regions-shared-across-pages), including the warning about a whole document landing in a region.
 
+## Keyed components: one instance of many
+
+A component rendered once per item, such as a table row or a card, needs an id per instance, and a request for one instance has to tell Props which item it wants. `structpages.Key` / `structpages.KeyTarget` (the `key` / `keytarget` filters) generate the id of one instance: the component's id, `--`, and the key.
+
+```toml
+[filters]
+key       = "github.com/jackielii/structpages.Key"
+keytarget = "github.com/jackielii/structpages.KeyTarget"
+```
+
+```gsx
+component (p SeriesPage) Row(s Series) {
+    <tr id={SeriesPage.Row |> key(s.ID.String())}>
+        <td>{ s.Name }</td>
+        <td>
+            <button hx-get={SeriesPage{} |> url}
+                    hx-target={SeriesPage.Row |> keytarget(s.ID.String())}
+                    hx-swap="outerHTML">Reload</button>
+        </td>
+    </tr>
+}
+```
+
+The key works like React's `key`: it is the item's identity, taken from its data and unique among the component's instances. Unlike React's, it comes back to the server. With `HTMXRenderTarget` or `HTMXv4RenderTarget`, a request targeting `series-page-row--3f2a…` `Is` `Row`, and `structpages.KeyOf(t)` returns the key, so Props loads only that item:
+
+```go
+func (p SeriesPage) Props(r *http.Request, t structpages.RenderTarget, s *Store) ([]Series, Series, error) {
+    if t.Is(p.Row) {
+        id, err := uuid.Parse(structpages.KeyOf(t))
+        if err != nil {
+            return nil, Series{}, err
+        }
+        row, err := s.Series(r.Context(), id) // checks the caller may see it
+        return nil, row, err                  // renders Row
+    }
+    rows, err := s.AllSeries(r.Context())
+    return rows, Series{}, err // renders Page
+}
+```
+
+- **The key is client input**, like a path parameter: Props must check that the caller may see the instance it names, and returns an error (say, not found) for one that doesn't exist.
+- The key is a string. Format it yourself (`s.ID.String()`, `strconv.Itoa(n)`) and parse it back in Props.
+- `Key` keeps `[A-Za-z0-9-]` and writes any other byte as `_XX` (so `s_1` becomes `s_5f1`): the id needs no CSS escaping, and `KeyOf` returns exactly the key you passed. Generated ids never contain `--`, so the first one ends the component id. The key doesn't count toward the id length budget. An empty key is an error: use `ID` for a component's single instance. `Key` takes the component forms `ID` takes, except a plain string, which names no component.
+- `KeyOf` returns `""` for an unkeyed target, including a request for the same component by its plain `ID`. Read it after `t.Is` has named the component: a keyed-looking id that names no component `Is` nothing but still carries its key.
+- A keyed id matches exactly. The part before `--` must be an id the page tree generates; the loose name and suffix forms an unkeyed `HX-Target` can use don't apply. A keyed id of another page's component or of a standalone function works as in [Regions shared across pages](#regions-shared-across-pages): the target `Is` that component and carries the key.
+- With htmx's morph swaps, keyed ids also give each instance a stable identity across updates, as React's keys do for its reconciler.
+
 ## Nested swap levels (Page → Content → Detail)
 
 A page's page components can be composed into **nested swap levels**, each an independent HTMX target. The levels are *not* a tree the matcher walks — they're sibling page components on one page, each with its own id. Because `HX-Target` selects the page component whose generated id it names, targeting a given level re-renders *only* that level, even though `Page` composes `Content` composes `Detail`:
@@ -254,7 +301,7 @@ The rule generalizes: **one page component per independently-swappable region, o
 
 ## Custom target selectors
 
-The built-in selectors cover htmx. `HTMXRenderTarget` reads htmx 1.x/2.x headers (`HX-Request`, `HX-Target` as a bare id). For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — use `HTMXv4RenderTarget`; it also wants `Page` for `HX-Request-Type: full` (boosted links, `hx-select`). Both match `HX-Target` against the served page's components by the generated id, the component name with or without the page prefix, or a suffix of it.
+The built-in selectors cover htmx. `HTMXRenderTarget` reads htmx 1.x/2.x headers (`HX-Request`, `HX-Target` as a bare id). For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — use `HTMXv4RenderTarget`; it also wants `Page` for `HX-Request-Type: full` (boosted links, `hx-select`). Both match `HX-Target` against the served page's components by the generated id (keyed or not), the component name with or without the page prefix, or a suffix of it.
 
 A selector can return any value implementing `RenderTarget` (`Is(component any) bool`). The framework only ever calls `Is`, so a custom target takes part in selection like the built-in ones: the page's component it `Is` renders, else `Page`. A custom selector typically handles its own case and delegates the rest to the htmx selector. A target that `Is` none of the page's components still reaches Props, which can type-assert it to read what it carries and break the flow with `RenderComponent`:
 
@@ -282,6 +329,8 @@ func (p dashboard) Props(w http.ResponseWriter, r *http.Request, sel structpages
 ```
 
 `Is` must have no side effects: the framework asks it about every component of the page, and Props may ask it too. A target that `Is` more than one of the page's components is an error. The exact matching rules are in the [API reference](./api.md#htmxrendertarget).
+
+A custom target carries the key of a [keyed component](#keyed-components-one-instance-of-many) by having a `Key() string` method, which `KeyOf` reads. A target that wraps another one passes the key through, or `KeyOf` returns `""`: `func (t myTarget) Key() string { return structpages.KeyOf(t.inner) }`.
 
 ## See also
 

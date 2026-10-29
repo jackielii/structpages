@@ -75,16 +75,16 @@ linter can't tell where the tree is mounted, so its pages get no tree-based chec
 |---|---|
 | `urlfor` | `structpages.URLFor` (and `Within`) chain/composition errors — unmounted type, unknown child type, fragment-before-step, ambiguous bare lookups. |
 | `ref` | `structpages.Ref(...)` strings that don't resolve to a page-tree node — including refs stored in struct fields and vars (e.g. a nav table). |
-| `idfor` | `structpages.ID` / `IDTarget` method expressions whose receiver is not mounted as a page, or whose method is missing on a chain leaf. The same for the argument of `RenderTarget.Is`, which matches the target an `ID(ctx, X)` element produces: a method expression or method value (`p.Content`) whose receiver isn't mounted, or an argument that isn't a function at all, such as `t.Is(p.Content())`, which calls the component instead of naming it, or a `Ref`/string, which structpages' own target selectors never match (a custom `RenderTarget` might). |
+| `idfor` | `structpages.ID` / `IDTarget` / `Key` / `KeyTarget` method expressions whose receiver is not mounted as a page, or whose method is missing on a chain leaf. The same for the argument of `RenderTarget.Is`, which matches the target an `ID(ctx, X)` element produces: a method expression or method value (`p.Content`) whose receiver isn't mounted, or an argument that isn't a function at all, such as `t.Is(p.Content())`, which calls the component instead of naming it, or a `Ref`/string, which structpages' own target selectors never match (a custom `RenderTarget` might). |
 | `params` | `URLFor` param keys that don't appear in the route pattern (including placeholders in a `?q={q}` fragment) — literal `map[string]any` keys and the constant keys of the key/value form, `URLFor(ctx, p, "id", x)` / `url("id", x)`. |
 | `escape` | A `URLFor` value already escaped with `net/url` — `url.QueryEscape(x)`, `url.PathEscape(x)` or `v.Encode()` passed positionally, as a key/value pair or in a literal map, `url("q", url.QueryEscape(q))` in gsx. `URLFor` escapes every value for its place in the URL, so it would be escaped twice. Pass the value raw; put an encoded `url.Values` in the template instead, `[]any{page, "?" + v.Encode()}`. Needs no page tree. |
 | `url-attr` | URL-bearing HTML attributes in `.gsx` and `.templ` files (`href`, `action`, `formaction`, `hx-{get,post,put,patch,delete}`, `hx-{push,replace}-url`) whose values are hard-coded internal paths, string concats, `fmt.Sprint*` calls, or gsx `` f`/path/@{x}` `` templates. Allows `https://`, `mailto:`, `#`, and protocol-relative `//…` externals. |
 | `route-literal` | `.go` string literals whose value exactly equals a mounted route — e.g. `return "/admin/queues"` — where you should resolve by page type via `URLFor`. Deliberately narrow: exact concrete-route matches only; comparisons (`==`/`switch`), `Ref(...)` args and the route argument of a `Mount`/`Parse` call (or of a helper forwarding to one), which defines the route, are skipped; `_test.go` and generated files are skipped. |
 | `selector` | A `structpages.Mount` call with no `structpages.WithTargetSelector(...)` option whose tree serves htmx templates. There is no default target selector since v0.9.0, so every htmx partial request to that tree renders the full `Page`. Pass `WithTargetSelector(structpages.HTMXRenderTarget)` for htmx 1/2 or `WithTargetSelector(structpages.HTMXv4RenderTarget)` for htmx 4. See [How `selector` decides](#how-selector-decides). |
-| `region` | A page that renders a region carrying another page's component id: in a component method of mounted page `P`, an element whose `id` is `ID(ctx, Q.M)` or whose `hx-target` is `IDTarget(ctx, Q.M)`, for another page `Q` mounted in the same tree. A request that targets the region and comes back to `P` asks for a component `P` doesn't have, so `P` swaps its whole Page into the region. An element whose own request goes to another page (a lazy load from `Q`, a form posting to `Q`) is fine. See [How `region` decides](#how-region-decides). |
+| `region` | A page that renders a region carrying another page's component id: in a component method of mounted page `P`, an element whose `id` is `ID(ctx, Q.M)` or `Key(ctx, Q.M, k)`, or whose `hx-target` is `IDTarget(ctx, Q.M)` or `KeyTarget(ctx, Q.M, k)`, for another page `Q` mounted in the same tree. A request that targets the region and comes back to `P` asks for a component `P` doesn't have, so `P` swaps its whole Page into the region. An element whose own request goes to another page (a lazy load from `Q`, a form posting to `Q`) is fine. See [How `region` decides](#how-region-decides). |
 | `mount` | A `Mount`/`Parse` page argument, or a `route`-tagged field, whose type isn't a named struct, so the linter can't rebuild that part of the tree and skips it. Reported while the tree is built, before suppression directives are read, so it can't be suppressed: fix the type. |
 
-The `*StructPages` methods `sp.URLFor(page, ...)`, `sp.ID(v)` and `sp.IDTarget(v)` are checked the same way as
+The `*StructPages` methods `sp.URLFor(page, ...)`, `sp.ID(v)`, `sp.IDTarget(v)`, `sp.Key(v, k)` and `sp.KeyTarget(v, k)` are checked the same way as
 the context functions. `Is` is checked when it is called through the `structpages.RenderTarget` interface, including
 through an interface or struct that embeds it; a type of your own that happens to have an `Is` method isn't
 checked. A standalone function component (`t.Is(ui.Toast)`) has no place in the tree and always passes, and an
@@ -113,7 +113,7 @@ line above.
 
 ### How `region` decides
 
-The check looks at every `structpages.ID` / `IDTarget` call, including the gsx `id` and `target` filters and the
+The check looks at every `structpages.ID` / `IDTarget` / `Key` / `KeyTarget` call, including the gsx `id`, `target`, `key` and `keytarget` filters and the
 `*StructPages` methods, that sits in a component method of a mounted page `P`. A component method is a method
 returning a value with `Render(context.Context, io.Writer) error`, which is what gsx's `component (p P) M()` and
 templ's `templ (p P) M()` lower to. The call is flagged when all of these hold:
@@ -128,8 +128,8 @@ templ's `templ (p P) M()` lower to. The call is flagged when all of these hold:
   clear the finding: the bug happens in every tree that mounts both.
 - It is the value of an HTML element's attribute in the `.gsx` or `.templ` source: in gsx, either the attribute's
   last pipeline stage (`id={X |> id}`) or the whole value (`id={structpages.ID(ctx, X)}`); in templ, the whole
-  value (`id={ structpages.ID(ctx, X) }`). For `ID` the attribute must be
-  `id`. For `IDTarget` it must be `hx-target` in any htmx spelling (`hx-target:inherited`, `data-hx-target`), on an
+  value (`id={ structpages.ID(ctx, X) }`). For `ID` and `Key` the attribute must be
+  `id`. For `IDTarget` and `KeyTarget` it must be `hx-target` in any htmx spelling (`hx-target:inherited`, `data-hx-target`), on an
   element other than `<hx-partial>`. An `<hx-partial>` is an out-of-band swap carried in a response: it places
   content and no request targets it, so updating another page's region from one is fine.
 - The requests that carry that target come back to `P`:
@@ -199,7 +199,7 @@ Limits:
 
 ### gsx templates
 
-gsx lowers the `url`, `id` and `target` filters to real `structpages.URLFor` / `ID` / `IDTarget` calls in
+gsx lowers the `url`, `id`, `target`, `key` and `keytarget` filters to real `structpages.URLFor` / `ID` / `IDTarget` / `Key` / `KeyTarget` calls in
 the generated `.x.go`, so `urlfor`, `ref`, `params`, `escape` and `idfor` check every `{ page{} |> url("id", x) }`
 exactly like hand-written Go. Findings are reported at the `.gsx` line through gsx's `//line` directives.
 `url-attr` parses the `.gsx` sources directly with gsx's own parser.

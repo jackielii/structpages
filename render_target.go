@@ -57,6 +57,9 @@ type Ref string
 // component, or a standalone function. For a standalone function this is the
 // package-qualified id ("overlay-mount" for overlay.Mount), so
 // Is(overlay.Mount) doesn't match a same-named Mount from another package.
+// The same holds for one instance of a component: an element rendered with
+// id Key(ctx, X, k) produces a request whose target Is(X), and [KeyOf] of
+// it returns k.
 type RenderTarget interface {
 	// Is reports whether the request wants component: a method expression
 	// (Page.Content), a bound method value (p.Content) or a standalone
@@ -75,6 +78,7 @@ type TargetSelector func(r *http.Request, pn *PageNode) (RenderTarget, error)
 type methodRenderTarget struct {
 	name   string
 	method reflect.Method
+	key    string // a keyed target id's key, for KeyOf
 }
 
 func (mrt *methodRenderTarget) Is(method any) bool {

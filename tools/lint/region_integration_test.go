@@ -60,6 +60,9 @@ func TestRegion_Integration(t *testing.T) {
 		regionContainer("pages.gsx", 14, "ace", "data-hx-target", dc),
 		regionContainer("pages.gsx", 15, "ace", "id", dc), // hand-written structpages.ID
 		regionContainer("pages.gsx", 26, "ace", "id", dc), // inside control flow
+		regionContainer("pages.gsx", 28, "ace", "id", dc), // keyed
+		regionContainer("pages.gsx", 29, "ace", "hx-target", dc),
+		regionContainer("pages.gsx", 31, "ace", "id", dc), // hand-written Key
 		regionContainer("pages.templ", 10, "ace", "data-hx-target", dc),
 		regionContainer("pages.templ", 19, "ace", "id", dc), // inside control flow
 		regionContainer("pages.templ", 7, "ace", "id", dc),  // []any chain

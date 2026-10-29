@@ -95,10 +95,10 @@ func loadDiags(t *testing.T, dir string, categories []string) []diag {
 	return out
 }
 
-// TestRender_Integration covers RenderTarget.Is arguments (idfor) and
-// Mount calls serving htmx templates without a target selector
-// (selector) in testdata/render, and that the mounts' own route
-// arguments aren't reported as route literals. Each "want" comment there has exactly
+// TestRender_Integration covers RenderTarget.Is and Key/KeyTarget
+// arguments (idfor) and Mount calls serving htmx templates without a
+// target selector (selector) in testdata/render, and that the mounts'
+// own route arguments aren't reported as route literals. Each "want" comment there has exactly
 // one entry here; every other case must stay quiet.
 func TestRender_Integration(t *testing.T) {
 	const sel = "Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
@@ -115,19 +115,24 @@ func TestRender_Integration(t *testing.T) {
 		`main.go:33: [selector] ` + fmt.Sprintf(sel, pagesUse),
 		`main.go:40: [selector] ` + fmt.Sprintf(sel, "hx-target:inherited at ../../tpl/home.templ:4:7"),
 		`main.go:42: [selector] ` + fmt.Sprintf(sel, pagesUse),
-		`pages.go:48: [idfor] RenderTarget.Is: p.Content() calls the component; ` +
+		`pages.go:50: [idfor] RenderTarget.Is: p.Content() calls the component; ` +
 			`pass the method or function itself (p.Content), not its result`,
-		`pages.go:49: [idfor] RenderTarget.Is: index{}.Content() calls the component; ` +
+		`pages.go:51: [idfor] RenderTarget.Is: index{}.Content() calls the component; ` +
 			`pass the method or function itself (index{}.Content), not its result`,
-		`pages.go:50: [idfor] RenderTarget.Is: p.Page() calls the component; ` +
+		`pages.go:52: [idfor] RenderTarget.Is: p.Page() calls the component; ` +
 			`pass the method or function itself (p.Page), not its result`,
-		`pages.go:51: [idfor] RenderTarget.Is: method expression Widget.Body: ` +
+		`pages.go:53: [idfor] RenderTarget.Is: method expression Widget.Body: ` +
 			`receiver type Widget is not mounted as a page`,
-		`pages.go:52: [idfor] RenderTarget.Is: method value Widget.Body: ` +
+		`pages.go:54: [idfor] RenderTarget.Is: method value Widget.Body: ` +
 			`receiver type Widget is not mounted as a page`,
-		`pages.go:53: [idfor] RenderTarget.Is: argument structpages.Ref("index.Content") has type ` +
+		`pages.go:55: [idfor] RenderTarget.Is: argument structpages.Ref("index.Content") has type ` +
 			`github.com/jackielii/structpages.Ref, ` + notFunc,
-		`pages.go:54: [idfor] RenderTarget.Is: argument "content" has type string, ` + notFunc,
+		`pages.go:56: [idfor] RenderTarget.Is: argument "content" has type string, ` + notFunc,
+		`pages.go:67: [idfor] Key: method expression Widget.Body: receiver type Widget is not mounted as a page`,
+		`pages.go:68: [idfor] KeyTarget: method value Widget.Body: receiver type Widget is not mounted as a page`,
+		`pages.go:69: [idfor] Key: method "Missing" not found on chain leaf "Home"; available: Content, Page, Props`,
+		`pages.go:70: [idfor] KeyTarget: Ref "Home.Missing": method "Missing" not found on page "Home"; ` +
+			`available: Content, Page, Props`,
 	}
 	if diff := cmp.Diff(want, moduleDiags(t, "testdata/render", "idfor", selectorCategory, "route-literal")); diff != "" {
 		t.Errorf("diagnostics (-want +got):\n%s", diff)

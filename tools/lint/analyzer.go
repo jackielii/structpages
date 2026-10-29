@@ -15,7 +15,8 @@ import (
 func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "structpageslint",
-		Doc: "checks structpages.URLFor / ID / IDTarget / Within / Ref / RenderTarget.Is calls against the page tree, " +
+		Doc: "checks structpages.URLFor / ID / IDTarget / Key / KeyTarget / Within / Ref / RenderTarget.Is calls " +
+			"against the page tree, " +
 			"flags route string literals that should use URLFor, Mount calls serving htmx templates " +
 			"without a target selector, and pages rendering regions with another page's component id",
 		Run: func(pass *analysis.Pass) (any, error) {
@@ -48,8 +49,8 @@ type checkCtx struct {
 	// failure from the tree that got furthest.
 	refDepth int
 	// callee names the structpages function being checked (URLFor, ID,
-	// IDTarget or Within), so shared page-resolution diagnostics name
-	// the call they came from.
+	// IDTarget, Key, KeyTarget or Within), so shared page-resolution
+	// diagnostics name the call they came from.
 	callee string
 	// srcs caches generated source files read by checkCtx.source.
 	srcs map[string][]byte
@@ -126,7 +127,7 @@ func visitCall(ctx *checkCtx, call *ast.CallExpr) {
 		return
 	}
 	switch fn.Name() {
-	case "ID", "IDTarget":
+	case "ID", "IDTarget", "Key", "KeyTarget":
 		checkRegion(ctx, call, args, fn.Name())
 	case "URLFor":
 		if len(args) > 0 {
@@ -180,6 +181,12 @@ func checkCall(ctx *checkCtx, call *ast.CallExpr) {
 		checkURLFor(ctx, call, args)
 	case "ID", "IDTarget":
 		checkIDOrIDTarget(ctx, args, fn.Name())
+	case "Key", "KeyTarget":
+		// The instance key follows the component; the component
+		// resolves as ID's does.
+		if len(args) == 2 {
+			checkIDOrIDTarget(ctx, args[:1], fn.Name())
+		}
 	case "Within":
 		checkWithin(ctx, args)
 	case "Is":
