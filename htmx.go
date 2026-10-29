@@ -282,7 +282,7 @@ func pageNodeHasType(pn *PageNode, info *methodInfo) bool {
 
 func (t *htmxUnmatchedTarget) isFunction(info *methodInfo) bool {
 	funcKebab := camelToKebab(info.methodName)
-	if info.packageName != "" && t.id == idSegment(info.packageName)+"-"+funcKebab {
+	if info.packageName != "" && t.id == camelToKebab(info.packageName)+"-"+funcKebab {
 		return true
 	}
 	if t.key != "" {

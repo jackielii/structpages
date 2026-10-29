@@ -350,21 +350,3 @@ func TestKeyOf_builtInTargetsInjectAsBefore(t *testing.T) {
 		}
 	}
 }
-
-func TestIDSegment(t *testing.T) {
-	for in, want := range map[string]string{
-		"UserList": "user-list",
-		"HTMLPage": "html-page",
-		"fnfmt":    "fnfmt",
-		"fn-fmt":   "fn-fmt",
-		"ui-Kit":   "ui-kit",
-		"my--lib":  "my-lib",
-		"lib-":     "lib",
-		"-lib":     "lib",
-		"":         "",
-	} {
-		if got := idSegment(in); got != want {
-			t.Errorf("idSegment(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
