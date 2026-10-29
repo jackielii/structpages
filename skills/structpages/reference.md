@@ -146,7 +146,9 @@ Input forms:
 **Format.** The kebab-cased field-name path from the root (root excluded) joined with the method:
 `admin-users-user-list`. Longer than the budget (`WithMaxIDLength`, default 40) it becomes the leaf page plus
 method, `users-user-list`, with a 4-hex hash appended when another node shares the leaf page name. An id only changes when that node
-is renamed or moved. Kebab conversion: `HTMLParser` → `html-parser`.
+is renamed or moved. Kebab conversion: `HTMLParser` → `html-parser`; underscores and hyphens separate words
+too (`Row_Edit` → `row-edit`), so a name never kebab-cases to `--` or a leading or trailing `-`; letters of any script
+are lowercased.
 
 **Mount context.** During a page's own render the current mount is used, so `p.Header |> id` differs per
 mount of the same struct. Without a current mount (another page, `sp.ID`) a type mounted twice with

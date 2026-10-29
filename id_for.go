@@ -456,10 +456,10 @@ func (p *parseContext) assignIDPaths() {
 func idPathFor(node *PageNode) []string {
 	var segs []string
 	for n := node; n != nil && n.Parent != nil; n = n.Parent {
-		segs = append(segs, idSegment(n.Name))
+		segs = append(segs, camelToKebab(n.Name))
 	}
 	if len(segs) == 0 {
-		return []string{idSegment(node.Name)}
+		return []string{camelToKebab(node.Name)}
 	}
 	slices.Reverse(segs)
 	return segs
@@ -516,31 +516,9 @@ func (p *parseContext) componentID(node *PageNode, methodName string, rawID bool
 func (p *parseContext) functionID(info *methodInfo, rawID bool) string {
 	var prefix []string
 	if info.packageName != "" {
-		prefix = []string{idSegment(info.packageName)}
+		prefix = []string{camelToKebab(info.packageName)}
 	}
 	return p.idFromPrefix(prefix, "", info.methodName, rawID)
-}
-
-// idSegment kebab-cases one segment of an id: a field name, or the last
-// element of a function's import path. A Go identifier kebab-cases with
-// single hyphens between words, but a path element can hold hyphens of
-// its own ("my-Lib" kebab-cases to "my--lib", "lib-" ends in one), so
-// runs of hyphens collapse to one and the ends are trimmed. Generated ids
-// thus never contain "--", which separates a keyed id's key (see Key).
-func idSegment(s string) string {
-	k := camelToKebab(s)
-	if !strings.Contains(k, "-") {
-		return k
-	}
-	var b strings.Builder
-	b.Grow(len(k))
-	for i := 0; i < len(k); i++ {
-		if k[i] == '-' && (b.Len() == 0 || i+1 == len(k) || k[i+1] == '-') {
-			continue
-		}
-		b.WriteByte(k[i])
-	}
-	return b.String()
 }
 
 // idFromPrefix joins a pre-kebabed prefix path with the kebab method

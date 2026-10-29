@@ -8,7 +8,7 @@ import (
 )
 
 // keySep joins a component id and an instance key. Generated ids never
-// contain it (see idSegment), so the first one in an id ends the
+// contain it (see camelToKebab), so the first one in an id ends the
 // component id.
 const keySep = "--"
 
