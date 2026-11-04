@@ -207,9 +207,9 @@ the `.gsx` and `.templ` sources: a gsx `` f`…` `` template part by part, and a
 split at string concatenation. Each expression is joined exactly to the code generated for it, as for
 [`region`](#how-region-decides). A part is a generated id when it is a call of `ID`, `IDTarget`, `Key` or
 `KeyTarget` (a gsx filter, a hand-written call, or a `*StructPages` method), or a local variable assigned
-once, from such a call, and never again: `{{ rowID, err := structpages.ID(ctx, Page.Row) }}`. A local
+once, from such a call, and never again: <code v-pre>{{ rowID, err := structpages.ID(ctx, Page.Row) }}</code>. A local
 variable assigned once from another expression stands for that expression, so
-`{{ id := rowID + "-" + row.ID }}` followed by `id={id}` is seen too.
+<code v-pre>{{ id := rowID + "-" + row.ID }}</code> followed by `id={id}` is seen too.
 
 What follows the generated id decides it:
 
