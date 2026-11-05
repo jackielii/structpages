@@ -18,14 +18,7 @@ import (
 // one route in each binary, so it must produce no diagnostic even
 // though, module-globally, the type is reachable at two routes.
 func TestBinaryScope_Integration(t *testing.T) {
-	cfg := &packages.Config{
-		Dir: "testdata/twobins",
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
-			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
-			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
-		Tests: true,
-	}
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := Load("testdata/twobins", nil, "./...")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

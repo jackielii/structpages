@@ -43,16 +43,11 @@ func main() {
 		patterns = []string{"./..."}
 	}
 
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
-			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
-			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
-		Tests: true,
-	}
+	var buildFlags []string
 	if *tags != "" {
-		cfg.BuildFlags = []string{"-tags=" + *tags}
+		buildFlags = []string{"-tags=" + *tags}
 	}
-	pkgs, err := packages.Load(cfg, patterns...)
+	pkgs, err := lint.Load("", buildFlags, patterns...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load: %v\n", err)
 		os.Exit(2)
@@ -87,55 +82,62 @@ func main() {
 		fmt.Println(line)
 		emitted++
 	}
+	scannedDirs := map[string]bool{}
 	for _, pkg := range pkgs {
 		runPass(analyzer, pkg, emit)
-		runTemplScan(pkg, emit)
-		runGSXScan(pkg, emit)
+		if dir := pkgDir(pkg); dir != "" && !scannedDirs[dir] {
+			scannedDirs[dir] = true
+			scanTemplates(dir, emit)
+		}
 	}
 	if emitted > 0 {
 		os.Exit(1)
 	}
 }
 
-// runTemplScan finds every .templ file in pkg's directory and emits
-// diagnostics from templscan.Scan via emit.
-func runTemplScan(pkg *packages.Package, emit func(string)) {
-	scanTemplates(pkg, "*.templ", "templscan",
-		func(name string) ([]templscan.Diagnostic, error) { return templscan.Scan(name, nil) }, emit)
-}
-
-// runGSXScan finds every .gsx file in pkg's directory and emits
-// diagnostics from gsxscan.Scan via emit.
-func runGSXScan(pkg *packages.Package, emit func(string)) {
-	scanTemplates(pkg, "*.gsx", "gsxscan", gsxscan.Scan, emit)
-}
-
-// scanTemplates runs scan over every file matching glob in pkg's
-// directory. Each package is scanned once even though packages.Load
-// may surface it multiple times (e.g. `pkg` and `pkg.test`); dedup
-// happens in emit. templscan.Diagnostic and gsxscan.Diagnostic are the
-// same type.
-func scanTemplates(pkg *packages.Package, glob, scanner string,
-	scan func(string) ([]templscan.Diagnostic, error), emit func(string),
-) {
-	if len(pkg.GoFiles) == 0 {
-		return
+// pkgDir is the source directory of pkg. packages.Load surfaces one
+// directory under several variants (pkg, pkg [pkg.test], pkg_test,
+// pkg.test); all report the same Dir. GoFiles is no substitute: the
+// synthesised pkg.test main's lone file lives in the go build cache,
+// and globbing a build-cache directory once per test binary dominated
+// the run on large modules.
+func pkgDir(pkg *packages.Package) string {
+	if pkg.Dir != "" {
+		return pkg.Dir
 	}
-	dir := filepath.Dir(pkg.GoFiles[0])
-	matches, err := filepath.Glob(filepath.Join(dir, glob))
+	if len(pkg.GoFiles) > 0 {
+		return filepath.Dir(pkg.GoFiles[0])
+	}
+	return ""
+}
+
+// scanTemplates runs templscan over every .templ file and gsxscan over
+// every .gsx file in dir, emitting their diagnostics. The directory is
+// read once for both. templscan.Diagnostic and gsxscan.Diagnostic are
+// the same type.
+func scanTemplates(dir string, emit func(string)) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	for _, m := range matches {
-		diags, err := scan(m)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s %s: %v\n", scanner, m, err)
-			continue
-		}
-		for _, d := range diags {
-			emit(fmt.Sprintf("%s:%d:%d: %s", d.Filename, d.Line, d.Col, d.Message))
+	run := func(ext, scanner string, scan func(string) ([]templscan.Diagnostic, error)) {
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ext {
+				continue
+			}
+			m := filepath.Join(dir, e.Name())
+			diags, err := scan(m)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s %s: %v\n", scanner, m, err)
+				continue
+			}
+			for _, d := range diags {
+				emit(fmt.Sprintf("%s:%d:%d: %s", d.Filename, d.Line, d.Col, d.Message))
+			}
 		}
 	}
+	run(".templ", "templscan", func(name string) ([]templscan.Diagnostic, error) { return templscan.Scan(name, nil) })
+	run(".gsx", "gsxscan", gsxscan.Scan)
 }
 
 // runPass runs analyzer.Run against a single package, handing every
