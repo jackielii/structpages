@@ -22,15 +22,7 @@ func urlforDiags(t *testing.T, buildFlags ...string) []string {
 // its file:line.
 func categoryDiags(t *testing.T, dir, category string, buildFlags ...string) []string {
 	t.Helper()
-	cfg := &packages.Config{
-		Dir: dir,
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
-			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
-			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
-		Tests:      true,
-		BuildFlags: buildFlags,
-	}
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := Load(dir, buildFlags, "./...")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

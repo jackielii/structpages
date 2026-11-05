@@ -51,14 +51,7 @@ type diag struct {
 // it, returning the diagnostics in the given categories.
 func loadDiags(t *testing.T, dir string, categories []string) []diag {
 	t.Helper()
-	cfg := &packages.Config{
-		Dir: dir,
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
-			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
-			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
-		Tests: true,
-	}
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := Load(dir, nil, "./...")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

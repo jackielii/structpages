@@ -21,14 +21,7 @@ import (
 // the genuine typos are reported, each worded from a tree that can run
 // it.
 func TestTestTrees_Integration(t *testing.T) {
-	cfg := &packages.Config{
-		Dir: "testdata/testtrees",
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
-			packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports |
-			packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedModule,
-		Tests: true,
-	}
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := Load("testdata/testtrees", nil, "./...")
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
