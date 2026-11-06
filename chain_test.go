@@ -2,6 +2,7 @@ package structpages
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -286,6 +287,61 @@ func TestRef_qualifiedPathErrors(t *testing.T) {
 			}
 		}
 	})
+	t.Run("segment number in error", func(t *testing.T) {
+		_, err := URLFor(ctx, Ref("Components.Detail.Nope"))
+		if err == nil {
+			t.Fatal("expected error for unknown segment")
+		}
+		if want := `segment 2 ("Nope")`; !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err.Error(), want)
+		}
+	})
+
+	for _, ref := range []Ref{".Index", "Components.", "Components..Detail"} {
+		t.Run("malformed "+string(ref), func(t *testing.T) {
+			if got, err := URLFor(ctx, ref); err == nil {
+				t.Fatalf("URLFor(%q) = %q, want error", ref, got)
+			}
+		})
+	}
+}
+
+// TestPageIndex_matchesTreeScan pins that the URLFor lookup index
+// resolves every node the way a depth-first scan of the tree does:
+// first match for names and routes, every match in order for types.
+func TestPageIndex_matchesTreeScan(t *testing.T) {
+	pc, err := parsePageTree("/", &ambiguousRoot{})
+	if err != nil {
+		t.Fatalf("parsePageTree: %v", err)
+	}
+	idx := pc.pageIndex()
+	for node := range pc.root.All() {
+		var firstName, firstRoute *PageNode
+		var sameType []*PageNode
+		for n := range pc.root.All() {
+			if firstName == nil && n.Name == node.Name {
+				firstName = n
+			}
+			if firstRoute == nil && n.FullRoute() == node.FullRoute() {
+				firstRoute = n
+			}
+			if pointerType(n.Value.Type()) == pointerType(node.Value.Type()) {
+				sameType = append(sameType, n)
+			}
+		}
+		if got := idx.byName[node.Name][0]; got != firstName {
+			t.Errorf("byName[%q][0] = %s, want %s", node.Name, got.FullRoute(), firstName.FullRoute())
+		}
+		if got := idx.byRoute[node.FullRoute()]; got != firstRoute {
+			t.Errorf("byRoute[%q] = %v, want %v", node.FullRoute(), got, firstRoute)
+		}
+		if got := idx.byType[pointerType(node.Value.Type())]; !slices.Equal(got, sameType) {
+			t.Errorf("byType[%s] has %d nodes, want %d", node.Value.Type(), len(got), len(sameType))
+		}
+		if got := pc.fullRoute(node); got != node.FullRoute() {
+			t.Errorf("fullRoute = %q, want %q", got, node.FullRoute())
+		}
+	}
 }
 
 // TestStrictAmbiguity_errorRecommendsChain pins that the strict-mode
