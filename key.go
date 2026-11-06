@@ -49,11 +49,16 @@ func Key(ctx context.Context, v any, key string) (string, error) {
 
 // KeyTarget is [Key] as a CSS selector (with "#" prefix), for hx-target.
 func KeyTarget(ctx context.Context, v any, key string) (string, error) {
-	id, err := Key(ctx, v, key)
+	if err := checkKeyArgs(v, key); err != nil {
+		return "", err
+	}
+	// IDTarget's "#" form is cached, so the selector is built in one
+	// concatenation rather than prefixing Key's result.
+	sel, err := IDTarget(ctx, v)
 	if err != nil {
 		return "", err
 	}
-	return "#" + id, nil
+	return sel + keySep + escapeKey(key), nil
 }
 
 // checkKeyArgs rejects what Key can't make a keyed id of: a plain string,
@@ -104,6 +109,9 @@ type keyedTarget interface {
 // lowercase hex, so the id needs no CSS escaping and unescapeKey
 // recovers the key.
 func escapeKey(key string) string {
+	if keyBytesOnly(key) {
+		return key // nothing to escape, the common case for ids and slugs
+	}
 	const hex = "0123456789abcdef"
 	var b strings.Builder
 	b.Grow(len(key))
@@ -150,6 +158,16 @@ func unescapeKey(s string) (key string, ok bool) {
 }
 
 // keyByte reports whether escapeKey keeps c as is.
+// keyBytesOnly reports whether every byte of s is a keyByte.
+func keyBytesOnly(s string) bool {
+	for i := range len(s) {
+		if !keyByte(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func keyByte(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-'
 }

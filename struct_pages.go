@@ -213,6 +213,7 @@ func (sp *StructPages) parse(page any, route, title string) error {
 			return err
 		}
 	}
+	pc.buildIndexes()
 	sp.pc = pc
 	return nil
 }
