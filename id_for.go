@@ -262,7 +262,7 @@ func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool
 // the resolver refuses to silently pick one and surfaces a
 // disambiguation error instead.
 func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodInfo) (*PageNode, error) {
-	if currentPage != nil && pageNodeMatchesMethod(currentPage, info) {
+	if currentPage != nil && pc.pageNodeMatchesMethod(currentPage, info) {
 		return currentPage, nil
 	}
 	matches := pc.collectPageNodesForMethod(info)
@@ -314,31 +314,38 @@ func resolvePageForMethod(pc *parseContext, currentPage *PageNode, info *methodI
 }
 
 // collectPageNodesForMethod returns every PageNode whose value type
-// matches info's receiver. For bound method values (isBound), it
-// additionally verifies the method exists on the type — matching
-// the historical behavior of findPageNodeByTypeName. For unbound
-// method expressions, the caller has already vouched for the
-// method by writing the expression, so we trust it.
+// matches info's receiver, in walk order. For bound method values
+// (isBound), it additionally verifies the method exists on the type —
+// matching the historical behavior of findPageNodeByTypeName. For unbound
+// method expressions, the caller has already vouched for the method by
+// writing the expression, so we trust it.
+//
+// Both come from the page index rather than a tree scan: an unbound
+// receiver is an exact type, and a bound one, matched by package path
+// and generic base name, is filtered from the nodes having the method,
+// once per method value. The result is shared; callers must not modify
+// it.
 func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
-	var out []*PageNode
-	for node := range p.root.All() {
-		nodeType := node.Value.Type()
-		if !info.receiverIs(nodeType) {
-			continue
-		}
-		if info.isBound {
-			if _, found := nodeType.MethodByName(info.methodName); !found {
-				continue
-			}
-		}
-		out = append(out, node)
+	idx := p.pageIndex()
+	if !info.isBound {
+		return idx.byType[pointerType(info.receiverType)]
 	}
+	if cached, ok := p.boundMatches.Load(info); ok {
+		return cached.([]*PageNode)
+	}
+	var out []*PageNode
+	for _, node := range idx.byMethod[info.methodName] {
+		if info.receiverIs(node.Value.Type()) {
+			out = append(out, node)
+		}
+	}
+	p.boundMatches.Store(info, out)
 	return out
 }
 
 // pageNodeMatchesMethod reports whether pn's value type is the
 // receiver type for info and has its method.
-func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
+func (p *parseContext) pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 	if pn == nil {
 		return false
 	}
@@ -347,8 +354,7 @@ func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 		return false
 	}
 	// Confirm the method exists on this type.
-	_, found := pointerType(nodeType).MethodByName(info.methodName)
-	return found
+	return p.hasMethod(pointerType(nodeType), info.methodName)
 }
 
 // idForRef handles dynamic method references using the Ref type.
@@ -383,12 +389,9 @@ func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 	// unique (e.g. two embedded types with the same name under different
 	// parents), so collect every match and refuse to guess when more than
 	// one carries the method.
-	var named, withMethod []*PageNode
-	for node := range pc.root.All() {
-		if node.Name != pageName {
-			continue
-		}
-		named = append(named, node)
+	named := pc.pageIndex().byName[pageName]
+	var withMethod []*PageNode
+	for _, node := range named {
 		if _, found := node.Value.Type().MethodByName(methodName); found {
 			withMethod = append(withMethod, node)
 		}
@@ -415,13 +418,7 @@ func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 
 // findPagesWithMethod finds all pages that have a method with the given name.
 func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
-	var matches []*PageNode
-	for node := range pc.root.All() {
-		if _, found := node.Value.Type().MethodByName(methodName); found {
-			matches = append(matches, node)
-		}
-	}
-	return matches
+	return pc.pageIndex().byMethod[methodName]
 }
 
 // defaultMaxIDLen is the character budget for a generated element id
@@ -482,7 +479,7 @@ func (p *parseContext) checkIDUniqueness() error {
 	seen := make(map[string]owner)
 	for node := range p.root.All() {
 		for method := range node.Components {
-			id := p.componentID(node, method, true)
+			id := p.buildComponentID(node, method, true)
 			cur := owner{route: node.FullRoute(), method: method}
 			if prev, ok := seen[id]; ok && prev != cur {
 				return fmt.Errorf(
@@ -503,6 +500,19 @@ func (p *parseContext) checkIDUniqueness() error {
 // leaf-only form, with a stable hash suffix appended when the leaf name
 // is not unique in the tree. A nil node yields the bare method name.
 func (p *parseContext) componentID(node *PageNode, methodName string, rawID bool) string {
+	p.buildComponentIndex()
+	if ids, ok := p.componentIDs[componentRef{page: node, method: methodName}]; ok &&
+		p.componentIDsLen == p.maxIDLen {
+		if rawID {
+			return ids.raw
+		}
+		return ids.target
+	}
+	return p.buildComponentID(node, methodName, rawID)
+}
+
+// buildComponentID computes componentID without the cache.
+func (p *parseContext) buildComponentID(node *PageNode, methodName string, rawID bool) string {
 	if node == nil {
 		return p.idFromPrefix(nil, "", methodName, rawID)
 	}

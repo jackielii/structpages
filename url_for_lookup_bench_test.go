@@ -7,10 +7,11 @@ import (
 )
 
 // A page tree large enough for lookup cost to show: a root, one app
-// wrapper, 8 sections and 8 leaves per section (74 nodes). The wrapper
-// keeps the sections off the top level, as an authed subtree would, so
-// qualified Refs anchor on a non-top-level node. Each leaf is a distinct type, since
-// lookupLeaf is instantiated per (section, leaf) marker pair.
+// wrapper, 8 sections of 8 leaves, a region page and a type mounted
+// twice (79 nodes). The wrapper keeps the sections off the top level, as
+// an authed subtree would, so qualified Refs anchor on a non-top-level
+// node. Each leaf is a distinct type, since lookupLeaf is instantiated
+// per (section, leaf) marker pair.
 type (
 	lkS0 struct{}
 	lkS1 struct{}
@@ -56,11 +57,35 @@ type lookupApp struct {
 	S7 lookupSection[lkS7] `route:"/s7/ S7"`
 }
 
-type lookupRoot struct {
-	App lookupApp `route:"/app/ App"`
+// lkRegion is a page with a partial that other pages' rows target.
+type lkRegion struct{}
+
+func (lkRegion) Page() component { return testComponent{} }
+func (lkRegion) Rows() component { return testComponent{} }
+
+// lkTwice is mounted under two parents, so its ids differ per mount and
+// only the current page can pick one.
+type lkTwice struct{}
+
+func (lkTwice) Page() component { return testComponent{} }
+func (lkTwice) Rows() component { return testComponent{} }
+
+type lkHolderX struct {
+	Shared lkTwice `route:"/shared Shared"`
 }
 
-// BenchmarkURLForLookup measures resolving a page in a 74-node tree by
+type lkHolderY struct {
+	Shared lkTwice `route:"/shared Shared"`
+}
+
+type lookupRoot struct {
+	App    lookupApp `route:"/app/ App"`
+	Region lkRegion  `route:"/region Region"`
+	X      lkHolderX `route:"/x/ X"`
+	Y      lkHolderY `route:"/y/ Y"`
+}
+
+// BenchmarkURLForLookup measures resolving a page in a 79-node tree by
 // each identifier form, with the target deep in walk order.
 func BenchmarkURLForLookup(b *testing.B) {
 	mux := http.NewServeMux()
@@ -103,6 +128,66 @@ func BenchmarkURLForLookup(b *testing.B) {
 		for b.Loop() {
 			for _, r := range refs {
 				_, _ = URLFor(ctx, r)
+			}
+		}
+	})
+}
+
+// BenchmarkIDTargetLookup measures resolving a component id from a
+// method expression or method value in a 79-node tree: from another
+// page (cross-page, the receiver is found by searching the tree) and
+// from a page rendering its own partial (current-page fast path).
+func BenchmarkIDTargetLookup(b *testing.B) {
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, lookupRoot{}, "/", "Root")
+	if err != nil {
+		b.Fatal(err)
+	}
+	ctx := pcCtx.WithValue(context.Background(), sp.pc)
+	var leafPage, twiceY *PageNode
+	for pn := range sp.pc.root.All() {
+		switch {
+		case pn.Name == "G" && pn.Parent.Name == "S7":
+			leafPage = pn
+		case pn.Name == "Shared" && pn.Parent.Name == "Y":
+			twiceY = pn
+		}
+	}
+	fromLeaf := currentPageCtx.WithValue(ctx, leafPage)
+	fromTwice := currentPageCtx.WithValue(ctx, twiceY)
+
+	cases := []struct {
+		name string
+		ctx  context.Context
+		v    any
+	}{
+		{"Unbound", fromLeaf, lkRegion.Rows},
+		{"Bound", fromLeaf, lkRegion{}.Rows},
+		{"TwiceMountedCurrent", fromTwice, lkTwice.Rows},
+	}
+	for _, c := range cases {
+		b.Run(c.name, func(b *testing.B) {
+			if _, err := IDTarget(c.ctx, c.v); err != nil {
+				b.Fatal(err)
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				_, _ = IDTarget(c.ctx, c.v)
+			}
+		})
+	}
+	b.Run("KeyTarget", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = KeyTarget(fromLeaf, lkRegion.Rows, "row-42")
+		}
+	})
+	b.Run("RowsOf50", func(b *testing.B) {
+		// One fragment rendering 50 rows, each targeting the region.
+		b.ReportAllocs()
+		for b.Loop() {
+			for range 50 {
+				_, _ = IDTarget(fromLeaf, lkRegion.Rows)
 			}
 		}
 	})

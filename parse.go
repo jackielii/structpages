@@ -28,14 +28,25 @@ type parseContext struct {
 	maxIDLen int
 
 	// componentIndex maps every component's generated id to its page and
-	// method, built once on first use (after maxIDLen is final).
+	// method. Mount and Parse build it once maxIDLen is final.
 	componentIndexOnce sync.Once
 	componentIndex     map[string]componentRef
+	// componentIDs caches each component's generated id, built with
+	// componentIndex for componentIDsLen, the maxIDLen they were built
+	// for.
+	componentIDs    map[componentRef]componentIDs
+	componentIDsLen int
 
-	// pages indexes the page tree for URLFor lookups, built once on first
-	// use: the tree is fixed after parse, and URLFor runs per link.
+	// pages indexes the page tree for URLFor and ID lookups. The tree is
+	// fixed after parse and lookups run per link, so Mount and Parse build
+	// it up front (buildIndexes); a hand-built context builds it on first
+	// use.
 	pagesOnce sync.Once
 	pages     pageIndex
+	// boundMatches memoises collectPageNodesForMethod for bound method
+	// values, keyed by their *methodInfo (cached per function, so the
+	// keys are bounded by the program's method values).
+	boundMatches sync.Map
 }
 
 // pageIndex holds the page tree's nodes keyed by each way URLFor can name
@@ -45,6 +56,12 @@ type pageIndex struct {
 	byType  map[reflect.Type][]*PageNode // keyed by pointerType
 	byName  map[string][]*PageNode
 	byRoute map[string]*PageNode // FullRoute; first node in walk order
+	// byMethod lists the nodes whose value type has each method, for
+	// resolving ids from a method value or a Ref naming a method.
+	byMethod map[string][]*PageNode
+	// ptrMethods records the method names of each node's pointer type,
+	// since reflect.Type.MethodByName allocates on every call.
+	ptrMethods map[reflect.Type]map[string]bool
 	// fullRoute caches each node's FullRoute, which otherwise re-joins
 	// every ancestor's route on each call.
 	fullRoute map[*PageNode]string
@@ -54,10 +71,12 @@ type pageIndex struct {
 func (p *parseContext) pageIndex() *pageIndex {
 	p.pagesOnce.Do(func() {
 		p.pages = pageIndex{
-			byType:    make(map[reflect.Type][]*PageNode),
-			byName:    make(map[string][]*PageNode),
-			byRoute:   make(map[string]*PageNode),
-			fullRoute: make(map[*PageNode]string),
+			byType:     make(map[reflect.Type][]*PageNode),
+			byName:     make(map[string][]*PageNode),
+			byRoute:    make(map[string]*PageNode),
+			byMethod:   make(map[string][]*PageNode),
+			ptrMethods: make(map[reflect.Type]map[string]bool),
+			fullRoute:  make(map[*PageNode]string),
 		}
 		if p.root == nil {
 			return
@@ -65,7 +84,18 @@ func (p *parseContext) pageIndex() *pageIndex {
 		for node := range p.root.All() {
 			pt := pointerType(node.Value.Type())
 			p.pages.byType[pt] = append(p.pages.byType[pt], node)
+			if p.pages.ptrMethods[pt] == nil {
+				names := make(map[string]bool, pt.NumMethod())
+				for i := range pt.NumMethod() {
+					names[pt.Method(i).Name] = true
+				}
+				p.pages.ptrMethods[pt] = names
+			}
 			p.pages.byName[node.Name] = append(p.pages.byName[node.Name], node)
+			for i := range node.Value.Type().NumMethod() {
+				name := node.Value.Type().Method(i).Name
+				p.pages.byMethod[name] = append(p.pages.byMethod[name], node)
+			}
 			route := node.FullRoute()
 			p.pages.fullRoute[node] = route
 			if p.pages.byRoute[route] == nil {
@@ -84,28 +114,62 @@ func (p *parseContext) fullRoute(node *PageNode) string {
 	return node.FullRoute()
 }
 
+// hasMethod reports whether pointer type pt has the named method, from
+// the index when pt is a page type in it.
+func (p *parseContext) hasMethod(pt reflect.Type, name string) bool {
+	if names, ok := p.pageIndex().ptrMethods[pt]; ok {
+		return names[name]
+	}
+	_, found := pt.MethodByName(name)
+	return found
+}
+
 // componentRef names one page's component.
 type componentRef struct {
 	page   *PageNode
 	method string
 }
 
+// componentIDs is one component's generated id, raw and as a CSS
+// selector.
+type componentIDs struct {
+	raw, target string
+}
+
 // componentOwner returns the page and method whose generated component id
 // is id.
 func (p *parseContext) componentOwner(id string) (componentRef, bool) {
+	p.buildComponentIndex()
+	ref, ok := p.componentIndex[id]
+	return ref, ok
+}
+
+// buildComponentIndex maps every component's generated id to its page
+// and method and back, once; maxIDLen must be final by then.
+func (p *parseContext) buildComponentIndex() {
 	p.componentIndexOnce.Do(func() {
 		p.componentIndex = make(map[string]componentRef)
+		p.componentIDs = make(map[componentRef]componentIDs)
+		p.componentIDsLen = p.maxIDLen
 		if p.root == nil {
 			return
 		}
 		for pn := range p.root.All() {
 			for name := range pn.Components {
-				p.componentIndex[p.componentID(pn, name, true)] = componentRef{page: pn, method: name}
+				ref := componentRef{page: pn, method: name}
+				raw := p.buildComponentID(pn, name, true)
+				p.componentIndex[raw] = ref
+				p.componentIDs[ref] = componentIDs{raw: raw, target: "#" + raw}
 			}
 		}
 	})
-	ref, ok := p.componentIndex[id]
-	return ref, ok
+}
+
+// buildIndexes builds the lookup indexes up front, so no request pays for
+// them and none is built from a partly set-up tree.
+func (p *parseContext) buildIndexes() {
+	p.pageIndex()
+	p.buildComponentIndex()
 }
 
 func parsePageTree(route string, page any, args ...any) (*parseContext, error) {
