@@ -31,6 +31,57 @@ type parseContext struct {
 	// method, built once on first use (after maxIDLen is final).
 	componentIndexOnce sync.Once
 	componentIndex     map[string]componentRef
+
+	// pages indexes the page tree for URLFor lookups, built once on first
+	// use: the tree is fixed after parse, and URLFor runs per link.
+	pagesOnce sync.Once
+	pages     pageIndex
+}
+
+// pageIndex holds the page tree's nodes keyed by each way URLFor can name
+// one. Slices and first-wins entries keep depth-first walk order, so
+// lookups resolve exactly as a scan of p.root.All() would.
+type pageIndex struct {
+	byType  map[reflect.Type][]*PageNode // keyed by pointerType
+	byName  map[string][]*PageNode
+	byRoute map[string]*PageNode // FullRoute; first node in walk order
+	// fullRoute caches each node's FullRoute, which otherwise re-joins
+	// every ancestor's route on each call.
+	fullRoute map[*PageNode]string
+}
+
+// pageIndex returns the page tree's lookup index.
+func (p *parseContext) pageIndex() *pageIndex {
+	p.pagesOnce.Do(func() {
+		p.pages = pageIndex{
+			byType:    make(map[reflect.Type][]*PageNode),
+			byName:    make(map[string][]*PageNode),
+			byRoute:   make(map[string]*PageNode),
+			fullRoute: make(map[*PageNode]string),
+		}
+		if p.root == nil {
+			return
+		}
+		for node := range p.root.All() {
+			pt := pointerType(node.Value.Type())
+			p.pages.byType[pt] = append(p.pages.byType[pt], node)
+			p.pages.byName[node.Name] = append(p.pages.byName[node.Name], node)
+			route := node.FullRoute()
+			p.pages.fullRoute[node] = route
+			if p.pages.byRoute[route] == nil {
+				p.pages.byRoute[route] = node
+			}
+		}
+	})
+	return &p.pages
+}
+
+// fullRoute returns node.FullRoute(), from the index when node is in it.
+func (p *parseContext) fullRoute(node *PageNode) string {
+	if route, ok := p.pageIndex().fullRoute[node]; ok {
+		return route
+	}
+	return node.FullRoute()
 }
 
 // componentRef names one page's component.
@@ -436,7 +487,7 @@ func (p *parseContext) urlFor(v any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return node.FullRoute(), nil
+	return p.fullRoute(node), nil
 }
 
 func (p *parseContext) findPageNode(v any) (*PageNode, error) {
@@ -461,13 +512,7 @@ func (p *parseContext) findPageNode(v any) (*PageNode, error) {
 
 	// Handle static type reference
 	ptv := pointerType(reflect.TypeOf(v))
-	var matches []*PageNode
-	for node := range p.root.All() {
-		pt := pointerType(node.Value.Type())
-		if ptv == pt {
-			matches = append(matches, node)
-		}
-	}
+	matches := p.pageIndex().byType[ptv]
 	switch len(matches) {
 	case 0:
 		return nil, fmt.Errorf("no page node found for type %s", ptv.String())
@@ -537,7 +582,7 @@ func (p *parseContext) resolveParts(parts []any) (string, error) {
 		if len(fragments) == 0 {
 			node = node.urlTarget()
 		}
-		pattern = node.FullRoute()
+		pattern = p.fullRoute(node)
 	}
 
 	// Phase 2: append string fragments. Reject typed values mixed in.
@@ -638,11 +683,8 @@ func (p *parseContext) descendByType(parent *PageNode, step any) (*PageNode, err
 //     this string (top-down walk order).
 func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 	if strings.HasPrefix(ref, "/") {
-		// Match by route
-		for node := range p.root.All() {
-			if node.FullRoute() == ref {
-				return node, nil
-			}
+		if node := p.pageIndex().byRoute[ref]; node != nil {
+			return node, nil
 		}
 		return nil, fmt.Errorf("no page found with route %q", ref)
 	}
@@ -651,11 +693,9 @@ func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 		return p.findPageNodeByQualifiedRef(ref)
 	}
 
-	// Match by page name
-	for node := range p.root.All() {
-		if node.Name == ref {
-			return node, nil
-		}
+	// Match by page name: the first node in walk order.
+	if nodes := p.pageIndex().byName[ref]; len(nodes) > 0 {
+		return nodes[0], nil
 	}
 	return nil, fmt.Errorf("no page found with name %q", ref)
 }
@@ -669,8 +709,10 @@ func (p *parseContext) findPageNodeByRef(ref string) (*PageNode, error) {
 // renaming a field surfaces "available: Index, Detail" instead of a
 // silent 404.
 func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error) {
-	segments := strings.Split(ref, ".")
-	if len(segments) == 0 || segments[0] == "" {
+	// Segments are cut off one at a time rather than split up front, so a
+	// resolve allocates nothing.
+	anchor, rest, hasRest := strings.Cut(ref, ".")
+	if anchor == "" {
 		return nil, fmt.Errorf("Ref: empty qualified path %q", ref)
 	}
 
@@ -678,11 +720,11 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 	// (the root or its direct children) so existing "Parent.Field" refs
 	// resolve exactly as before and "Root.Foo" works explicitly.
 	var current *PageNode
-	if p.root.Name == segments[0] {
+	if p.root.Name == anchor {
 		current = p.root
 	} else {
 		for _, c := range p.root.Children {
-			if c.Name == segments[0] {
+			if c.Name == anchor {
 				current = c
 				break
 			}
@@ -693,18 +735,13 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 	// "Receptionist.Patients" resolves without the authed-subtree segment).
 	// More than one match is ambiguous — error rather than silently pick.
 	if current == nil {
-		var matches []*PageNode
-		for node := range p.root.All() {
-			if node.Name == segments[0] {
-				matches = append(matches, node)
-			}
-		}
+		matches := p.pageIndex().byName[anchor]
 		switch len(matches) {
 		case 1:
 			current = matches[0]
 		case 0:
 			return nil, fmt.Errorf(
-				"Ref %q: anchor %q not found in the page tree", ref, segments[0])
+				"Ref %q: anchor %q not found in the page tree", ref, anchor)
 		default:
 			routes := make([]string, len(matches))
 			for i, m := range matches {
@@ -713,12 +750,14 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 			return nil, fmt.Errorf(
 				"Ref %q: anchor %q is ambiguous — it names %d nodes (%s); "+
 					"qualify it with a parent segment",
-				ref, segments[0], len(matches), strings.Join(routes, ", "))
+				ref, anchor, len(matches), strings.Join(routes, ", "))
 		}
 	}
 
 	// Walk down: each subsequent segment must match a child Name.
-	for i, name := range segments[1:] {
+	for i := 1; hasRest; i++ {
+		var name string
+		name, rest, hasRest = strings.Cut(rest, ".")
 		var next *PageNode
 		for _, c := range current.Children {
 			if c.Name == name {
@@ -733,7 +772,7 @@ func (p *parseContext) findPageNodeByQualifiedRef(ref string) (*PageNode, error)
 			}
 			return nil, fmt.Errorf(
 				"Ref %q: segment %d (%q) not found as child of %q; available children: %s",
-				ref, i+1, name, current.Name, strings.Join(childNames, ", "))
+				ref, i, name, current.Name, strings.Join(childNames, ", "))
 		}
 		current = next
 	}
