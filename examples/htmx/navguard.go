@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/jackielii/structpages"
@@ -17,8 +18,9 @@ import (
 // get that markup with no layout. For a document navigation to a fragment,
 // the guard redirects to the page that hosts it without running Props.
 //
-// It also marks responses that differ by htmx headers as such, so a cache
-// never answers a navigation with a partial.
+// It also marks responses that differ by request headers as such (Vary), so
+// a cache never answers a navigation with a partial, and makes fragments and
+// partials no-store by default.
 func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 	_, hasPage := pn.Components["Page"]
 	fragment := !hasPage && pn.Props != nil
@@ -26,25 +28,30 @@ func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 		return next // ServeHTTP pages: actions, redirects, downloads, JSON
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Vary", "HX-Request, HX-Target, HX-Request-Type, HX-History-Restore-Request, Sec-Fetch-Mode, Sec-Fetch-Dest")
+		addVary(w.Header(), varyHeaders...)
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r) // writes: any htmx request stays an htmx request
 			return
 		}
 		intent := requestIntent(r)
 		if intent == partial || fragment {
+			// The default. A fragment whose successful response may be
+			// cached privately sets its own Cache-Control in Props, just
+			// before returning RenderComponent.
 			w.Header().Set("Cache-Control", "private, no-store")
 		}
 		if !fragment || intent == partial {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Redirect before Props runs, so before the fragment's own access
+		// checks: the landing page applies its own.
 		to, err := landingURL(r, pn)
 		if err != nil {
 			http.NotFound(w, r) // render your app's error page here
 			return
 		}
-		if intent == htmxFull {
+		if intent == wholePage {
 			w.Header().Set("HX-Location", to)
 			return
 		}
@@ -52,16 +59,40 @@ func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 	})
 }
 
+var varyHeaders = []string{
+	"HX-Request", "HX-Target", "HX-Request-Type", "HX-Boosted",
+	"HX-History-Restore-Request", "Sec-Fetch-Mode", "Sec-Fetch-Dest",
+}
+
+// addVary adds tokens to the Vary header once each, keeping what other
+// middleware already put there.
+func addVary(h http.Header, tokens ...string) {
+	var all []string
+	for _, v := range h.Values("Vary") {
+		for _, t := range strings.Split(v, ",") {
+			if t = strings.TrimSpace(t); t != "" {
+				all = append(all, t)
+			}
+		}
+	}
+	for _, t := range tokens {
+		if !slices.ContainsFunc(all, func(s string) bool { return strings.EqualFold(s, t) }) {
+			all = append(all, t)
+		}
+	}
+	h.Set("Vary", strings.Join(all, ", "))
+}
+
 type intent int
 
 const (
-	document intent = iota // a browser navigation, curl, a test: wants a document
-	htmxFull               // an htmx request for a whole page (htmx 4 HX-Request-Type: full)
-	partial                // an htmx request for part of a page
+	document  intent = iota // a browser navigation, curl, a test: wants a document
+	wholePage               // an htmx request that swaps the whole body (boosted links)
+	partial                 // an htmx request for part of a page
 )
 
-// requestIntent reads what kind of response the request is for. Anything
-// that is not explicitly an htmx partial counts as a document.
+// requestIntent reads what kind of response a read is for. Anything that is
+// not an htmx request counts as a document.
 func requestIntent(r *http.Request) intent {
 	switch r.Header.Get("Sec-Fetch-Dest") {
 	case "document", "iframe", "frame":
@@ -74,10 +105,23 @@ func requestIntent(r *http.Request) intent {
 		r.Header.Get("HX-Request") != "true" {
 		return document
 	}
-	if r.Header.Get("HX-Request-Type") == "full" {
-		return htmxFull
+	if targetsBody(r) {
+		return wholePage
 	}
+	// Everything else is a partial, including htmx 4's HX-Request-Type: full,
+	// which it also sends for any hx-select swap into an element.
 	return partial
+}
+
+// targetsBody reports whether an htmx request swaps the whole body: htmx 4
+// sends HX-Target "body" or "body#id"; htmx 2 sends the target's id, so a
+// boosted request into an id-less body has no HX-Target.
+func targetsBody(r *http.Request) bool {
+	target := r.Header.Get("HX-Target")
+	if tag, _, _ := strings.Cut(target, "#"); tag == "body" {
+		return true
+	}
+	return target == "" && r.Header.Get("HX-Boosted") == "true"
 }
 
 // Landing is implemented by a fragment whose hosting page is not an

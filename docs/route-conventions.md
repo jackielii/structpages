@@ -193,15 +193,17 @@ Fragments have URLs, and browsers will open them: a link opened in a new tab, a 
 
 Under these conventions the fix is one generic middleware. A [`MiddlewareFunc`](./middleware.md) receives each route's `*PageNode` at mount time, and the node already says what kind of route it is: `pn.Components["Page"]` for a page, `pn.Props` without `Page` for a fragment. For a fragment, the guard looks at what the request wants:
 
-| Request | Wants | Guard's response |
+| Request (GET or HEAD) | Wants | Guard's response |
 |---|---|---|
 | `Sec-Fetch-Mode: navigate`, or `Sec-Fetch-Dest: document`, `iframe` or `frame` | a document, whatever htmx headers it carries | 303 to the landing page |
 | `HX-History-Restore-Request: true` | a document | 303 (htmx 2 restores history with its own request, which follows redirects but ignores response headers) |
-| `HX-Request: true` with `HX-Request-Type: full` (htmx 4) | a whole page | `HX-Location` to the landing page |
+| `HX-Request: true` that swaps the body: `HX-Target` of `body` (htmx 4), or no `HX-Target` with `HX-Boosted: true` (htmx 2) | a whole page | `HX-Location` to the landing page |
 | `HX-Request: true`, otherwise | a part of a page | the fragment, as usual |
 | anything else: no htmx headers, curl, tests | a document | 303 to the landing page |
 
-Only an explicit htmx partial gets the fragment; everything else counts as a navigation. The guard redirects **without running Props**, so it loads no data and doesn't depend on the fragment's parameters being valid.
+Don't read htmx 4's `HX-Request-Type: full` as a page load. htmx 4 sends `full` when the target is the body, but also for any `hx-select` swap into an element; a guard that redirects every `full` request navigates away from the page when a dialog loads with `hx-select`. The target says what is being replaced, so the guard asks it.
+
+Only htmx requests that swap part of the page get the fragment; everything else counts as a navigation. The guard redirects **without running Props**, so it loads no data and doesn't depend on the fragment's parameters being valid. Writes pass straight through: for a POST, any htmx request is an htmx request, and your error handler can answer it as one.
 
 The landing page is, in order:
 
@@ -209,35 +211,45 @@ The landing page is, in order:
 2. the nearest ancestor with `Page`, or a group's `/{$}` index page, whose path parameters the request can fill;
 3. otherwise, your app's not-found page.
 
-The guard also keeps caches from mixing representations: every rendering route gets `Vary` on the htmx and `Sec-Fetch` headers, and fragments and partial responses get `Cache-Control: private, no-store`.
+**The redirect comes before the fragment's access checks.** Props hasn't run, so a visitor who may not see the record gets the same 303 as one who may, not the fragment's 403 or 404. The landing page then applies its own authorization. Choose landings that reveal nothing on their own (the URL already carries the ids the fragment's URL did), and test a fragment's access with the partial request (`HX-Request: true` and an `HX-Target`), not a plain GET, which only ever sees the redirect.
+
+The guard also keeps caches from mixing representations:
+
+- Every rendering route gets `Vary` on the htmx and `Sec-Fetch` headers. The guard merges its tokens into any `Vary` other middleware set, so each appears once.
+- Fragment and partial responses default to `Cache-Control: private, no-store`, and so do the guard's redirects. A fragment whose successful response is safe to keep, such as a notification count, sets its own header in `Props` just before returning `RenderComponent` (`w.Header().Set("Cache-Control", "private, max-age=3600")`). Set it only on that success path: Props' writer isn't buffered, so a header set before an error stays on the error response.
 
 ```go
 func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
     _, hasPage := pn.Components["Page"]
     fragment := !hasPage && pn.Props != nil
     if !hasPage && !fragment {
-        return next // ServeHTTP routes: actions, redirects, protocols
+        return next // ServeHTTP pages: actions, redirects, downloads, JSON
     }
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Add("Vary", "HX-Request, HX-Target, HX-Request-Type, HX-History-Restore-Request, Sec-Fetch-Mode, Sec-Fetch-Dest")
+        addVary(w.Header(), varyHeaders...)
         if r.Method != http.MethodGet && r.Method != http.MethodHead {
-            next.ServeHTTP(w, r)
+            next.ServeHTTP(w, r) // writes: any htmx request stays an htmx request
             return
         }
         intent := requestIntent(r)
         if intent == partial || fragment {
+            // The default. A fragment whose successful response may be
+            // cached privately sets its own Cache-Control in Props, just
+            // before returning RenderComponent.
             w.Header().Set("Cache-Control", "private, no-store")
         }
         if !fragment || intent == partial {
             next.ServeHTTP(w, r)
             return
         }
+        // Redirect before Props runs, so before the fragment's own access
+        // checks: the landing page applies its own.
         to, err := landingURL(r, pn)
         if err != nil {
             http.NotFound(w, r) // render your app's error page here
             return
         }
-        if intent == htmxFull {
+        if intent == wholePage {
             w.Header().Set("HX-Location", to)
             return
         }
@@ -245,35 +257,82 @@ func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
     })
 }
 
+var varyHeaders = []string{
+    "HX-Request", "HX-Target", "HX-Request-Type", "HX-Boosted",
+    "HX-History-Restore-Request", "Sec-Fetch-Mode", "Sec-Fetch-Dest",
+}
+
+// addVary adds tokens to the Vary header once each, keeping what other
+// middleware already put there.
+func addVary(h http.Header, tokens ...string) {
+    var all []string
+    for _, v := range h.Values("Vary") {
+        for _, t := range strings.Split(v, ",") {
+            if t = strings.TrimSpace(t); t != "" {
+                all = append(all, t)
+            }
+        }
+    }
+    for _, t := range tokens {
+        if !slices.ContainsFunc(all, func(s string) bool { return strings.EqualFold(s, t) }) {
+            all = append(all, t)
+        }
+    }
+    h.Set("Vary", strings.Join(all, ", "))
+}
+
 type intent int
 
 const (
-    document intent = iota
-    htmxFull
-    partial
+    document  intent = iota // a browser navigation, curl, a test: wants a document
+    wholePage               // an htmx request that swaps the whole body (boosted links)
+    partial                 // an htmx request for part of a page
 )
 
+// requestIntent reads what kind of response a read is for. Anything that is
+// not an htmx request counts as a document.
 func requestIntent(r *http.Request) intent {
     switch r.Header.Get("Sec-Fetch-Dest") {
     case "document", "iframe", "frame":
         return document
     }
+    // htmx 2 restores history on a cache miss with its own request, which
+    // follows redirects but reads no response headers: send it a 303.
     if r.Header.Get("Sec-Fetch-Mode") == "navigate" ||
         r.Header.Get("HX-History-Restore-Request") == "true" ||
         r.Header.Get("HX-Request") != "true" {
         return document
     }
-    if r.Header.Get("HX-Request-Type") == "full" {
-        return htmxFull
+    if targetsBody(r) {
+        return wholePage
     }
+    // Everything else is a partial, including htmx 4's HX-Request-Type: full,
+    // which it also sends for any hx-select swap into an element.
     return partial
 }
 
-// Landing is implemented by a fragment whose hosting page is not an ancestor.
+// targetsBody reports whether an htmx request swaps the whole body: htmx 4
+// sends HX-Target "body" or "body#id"; htmx 2 sends the target's id, so a
+// boosted request into an id-less body has no HX-Target.
+func targetsBody(r *http.Request) bool {
+    target := r.Header.Get("HX-Target")
+    if tag, _, _ := strings.Cut(target, "#"); tag == "body" {
+        return true
+    }
+    return target == "" && r.Header.Get("HX-Boosted") == "true"
+}
+
+// Landing is implemented by a fragment whose hosting page is not an
+// ancestor, to name where a document navigation should go instead.
 type Landing interface {
     Landing(r *http.Request) (string, error)
 }
 
+var errNoLanding = errors.New("no page hosts this fragment")
+
+// landingURL returns where a document navigation to fragment pn goes: its
+// Landing, else the nearest ancestor that is a page (or a group's index
+// page) whose URL the request's path parameters can fill.
 func landingURL(r *http.Request, pn *structpages.PageNode) (string, error) {
     if l, ok := pn.Value.Interface().(Landing); ok {
         return l.Landing(r)
@@ -292,7 +351,7 @@ func landingURL(r *http.Request, pn *structpages.PageNode) (string, error) {
             }
         }
     }
-    return "", errors.New("no page hosts this fragment")
+    return "", errNoLanding
 }
 
 func isGETPage(pn *structpages.PageNode) bool {
@@ -316,7 +375,7 @@ The [htmx example](https://github.com/jackielii/structpages/tree/main/examples/h
 
 Adapt it to your app where it differs:
 
-- **Authentication.** Put the guard before your sign-in middleware if a signed-out visitor should come back to the landing page rather than the fragment URL.
+- **Authentication.** Put the guard before your sign-in middleware if a signed-out visitor should come back to the landing page rather than the fragment URL. Middleware after it still sees the request's htmx headers, `HX-Target` included; the guard doesn't rewrite them.
 - **Error pages.** Replace `http.NotFound` with your app's full-document error page.
 - **Query strings.** The landing URL carries path parameters only. A fragment that should keep, say, `?tab=`, builds its URL in its `Landing` method.
 
