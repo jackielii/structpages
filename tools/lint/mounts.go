@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -48,7 +49,26 @@ type treeBuilder struct {
 
 // treeBuilders maps a function's full name (types.Func.FullName) to how
 // it builds a page tree.
-type treeBuilders map[string]treeBuilder
+type treeBuilders struct {
+	byName map[string]treeBuilder
+	// short holds the builders' bare names (types.Func.Name), checked
+	// before building a full name: most calls are to other functions.
+	short map[string]bool
+}
+
+func (b treeBuilders) add(fn string, tb treeBuilder) {
+	b.byName[fn] = tb
+	b.short[fn[strings.LastIndexByte(fn, '.')+1:]] = true
+}
+
+// lookup returns how fn builds a page tree, if it does.
+func (b treeBuilders) lookup(fn *types.Func) (treeBuilder, bool) {
+	if !b.short[fn.Name()] {
+		return treeBuilder{}, false
+	}
+	tb, ok := b.byName[fn.Origin().FullName()]
+	return tb, ok
+}
 
 // findTreeBuilders returns structpages.Mount and Parse (Parse is Mount
 // without the mux: tests use it to get a PageContext), plus every
@@ -66,46 +86,85 @@ type treeBuilders map[string]treeBuilder
 // argument is neither a constant nor one of its parameters is not a
 // builder, since no call site can tell where its tree is mounted.
 func findTreeBuilders(pkgs []*packages.Package) treeBuilders {
-	builders := treeBuilders{
-		structpagesPkg + ".Mount": {page: 1, route: 2, mountsHere: true},
-		structpagesPkg + ".Parse": {page: 0, route: 1},
+	builders := treeBuilders{byName: map[string]treeBuilder{}, short: map[string]bool{}}
+	builders.add(structpagesPkg+".Mount", treeBuilder{page: 1, route: 2, mountsHere: true})
+	builders.add(structpagesPkg+".Parse", treeBuilder{page: 0, route: 1})
+
+	// Collect the functions that could forward a page once: those with
+	// an interface-typed parameter (the page must be one), each with the
+	// calls in its body that have a static callee. A function seen in
+	// several package variants is collected once. The fixed-point
+	// iteration below then scans only these call lists.
+	type candidate struct {
+		pkg   *packages.Package
+		fn    *types.Func
+		name  string
+		calls []*ast.CallExpr
+	}
+	var cands []*candidate
+	seen := map[string]bool{}
+	for _, pkg := range pkgs {
+		if pkg.TypesInfo == nil {
+			continue
+		}
+		for _, file := range pkg.Syntax {
+			for _, decl := range file.Decls {
+				fd, ok := decl.(*ast.FuncDecl)
+				if !ok || fd.Body == nil {
+					continue
+				}
+				fn, ok := pkg.TypesInfo.Defs[fd.Name].(*types.Func)
+				if !ok || !hasInterfaceParam(fn) {
+					continue
+				}
+				name := fn.FullName()
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+				c := &candidate{pkg: pkg, fn: fn, name: name}
+				ast.Inspect(fd.Body, func(n ast.Node) bool {
+					if call, ok := n.(*ast.CallExpr); ok && calleeFunc(pkg.TypesInfo, call) != nil {
+						c.calls = append(c.calls, call)
+					}
+					return true
+				})
+				cands = append(cands, c)
+			}
+		}
 	}
 	for changed := true; changed; {
 		changed = false
-		for _, pkg := range pkgs {
-			if pkg.TypesInfo == nil {
+		for _, c := range cands {
+			if _, known := builders.byName[c.name]; known {
 				continue
 			}
-			for _, file := range pkg.Syntax {
-				for _, decl := range file.Decls {
-					fd, ok := decl.(*ast.FuncDecl)
-					if !ok || fd.Body == nil {
-						continue
-					}
-					fn, ok := pkg.TypesInfo.Defs[fd.Name].(*types.Func)
-					if !ok {
-						continue
-					}
-					name := fn.FullName()
-					if _, known := builders[name]; known {
-						continue
-					}
-					if b, ok := forwardedBuilder(pkg, fd, fn, builders); ok {
-						builders[name] = b
-						changed = true
-					}
-				}
+			if b, ok := forwardedBuilder(c.pkg, c.fn, c.calls, builders); ok {
+				builders.add(c.name, b)
+				changed = true
 			}
 		}
 	}
 	return builders
 }
 
-// forwardedBuilder reports whether fd calls a tree builder with one of
-// its own interface-typed parameters as the page, and if so how fd
-// itself builds a tree.
+// hasInterfaceParam reports whether fn has a parameter of interface type.
+func hasInterfaceParam(fn *types.Func) bool {
+	params := fn.Type().(*types.Signature).Params()
+	for i := range params.Len() {
+		if types.IsInterface(params.At(i).Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// forwardedBuilder reports whether fn, through one of calls (its body's
+// calls, in source order), calls a tree builder with one of its own
+// interface-typed parameters as the page, and if so how fn itself builds
+// a tree.
 func forwardedBuilder(
-	pkg *packages.Package, fd *ast.FuncDecl, fn *types.Func, builders treeBuilders,
+	pkg *packages.Package, fn *types.Func, calls []*ast.CallExpr, builders treeBuilders,
 ) (treeBuilder, bool) {
 	params := fn.Type().(*types.Signature).Params()
 	paramIndex := func(e ast.Expr) int {
@@ -124,35 +183,24 @@ func forwardedBuilder(
 		}
 		return -1
 	}
-	var found treeBuilder
-	ok := false
-	ast.Inspect(fd.Body, func(n ast.Node) bool {
-		if ok {
-			return false
-		}
-		call, isCall := n.(*ast.CallExpr)
-		if !isCall {
-			return true
-		}
+	for _, call := range calls {
 		b, isBuilder := builderFor(pkg.TypesInfo, call, builders)
 		if !isBuilder {
-			return true
+			continue
 		}
 		page := paramIndex(call.Args[b.page])
 		if page < 0 || !types.IsInterface(params.At(page).Type()) {
-			return true
+			continue
 		}
 		route, routeConst, routed := callRoute(pkg, call, b)
 		if !routed {
 			if route = paramIndex(call.Args[b.route]); route < 0 {
-				return true
+				continue
 			}
 		}
-		found = treeBuilder{page: page, route: route, routeConst: routeConst, mount: reachedMount(pkg, call, b)}
-		ok = true
-		return false
-	})
-	return found, ok
+		return treeBuilder{page: page, route: route, routeConst: routeConst, mount: reachedMount(pkg, call, b)}, true
+	}
+	return treeBuilder{}, false
 }
 
 // builderFor returns how call builds a page tree, if its callee is a
@@ -162,7 +210,7 @@ func builderFor(info *types.Info, call *ast.CallExpr, builders treeBuilders) (tr
 	if fn == nil {
 		return treeBuilder{}, false
 	}
-	b, ok := builders[fn.Origin().FullName()]
+	b, ok := builders.lookup(fn)
 	if !ok || len(call.Args) <= max(b.page, b.route) {
 		return treeBuilder{}, false
 	}

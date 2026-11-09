@@ -9,18 +9,29 @@
 //
 // Usage:
 //
-//	structpages-lint [packages...]
+//	structpages-lint [-tags tag,tag]... [-cache=false] [packages...]
 //
 // Defaults to ./... when no packages are given. Exits 0 when there are
 // no findings, 1 when there are, and 2 when the packages could not be
 // loaded or type-checked (nothing was analysed).
+//
+// Repeat -tags to lint several build configurations in one run. A run
+// whose inputs match an earlier one's reuses its findings (see
+// cache.go); -cache=false always analyses.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/pprof"
+	"slices"
+	"strings"
+	"sync"
 
 	"github.com/jackielii/structpages/tools/lint"
 	"github.com/jackielii/structpages/tools/lint/gsxscan"
@@ -30,69 +41,182 @@ import (
 )
 
 func main() {
-	tags := flag.String("tags", "", "comma-separated build tags to load packages under "+
+	var tags tagSets
+	flag.Var(&tags, "tags", "comma-separated build tags to load packages under "+
 		"(e.g. -tags devtools), so URLFor/ID call sites in code gated behind those tags "+
-		"resolve against the tree that actually mounts them")
+		"resolve against the tree that actually mounts them. Repeat it to lint several "+
+		"build configurations in one run: -tags '' -tags devtools lints the default build "+
+		"and the devtools one, printing their findings together")
+	useCache := flag.Bool("cache", true, "reuse the findings of an earlier run whose inputs "+
+		"(files, modules, toolchain, flags, this binary) are unchanged; -cache=false always analyses. "+
+		"Results live in $STRUCTPAGES_LINT_CACHE, default structpages-lint in the user cache directory")
+	cpuprofile := flag.String("cpuprofile", "", "write a CPU profile to `file`")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: structpages-lint [-tags tag,tag] [packages...]\n")
+		fmt.Fprintf(os.Stderr, "Usage: structpages-lint [-tags tag,tag]... [-cache=false] [packages...]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	patterns := flag.Args()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", err)
+			os.Exit(2)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Fprintf(os.Stderr, "cpuprofile: %v\n", err)
+			os.Exit(2)
+		}
+	}
+	if len(tags) == 0 {
+		tags = tagSets{""}
+	}
+	code := run(os.Stdout, tags, *useCache, flag.Args())
+	pprof.StopCPUProfile()
+	os.Exit(code)
+}
+
+// tagSets collects the -tags flags, one build configuration each.
+type tagSets []string
+
+func (t *tagSets) String() string     { return strings.Join(*t, " ") }
+func (t *tagSets) Set(v string) error { *t = append(*t, v); return nil }
+
+// run lints patterns under each build configuration in tagSets and
+// returns the exit code: 2 if any configuration failed to load, else 1
+// if any has findings, else 0. The findings of all configurations are
+// printed together, de-duplicated and sorted.
+//
+// The configurations' package graphs load concurrently; that's cheap,
+// and all a configuration needs when its result is cached. Analyses run
+// one at a time, since each holds its packages' syntax and types.
+func run(stdout io.Writer, tagSets []string, useCache bool, patterns []string) int {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-
-	var buildFlags []string
-	if *tags != "" {
-		buildFlags = []string{"-tags=" + *tags}
+	type config struct {
+		tags  string
+		graph *lint.Graph
+		err   error
+		out   string
+		code  int
 	}
-	pkgs, err := lint.Load("", buildFlags, patterns...)
+	configs := make([]*config, len(tagSets))
+	var wg sync.WaitGroup
+	for i, tags := range tagSets {
+		c := &config{tags: tags}
+		configs[i] = c
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var buildFlags []string
+			if c.tags != "" {
+				buildFlags = []string{"-tags=" + c.tags}
+			}
+			c.graph, c.err = lint.LoadGraph("", buildFlags, patterns...)
+		}()
+	}
+	wg.Wait()
+
+	code := 0
+	lines := map[string]bool{}
+	for _, c := range configs {
+		if c.err != nil {
+			fmt.Fprintf(os.Stderr, "load: %v\n", c.err)
+			code = 2
+			continue
+		}
+		var key string
+		cached := false
+		if useCache {
+			key = cacheKey(c.graph, c.tags, patterns)
+			c.out, c.code, cached = cacheGet(key)
+		}
+		if !cached {
+			c.out, c.code = analyse(c.graph)
+			if key != "" && c.code != 2 {
+				cachePut(key, c.out, c.code)
+			}
+		}
+		code = max(code, c.code)
+		for _, line := range strings.SplitAfter(c.out, "\n") {
+			if line != "" {
+				lines[line] = true
+			}
+		}
+	}
+	for _, line := range slices.Sorted(maps.Keys(lines)) {
+		io.WriteString(stdout, line)
+	}
+	return code
+}
+
+// analyse loads and checks graph's packages, returning the findings,
+// one per line, and the exit code. Load errors go to stderr, with exit
+// code 2.
+func analyse(graph *lint.Graph) (string, int) {
+	pkgs, err := graph.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load: %v\n", err)
-		os.Exit(2)
+		return "", 2
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(2)
+		return "", 2
 	}
 
+	var out strings.Builder
 	tree, treeDiags := lint.BuildTree(pkgs)
-	emitted := 0
 	for _, d := range treeDiags {
-		fmt.Printf("%s: %s\n", d.Pos, d.Message)
-		emitted++
+		fmt.Fprintf(&out, "%s: %s\n", d.Pos, d.Message)
 	}
 	if len(tree.Roots) == 0 {
 		fmt.Fprintln(os.Stderr,
 			"structpages-lint: no structpages.Mount(...) call found in scope; "+
 				"pass packages containing Mount, or run from module root")
-		if emitted == 0 {
-			os.Exit(0)
+		if out.Len() == 0 {
+			return "", 0
 		}
-		os.Exit(1)
+		return out.String(), 1
 	}
 
 	analyzer := lint.NewAnalyzer(tree)
-	seen := map[string]bool{}
+	var (
+		mu    sync.Mutex
+		lines = map[string]bool{}
+	)
 	emit := func(line string) {
-		if seen[line] {
-			return
-		}
-		seen[line] = true
-		fmt.Println(line)
-		emitted++
+		mu.Lock()
+		lines[line] = true
+		mu.Unlock()
 	}
+	// Packages and template directories are checked concurrently; the
+	// findings are de-duplicated (one file is seen by each of its
+	// package's variants) and printed sorted, so the output doesn't
+	// depend on scheduling.
+	var dirs []string
 	scannedDirs := map[string]bool{}
 	for _, pkg := range pkgs {
-		runPass(analyzer, pkg, emit)
 		if dir := pkgDir(pkg); dir != "" && !scannedDirs[dir] {
 			scannedDirs[dir] = true
-			scanTemplates(dir, emit)
+			dirs = append(dirs, dir)
 		}
 	}
-	if emitted > 0 {
-		os.Exit(1)
+	parallel(len(pkgs), func(i int) {
+		pkg := pkgs[i]
+		err := lint.Check(analyzer, tree, pkg, func(d analysis.Diagnostic) {
+			emit(fmt.Sprintf("%s: %s", pkg.Fset.Position(d.Pos), d.Message))
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "analyzer error in %s: %v\n", pkg.PkgPath, err)
+		}
+	})
+	parallel(len(dirs), func(i int) { scanTemplates(dirs[i], emit) })
+	for _, line := range slices.Sorted(maps.Keys(lines)) {
+		out.WriteString(line + "\n")
 	}
+	if out.Len() > 0 {
+		return out.String(), 1
+	}
+	return "", 0
 }
 
 // pkgDir is the source directory of pkg. packages.Load surfaces one
@@ -140,26 +264,22 @@ func scanTemplates(dir string, emit func(string)) {
 	run(".gsx", "gsxscan", gsxscan.Scan)
 }
 
-// runPass runs analyzer.Run against a single package, handing every
-// reported diagnostic to emit (which deduplicates across passes).
-func runPass(a *analysis.Analyzer, pkg *packages.Package, emit func(string)) {
-	if pkg.TypesInfo == nil || pkg.Types == nil || len(pkg.Syntax) == 0 {
-		return
+// parallel calls f(0) … f(n-1) on GOMAXPROCS goroutines and waits.
+func parallel(n int, f func(int)) {
+	next := make(chan int)
+	var wg sync.WaitGroup
+	for range runtime.GOMAXPROCS(0) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				f(i)
+			}
+		}()
 	}
-	pass := &analysis.Pass{
-		Analyzer:   a,
-		Fset:       pkg.Fset,
-		Files:      pkg.Syntax,
-		OtherFiles: pkg.OtherFiles,
-		Pkg:        pkg.Types,
-		TypesInfo:  pkg.TypesInfo,
-		Report: func(d analysis.Diagnostic) {
-			pos := pkg.Fset.Position(d.Pos)
-			emit(fmt.Sprintf("%s: %s", pos, d.Message))
-		},
-		ResultOf: map[*analysis.Analyzer]any{},
+	for i := range n {
+		next <- i
 	}
-	if _, err := a.Run(pass); err != nil {
-		fmt.Fprintf(os.Stderr, "analyzer error in %s: %v\n", pkg.PkgPath, err)
-	}
+	close(next)
+	wg.Wait()
 }

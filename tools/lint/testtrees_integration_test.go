@@ -38,22 +38,11 @@ func TestTestTrees_Integration(t *testing.T) {
 	seen := map[string]bool{}
 	analyzer := NewAnalyzer(tree)
 	for _, pkg := range pkgs {
-		if pkg.TypesInfo == nil || pkg.Types == nil || len(pkg.Syntax) == 0 {
-			continue
+		report := func(d analysis.Diagnostic) {
+			pos := pkg.Fset.Position(d.Pos)
+			seen[filepath.Base(pos.Filename)+": "+d.Message] = true
 		}
-		pass := &analysis.Pass{
-			Analyzer:  analyzer,
-			Fset:      pkg.Fset,
-			Files:     pkg.Syntax,
-			Pkg:       pkg.Types,
-			TypesInfo: pkg.TypesInfo,
-			Report: func(d analysis.Diagnostic) {
-				pos := pkg.Fset.Position(d.Pos)
-				seen[filepath.Base(pos.Filename)+": "+d.Message] = true
-			},
-			ResultOf: map[*analysis.Analyzer]any{},
-		}
-		if _, err := analyzer.Run(pass); err != nil {
+		if err := Check(analyzer, tree, pkg, report); err != nil {
 			t.Fatalf("analyzer run %s: %v", pkg.PkgPath, err)
 		}
 	}

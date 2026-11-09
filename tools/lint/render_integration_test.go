@@ -65,23 +65,12 @@ func loadDiags(t *testing.T, dir string, categories []string) []diag {
 	var out []diag
 	analyzer := NewAnalyzer(tree)
 	for _, pkg := range pkgs {
-		if pkg.TypesInfo == nil || pkg.Types == nil || len(pkg.Syntax) == 0 {
-			continue
+		report := func(d analysis.Diagnostic) {
+			if slices.Contains(categories, d.Category) {
+				out = append(out, diag{pkg.Fset.Position(d.Pos), d.Message})
+			}
 		}
-		pass := &analysis.Pass{
-			Analyzer:  analyzer,
-			Fset:      pkg.Fset,
-			Files:     pkg.Syntax,
-			Pkg:       pkg.Types,
-			TypesInfo: pkg.TypesInfo,
-			Report: func(d analysis.Diagnostic) {
-				if slices.Contains(categories, d.Category) {
-					out = append(out, diag{pkg.Fset.Position(d.Pos), d.Message})
-				}
-			},
-			ResultOf: map[*analysis.Analyzer]any{},
-		}
-		if _, err := analyzer.Run(pass); err != nil {
+		if err := Check(analyzer, tree, pkg, report); err != nil {
 			t.Fatalf("analyzer run %s: %v", pkg.PkgPath, err)
 		}
 	}

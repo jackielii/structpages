@@ -59,24 +59,13 @@ func TestBinaryScope_Integration(t *testing.T) {
 	// Run the analyzer over every package; assert no urlfor diagnostic.
 	analyzer := NewAnalyzer(tree)
 	for _, pkg := range pkgs {
-		if pkg.TypesInfo == nil || pkg.Types == nil || len(pkg.Syntax) == 0 {
-			continue
+		report := func(d analysis.Diagnostic) {
+			if strings.HasPrefix(d.Message, "[urlfor]") {
+				t.Errorf("%s: unexpected diagnostic: %s",
+					pkg.Fset.Position(d.Pos), d.Message)
+			}
 		}
-		pass := &analysis.Pass{
-			Analyzer:  analyzer,
-			Fset:      pkg.Fset,
-			Files:     pkg.Syntax,
-			Pkg:       pkg.Types,
-			TypesInfo: pkg.TypesInfo,
-			Report: func(d analysis.Diagnostic) {
-				if strings.HasPrefix(d.Message, "[urlfor]") {
-					t.Errorf("%s: unexpected diagnostic: %s",
-						pkg.Fset.Position(d.Pos), d.Message)
-				}
-			},
-			ResultOf: map[*analysis.Analyzer]any{},
-		}
-		if _, err := analyzer.Run(pass); err != nil {
+		if err := Check(analyzer, tree, pkg, report); err != nil {
 			t.Fatalf("analyzer run %s: %v", pkg.PkgPath, err)
 		}
 	}
