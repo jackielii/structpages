@@ -6,9 +6,27 @@ sidebar_position: 5.6
 
 # Guarding Fragment URLs
 
-A fragment is markup that only makes sense inside a page: a dialog, a list's rows, a details panel. It has its own URL, so a browser can open that URL as a document. It happens through a link opened in a new tab, a bookmark, a notification click, or Back or reload after a request pushed the URL. The reader then gets bare markup with no layout, no styles and no scripts.
+## The problem
 
-Fixing this route by route doesn't last: every new fragment is one more place to forget. Fix it once instead, in one middleware that knows from each route's `*PageNode` what kind of route it wraps, and from each request what kind of response it wants. This page describes that pattern, the decisions behind it, and how to keep it enforced.
+> **How do I stop an unstyled fragment from rendering as a full page?**
+
+A fragment is markup that only makes sense inside a page: a dialog, a list's rows, a details panel. htmx fetches it from its own URL and swaps it into the page that is already on screen, with that page's layout, styles and scripts around it.
+
+But the URL is a real URL, and browsers open URLs as pages. That happens when someone:
+
+- opens a link or button target in a new tab;
+- bookmarks it, or copies it into a chat;
+- clicks a notification or an email that links to it;
+- presses Back or reload after a request pushed the fragment's URL to the address bar (`hx-push-url`);
+- reaches it from a crawler or link preview.
+
+Each time, the server answers the way it answers htmx: with the fragment alone. The browser shows a dialog's form or a list's rows on a blank page, with no layout, no styles, no navigation and no scripts. The page looks broken, and the reader can't get back into the app from it.
+
+Fixing this route by route doesn't last. Each fragment has to check the request, choose a page to send the reader to, and keep its URL out of history, and every new fragment is one more place to forget. The checks are also easy to get subtly wrong: an `HX-Request` check, for instance, mistakes htmx's own history restore for a partial.
+
+So fix it once, in one middleware. It knows from each route's `*PageNode` what kind of route it wraps, and from each request what kind of response the request wants. When a page load reaches a fragment, it sends the reader to the page that shows that fragment instead of rendering it. This page describes that pattern, the decisions behind it, and how to keep it enforced.
+
+## The pattern
 
 The pattern has five parts:
 
