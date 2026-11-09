@@ -92,9 +92,7 @@ func TestPageNode_String_componentsAndProps(t *testing.T) {
 		Components: map[string]reflect.Method{
 			"Page": method,
 		},
-		Props: map[string]reflect.Method{
-			"Props": method,
-		},
+		Props: &method,
 	}
 
 	str := pn.String()
@@ -116,7 +114,6 @@ func TestPageNode_String_edgeCases(t *testing.T) {
 		Value:       reflect.Value{}, // Zero value
 		Middlewares: nil,
 		Components:  make(map[string]reflect.Method),
-		Props:       make(map[string]reflect.Method),
 	}
 
 	str := pn.String()

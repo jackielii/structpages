@@ -297,10 +297,7 @@ func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) err
 	// Only the method named exactly Props is the Props method; other methods
 	// ending in "Props" (UserListProps, ...) are ordinary helpers.
 	if method.Name == "Props" {
-		if item.Props == nil {
-			item.Props = make(map[string]reflect.Method)
-		}
-		item.Props[method.Name] = *method
+		item.Props = method
 		return nil
 	}
 

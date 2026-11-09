@@ -644,10 +644,8 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 
 	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
 	pn := &PageNode{
-		Name: "test",
-		Props: map[string]reflect.Method{
-			"Props": propsMethod,
-		},
+		Name:  "test",
+		Props: &propsMethod,
 		Value: reflect.ValueOf(&pageWithErrorProps{}),
 	}
 
@@ -906,15 +904,11 @@ func TestOnlyExactPropsIsPropsMethod(t *testing.T) {
 	if helper == nil || withHelper == nil {
 		t.Fatal("pages not found in tree")
 	}
-	if len(helper.Props) != 0 {
-		t.Errorf("Helper.Props = %v, want empty", helper.Props)
+	if helper.Props != nil {
+		t.Errorf("Helper.Props = %s, want nil", helper.Props.Name)
 	}
-	var names []string
-	for name := range withHelper.Props {
-		names = append(names, name)
-	}
-	if diff := cmp.Diff([]string{"Props"}, names); diff != "" {
-		t.Errorf("WithHelper.Props keys (-want +got):\n%s", diff)
+	if withHelper.Props == nil || withHelper.Props.Name != "Props" {
+		t.Errorf("WithHelper.Props = %v, want the Props method", withHelper.Props)
 	}
 
 	rec := httptest.NewRecorder()

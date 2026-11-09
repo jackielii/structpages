@@ -223,7 +223,8 @@ Calling `t.Is(...)` changes nothing; recognising a target and returning no error
 The writer is **not** buffered. Headers and cookies are fine (set `Content-Type`, then `w.WriteHeader(status)`, before returning
 `RenderComponent` to send a status: the framework can't set the header after the status); a body write is sent immediately and is not undone by a later error.
 
-Only `Props` is invoked. Other `*Props` methods are recorded in `PageNode.Props` but never called.
+Only the method named exactly `Props` is the Props method (`PageNode.Props`, nil when absent). Other `*Props` methods are
+ordinary helpers you call yourself.
 
 ### ServeHTTP
 
@@ -342,7 +343,7 @@ Honoured only from `Props`: the request ends without rendering or calling the er
 type PageNode struct {
     Name, Title, Method, Route string
     Value       reflect.Value
-    Props       map[string]reflect.Method
+    Props       *reflect.Method // the Props method, nil when absent
     Components  map[string]reflect.Method
     Middlewares *reflect.Method
     Parent      *PageNode
