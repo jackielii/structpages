@@ -37,11 +37,14 @@ type PageNode struct {
 	Route         string
 	routeSegments []segment // Pre-parsed route segments for performance
 	Value         reflect.Value
-	Props         map[string]reflect.Method
-	Components    map[string]reflect.Method
-	Middlewares   *reflect.Method
-	Parent        *PageNode
-	Children      []*PageNode
+	// Props holds the page's Props method under the key "Props", or is nil
+	// when the page has none. Only the method named exactly Props is
+	// recorded; other methods ending in "Props" are ordinary helpers.
+	Props       map[string]reflect.Method
+	Components  map[string]reflect.Method
+	Middlewares *reflect.Method
+	Parent      *PageNode
+	Children    []*PageNode
 
 	// idPath is the kebab-cased field-name path from the root (root
 	// excluded) down to this node — the stable identity used to build

@@ -294,7 +294,9 @@ func (p *parseContext) processMethod(item *PageNode, method *reflect.Method) err
 		return nil
 	}
 
-	if strings.HasSuffix(method.Name, "Props") {
+	// Only the method named exactly Props is the Props method; other methods
+	// ending in "Props" (UserListProps, ...) are ordinary helpers.
+	if method.Name == "Props" {
 		if item.Props == nil {
 			item.Props = make(map[string]reflect.Method)
 		}
