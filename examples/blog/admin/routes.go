@@ -2,7 +2,7 @@
 // HTMX refresh, post and user CRUD, and a logout action. The Pages struct's
 // Middlewares() method gates every descendant behind RequireAdmin.
 //
-// LoginPage lives outside Pages and is mounted by main as a sibling, so
+// LoginPage and LoginAction live outside Pages and are mounted by main as siblings, so
 // signed-out visitors can reach the form without tripping the gate.
 package admin
 
@@ -31,7 +31,7 @@ type Pages struct {
 
 // Middlewares is invoked once at mount time and applies to every child
 // of Pages — including Assets — so /admin/static/* is gated behind
-// RequireAdmin. The login page renders with its own loginShell (no
+// RequireAdmin. The login page renders with its own LoginShell (no
 // references to /admin/static/), so unauthenticated visitors never need
 // the assets.
 func (Pages) Middlewares(a *auth.Service) []structpages.MiddlewareFunc {

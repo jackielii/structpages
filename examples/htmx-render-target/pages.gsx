@@ -119,14 +119,7 @@ func (p dashboard) Props(r *http.Request, target structpages.RenderTarget) (dash
 		notifications := loadNotifications()
 		return dashboardData{}, structpages.RenderComponent(<NotificationsList notifications={notifications}/>)
 
-	case target.Is(p.Page):
-		return dashboardData{
-			Stats:         loadUserStats(),
-			Sales:         loadSalesData(),
-			Notifications: loadNotifications(),
-		}, nil
-
-	default:
+	default: // the full page: navigation, or a target that is none of the widgets
 		return dashboardData{
 			Stats:         loadUserStats(),
 			Sales:         loadSalesData(),

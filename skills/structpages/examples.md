@@ -203,9 +203,11 @@ func (TeamManagementAddUser) ServeHTTP(w http.ResponseWriter, r *http.Request, a
 
 ---
 
-## 3. ServeHTTP with RenderTarget (view modes)
+## 3. View modes with RenderTarget
 
-Both view modes render into one `Results` region, so the toggle always has a target in the DOM:
+Both view modes render into one `Results` region, so the toggle always has a target in the DOM. `Page`
+and `Results` take the same props, so `Props` returns them and the framework renders whichever the request
+wants:
 
 ```go
 type resultsProps struct {
@@ -213,16 +215,12 @@ type resultsProps struct {
     Items []Item
 }
 
-func (p IndexPage) ServeHTTP(w http.ResponseWriter, r *http.Request, appCtx *AppContext, sel structpages.RenderTarget) error {
+func (p IndexPage) Props(r *http.Request, appCtx *AppContext) (resultsProps, error) {
     items, err := appCtx.Store.ListItems(r.Context())
     if err != nil {
-        return fmt.Errorf("list items: %w", err)
+        return resultsProps{}, fmt.Errorf("list items: %w", err)
     }
-    results := resultsProps{View: r.FormValue("view"), Items: items}
-    if sel.Is(p.Results) {
-        return structpages.RenderComponent(p.Results(results))
-    }
-    return structpages.RenderComponent(p.Page(results))
+    return resultsProps{View: r.FormValue("view"), Items: items}, nil
 }
 ```
 
@@ -250,7 +248,8 @@ component (p IndexPage) Results(props resultsProps) {
 ```
 
 `Page` wraps `<div id={IndexPage.Results |> id}><p.Results props={props}/></div>`. `href` keeps the links
-working without JavaScript.
+working without JavaScript. The pushed URL is the page's own, which answers a navigation with `Page`;
+send `Vary: HX-Request, HX-Target` so a cache doesn't answer one with `Results`.
 
 ---
 
@@ -302,9 +301,32 @@ component (p EntityDetailPage) Content(props EntityDetailProps) {
 
 ## 5. Lazy-loaded region on its own route
 
+A region with its own route is a fragment: no `Page`, and `Props` returns only an error, rendering the
+component explicitly.
+
+```gsx
+type ListActionsPartial struct{}
+
+func (p ListActionsPartial) Props(r *http.Request, appCtx *AppContext) error {
+    actions, err := appCtx.Store.ListActions(r.Context(), r.PathValue("entityType"), r.PathValue("entityId"))
+    if err != nil {
+        return err
+    }
+    return structpages.RenderComponent(p.Actions(actions))
+}
+
+component (p ListActionsPartial) Actions(actions []Action) {
+    { for _, a := range actions {
+        <button hx-post={a.URL}>{ a.Label }</button>
+    } }
+}
+```
+
+The hosting page loads it into a placeholder:
+
 ```gsx
 <div
-    id={ListActionsPartial.Page |> id}
+    id={ListActionsPartial.Actions |> id}
     hx-get={ListActionsPartial{} |> url(map[string]any{"entityType": entityType, "entityId": entityID})}
     hx-trigger="load, refresh-actions from:body"
     hx-target="this"
@@ -312,6 +334,10 @@ component (p EntityDetailPage) Content(props EntityDetailProps) {
     Loading…
 </div>
 ```
+
+Don't name the fragment's component `Page`: a browser that opens the fragment's URL (new tab, reload after
+`hx-push-url`) would get its bare markup as a document. Don't push a fragment URL to history. The
+navigation guard in docs/route-conventions.md redirects such navigations to the page above the fragment.
 
 ---
 

@@ -23,13 +23,14 @@ import (
 // Ref("loginPage"), Ref("dashboard") to link across packages without
 // importing them).
 //
-// Note loginPage is a sibling of admin (not a child) — admin.Pages.Middlewares
+// Note loginPage and login are siblings of admin (not children) — admin.Pages.Middlewares
 // returns RequireAdmin, which would otherwise lock unauthenticated users
 // out of the very form they need to sign in with.
 type rootPages struct {
-	blog      blogpkg.Pages   `route:"/ Blog"`
-	loginPage admin.LoginPage `route:"/admin/login Admin Login"`
-	admin     admin.Pages     `route:"/admin Admin"`
+	blog      blogpkg.Pages     `route:"/ Blog"`
+	loginPage admin.LoginPage   `route:"GET /admin/login Admin Login"`
+	login     admin.LoginAction `route:"POST /admin/login Sign In"`
+	admin     admin.Pages       `route:"/admin Admin"`
 }
 
 func main() {

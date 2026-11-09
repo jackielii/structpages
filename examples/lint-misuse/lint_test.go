@@ -10,9 +10,10 @@ import (
 )
 
 // TestLintMisuse builds tools/lint/cmd/structpages-lint, runs it against this
-// fixture, and snapshot-compares the output. It pins the exact
-// diagnostic wording so any drift in messages requires an
-// intentional update to the want literal below.
+// fixture, and snapshot-compares the output, which the linter prints in
+// file and position order. It pins the exact diagnostic wording so any
+// drift in messages requires an intentional update to the want literal
+// below.
 //
 // Run with: go test ./examples/lint-misuse/ -run TestLintMisuse
 func TestLintMisuse(t *testing.T) {
@@ -31,6 +32,11 @@ func TestLintMisuse(t *testing.T) {
 	// analyzer reads from the .gsx because codegen drops them. That only
 	// lines up because gsx positions attribute holes on their real line.
 	want := strings.Join([]string{
+		"pages.go:LINE:COL: [selector] Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
+			"(hx-get at pages.gsx:25:5); structpages has no default target selector since v0.9.0, " +
+			"so htmx partial requests render the full Page. Pass " +
+			"structpages.WithTargetSelector(structpages.HTMXRenderTarget) for htmx 1/2, or " +
+			"structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) for htmx 4",
 		`pages.go:LINE:COL: [ref] Ref "Items.NoSuch": segment 1 ("NoSuch") not found as child of "Items"; available: Detail, Index`,
 		`pages.go:LINE:COL: [ref] Ref "/missing": no page with this route. Did you rename a route tag? Known routes: /, /items, /items/{$}, /items/{slug}, /{$}`,
 		`pages.go:LINE:COL: [ref] Ref "Ghost": no page with this name; known names include: Detail, Home, Index, Items, root`,
@@ -51,19 +57,14 @@ func TestLintMisuse(t *testing.T) {
 		`pages.go:LINE:COL: [ref] Ref "Items.Nope": segment 1 ("Nope") not found as child of "Items"; available: Detail, Index`,
 		`pages.go:LINE:COL: [urlfor] Within: no page mounted for type unmountedPage`,
 		`pages.go:LINE:COL: [urlfor] Within: chain element 1 is a string fragment; Within takes page steps only`,
-		`pages.gsx:LINE:COL: [params] URLFor: param "nope" does not appear in pattern "/items/{slug}" (known: slug)`,
-		`pages.gsx:LINE:COL: [params] URLFor: param "unsuppressed" does not appear in pattern "/items/{slug}" (known: slug)`,
-		"pages.go:LINE:COL: [selector] Mount has no structpages.WithTargetSelector option, but its pages' templates use htmx " +
-			"(hx-get at pages.gsx:25:5); structpages has no default target selector since v0.9.0, " +
-			"so htmx partial requests render the full Page. Pass " +
-			"structpages.WithTargetSelector(structpages.HTMXRenderTarget) for htmx 1/2, or " +
-			"structpages.WithTargetSelector(structpages.HTMXv4RenderTarget) for htmx 4",
 		`pages.gsx:LINE:COL: [url-attr] href value "/login" is a hard-coded internal URL; use structpages.URLFor instead`,
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/\" + \"admin\"` builds an internal URL by string concatenation; use structpages.URLFor instead",
 		"pages.gsx:LINE:COL: [url-attr] href value `\"/items/\" + strconv.Itoa(id)` builds an internal URL by string concatenation; use structpages.URLFor instead",
 		"pages.gsx:LINE:COL: [url-attr] href value `fmt.Sprintf(\"/users/%s\", name)` builds an internal URL via fmt.Sprint*; use structpages.URLFor instead",
 		`pages.gsx:LINE:COL: [url-attr] hx-get value "/api/items" is a hard-coded internal URL; use structpages.URLFor instead`,
 		`pages.gsx:LINE:COL: [url-attr] action value "/submit" is a hard-coded internal URL; use structpages.URLFor instead`,
+		`pages.gsx:LINE:COL: [params] URLFor: param "nope" does not appear in pattern "/items/{slug}" (known: slug)`,
+		`pages.gsx:LINE:COL: [params] URLFor: param "unsuppressed" does not appear in pattern "/items/{slug}" (known: slug)`,
 	}, "\n")
 	if got != want {
 		t.Errorf("linter output mismatch.\n--- got ---\n%s\n--- want ---\n%s", got, want)

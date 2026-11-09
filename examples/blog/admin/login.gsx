@@ -8,32 +8,36 @@ import (
 	"github.com/jackielii/structpages/examples/blog/ui/components"
 )
 
-// LoginPage handles both GET and POST at /admin/login. It is mounted as a
-// sibling of admin.Pages (in main), so RequireAdmin does not gate it.
+// LoginPage is the sign-in document at GET /admin/login, and LoginAction
+// handles the form's POST to the same path. They are mounted by main as
+// siblings of admin.Pages, so RequireAdmin does not gate them.
 //
-// Because it defines ServeHTTP, structpages routes everything to that
-// method directly — there's no Props/Page split for this page.
+// The split follows the route convention: a GET that shows something is a
+// page (it has Page), and ServeHTTP only does things — here, sign in and
+// redirect, or show the form again with the error.
 type LoginPage struct{}
 
-func (LoginPage) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Service) error {
-	var (
-		username string
-		errMsg   string
-	)
-	if r.Method == http.MethodPost {
-		username = r.FormValue("username")
-		password := r.FormValue("password")
-		if _, err := a.Login(w, username, password); err != nil {
-			errMsg = "Invalid username or password."
-		} else {
-			http.Redirect(w, r, "/admin/", http.StatusSeeOther)
-			return nil
-		}
-	}
-	return structpages.RenderComponent(<LoginShell username={username} errMsg={errMsg}/>)
+component (p LoginPage) Page() {
+	<LoginShell username="" errMsg=""/>
 }
 
-// LoginShell is rendered by LoginPage.ServeHTTP above. gsx requires
+type LoginAction struct{}
+
+func (LoginAction) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Service) error {
+	username := r.FormValue("username")
+	if _, err := a.Login(w, username, r.FormValue("password")); err != nil {
+		return structpages.RenderComponent(<LoginShell username={username} errMsg="Invalid username or password."/>)
+	}
+	dashboard, err := structpages.URLFor(r.Context(), structpages.Ref("dashboard"))
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, dashboard, http.StatusSeeOther)
+	return nil
+}
+
+// LoginShell is the whole sign-in document, rendered by LoginPage.Page and,
+// with an error, by LoginAction. gsx requires
 // component names to be Capitalized (lowercase = HTML element), so the templ
 // `loginShell` becomes `LoginShell`.
 component LoginShell(username, errMsg string) {

@@ -43,7 +43,7 @@ posts, comments, and sessions.
     ├── routes.go              admin.Pages with Middlewares() returning RequireAdmin,
     │                          plus an Assets field that owns /admin/static/*
     ├── static/                module-scoped assets (admin-logo.svg)
-    ├── login.gsx               LoginPage — sibling of admin.Pages, not a child
+    ├── login.gsx               LoginPage (GET) + LoginAction (POST) — siblings of admin.Pages
     ├── logout.go
     ├── dashboard.gsx           Props + RenderTarget refreshing widgets independently
     ├── posts.gsx               list / new / edit / create / update / delete

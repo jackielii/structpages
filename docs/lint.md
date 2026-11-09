@@ -34,7 +34,14 @@ The linter needs Go 1.26, and `go get -tool` raises your module's `go` line to m
   to rebuild the tree.
 - It exits 0 when clean, 1 when it reports findings, and 2 when packages fail to load or type-check (nothing
   was checked). Wire it into CI alongside `go test`.
-- If pages are mounted behind build tags, pass them through with `-tags`.
+- If pages are mounted behind build tags, pass them through with `-tags`. Repeat the flag to check several
+  builds in one run: `-tags '' -tags devtools` checks the default build and the devtools one, and prints
+  their findings together.
+- It reuses the findings of an earlier run when none of its inputs changed: your module's files and
+  templates, dependency versions, the Go toolchain, the flags, and the linter binary itself. An unchanged
+  rerun skips the analysis and costs about as much as `go list`. Results are kept in
+  `$STRUCTPAGES_LINT_CACHE`, by default `structpages-lint` in your user cache directory. Pass
+  `-cache=false` to always analyse.
 - In gsx projects, generate first (`go tool gsx generate .`): template filters are checked through the
   generated `.x.go`.
 
@@ -43,7 +50,8 @@ The linter needs Go 1.26, and `go get -tool` raises your module's `go` line to m
 ```yaml
 - run: go tool gsx generate .   # gsx projects: the linter reads the generated .x.go (recurses)
 - run: go tool structpages-lint ./...
-- run: go tool structpages-lint -tags devtools ./...   # once per build-tag set that mounts pages
+# or, when pages are mounted behind build tags, every build that mounts pages in one run:
+# - run: go tool structpages-lint -tags '' -tags devtools ./...
 ```
 
 Findings exit 1 and fail the step. Packages that don't load or type-check exit 2, so a broken build can't pass as clean.

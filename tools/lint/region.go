@@ -359,6 +359,21 @@ func goTokens(src string) []string {
 	}
 }
 
+// sourceFiles caches the Go files checkCtx.text reads, for the whole
+// run: a package's test variants share its files, and checks run
+// concurrently.
+var sourceFiles sync.Map // filename -> []byte
+
+// sourceFile returns the contents of filename, nil if it can't be read.
+func sourceFile(filename string) []byte {
+	if src, ok := sourceFiles.Load(filename); ok {
+		return src.([]byte)
+	}
+	src, _ := os.ReadFile(filename)
+	actual, _ := sourceFiles.LoadOrStore(filename, src)
+	return actual.([]byte)
+}
+
 // templateFiles holds the template files added to each FileSet by
 // templatePos, so each is added once.
 var templateFiles = struct {
@@ -479,14 +494,7 @@ func (ctx *checkCtx) text(start, end token.Pos) string {
 	if tf == nil {
 		return ""
 	}
-	src, ok := ctx.srcs[tf.Name()]
-	if !ok {
-		src, _ = os.ReadFile(tf.Name())
-		if ctx.srcs == nil {
-			ctx.srcs = map[string][]byte{}
-		}
-		ctx.srcs[tf.Name()] = src
-	}
+	src := sourceFile(tf.Name())
 	s, e := tf.Offset(start), tf.Offset(end)
 	if e > len(src) || s > e {
 		return ""

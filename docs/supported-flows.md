@@ -6,13 +6,14 @@ sidebar_position: 5
 
 # Page Response Patterns
 
-There are four main shapes — choose based on what the page does. The first renders declaratively (Props method + Page method); the other three are handler methods (`ServeHTTP`).
+There are five main shapes — choose based on what the page does. The first two render declaratively (a Props method, with or without a Page method); the other three are handler methods (`ServeHTTP`). The rule that sorts them: **Props decides what to show; ServeHTTP decides what to do.** [Route Conventions](./route-conventions.md) explains the rule and why it matters when a browser opens a fragment's URL.
 
 | Shape | Entry | When to use |
 |---|---|---|
-| **Renders a page** | `Props(...)` + `Page(props)` | Standard pages, HTMX partials — the primary pattern |
-| **Returns a partial** | `ServeHTTP(w, r, deps...) error` | Form actions that mutate then refresh a region |
-| **Redirects** | `ServeHTTP(w, r, deps...) error` | Post-action navigation |
+| **Renders a page** | `Props(...)` + `Page(props)`, plus region components (`Content`, `UserList`, …) | Standard pages, and their HTMX partials served from the page's own URL — the primary pattern |
+| **Renders a fragment** | `Props(...) error` returning `RenderComponent(...)`, no `Page` | Dialogs, rows, panels on their own route, that only exist inside another page |
+| **Returns a partial** | `ServeHTTP(w, r, deps...) error` | Form actions (POST, PATCH, DELETE) that mutate then refresh a region |
+| **Redirects** | `ServeHTTP(w, r, deps...) error` | Post-action navigation, and GETs that only redirect (old URLs, "jump to" links) |
 | **Serves JSON** | `ServeHTTP(w, r, deps...)` *(no error return)* | API endpoints |
 
 ## A page that renders: Props method + Page method
@@ -96,9 +97,27 @@ To render something other than what the request wants — an empty state, an inl
 
 On larger pages the data is typically split into per-pane values, with helper methods feeding both the partial branches and the full page — see the worked example in [HTMX Integration](./htmx.md#rendertarget-in-props).
 
+## A fragment: Props without Page
+
+Some routes are never a page of their own: an edit dialog, a details panel, the next rows of a list. Give them no `Page`. `Props` returns only an error and renders the component explicitly:
+
+```go
+type editDialog struct{}
+
+func (p editDialog) Props(r *http.Request, store *Store) error {
+    item, err := store.Item(r.PathValue("id"))
+    if err != nil {
+        return err
+    }
+    return structpages.RenderComponent(p.Dialog(item))
+}
+```
+
+Don't name a fragment's component `Page`, and don't return data for the framework to render: with no `Page` to fall back to, Props is the one place that decides. See [Route Conventions](./route-conventions.md#fragments).
+
 ## A handler method that returns a partial
 
-The most common HTMX form action — mutate state, respond with the refreshed region:
+The most common HTMX form action — mutate state, respond with the refreshed region. This is for POST, PATCH and DELETE routes; a GET that shows something is a page or a fragment, and its rendering belongs in `Props`:
 
 ```go
 type add struct{}
@@ -159,6 +178,7 @@ Only the error-returning forms are buffered; what that means for writing `w` is 
 
 ## See also
 
+- [Route Conventions](./route-conventions.md) — pages, fragments, actions and protocols, and guarding fragment URLs.
 - [How a Request Is Rendered](./rendering.md) — the flow: target selector, Props, which component renders.
 - [HTMX Integration](./htmx.md) — `RenderTarget`, partial selection, the id loop.
 - [Error Handling](./error-handling.md) — buffering rules, typed errors, redirects, JSON.

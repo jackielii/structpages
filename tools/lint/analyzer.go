@@ -7,6 +7,7 @@ import (
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/packages"
 )
 
 // NewAnalyzer returns an analyzer that validates structpages calls
@@ -25,6 +26,36 @@ func NewAnalyzer(tree *PageTree) *analysis.Analyzer {
 			return nil, nil
 		},
 	}
+}
+
+// Check runs the analyzer over one package that Load returned, handing
+// each diagnostic to report. A type-checked package gets every check. A
+// package Load parsed without types, one that doesn't depend on
+// structpages, gets the route-literal check, the only one that can fire
+// there: nothing else in it can name a page.
+func Check(a *analysis.Analyzer, tree *PageTree, pkg *packages.Package, report func(analysis.Diagnostic)) error {
+	if len(pkg.Syntax) == 0 {
+		return nil
+	}
+	if pkg.Types == nil || pkg.TypesInfo == nil {
+		pass := &analysis.Pass{Analyzer: a, Fset: pkg.Fset, Files: pkg.Syntax, Report: report}
+		ctx := &checkCtx{pass: pass, tree: tree, roots: tree.rootsFor(pkg.PkgPath),
+			dm: newDirectiveMap(pkg.Fset, pkg.Syntax)}
+		checkRouteLiterals(ctx)
+		return nil
+	}
+	pass := &analysis.Pass{
+		Analyzer:   a,
+		Fset:       pkg.Fset,
+		Files:      pkg.Syntax,
+		OtherFiles: pkg.OtherFiles,
+		Pkg:        pkg.Types,
+		TypesInfo:  pkg.TypesInfo,
+		Report:     report,
+		ResultOf:   map[*analysis.Analyzer]any{},
+	}
+	_, err := a.Run(pass)
+	return err
 }
 
 // checkCtx is the shared context passed to each per-call check.
@@ -53,8 +84,6 @@ type checkCtx struct {
 	// IDTarget, Key, KeyTarget or Within), so shared page-resolution
 	// diagnostics name the call they came from.
 	callee string
-	// srcs caches generated source files read by checkCtx.source.
-	srcs map[string][]byte
 }
 
 func run(pass *analysis.Pass, tree *PageTree) {
@@ -219,7 +248,7 @@ func (ctx *checkCtx) report(pos token.Pos, category, format string, args ...any)
 // form `structpages.Ref(expr)`. Type conversions show up as
 // *ast.CallExpr with a non-func callee (a *types.TypeName).
 func isRefConversion(info *types.Info, call *ast.CallExpr) bool {
-	if len(call.Args) != 1 {
+	if info == nil || len(call.Args) != 1 {
 		return false
 	}
 	var ident *ast.Ident

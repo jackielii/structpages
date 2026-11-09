@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -72,7 +73,9 @@ func checkIDChain(ctx *checkCtx, comp *ast.CompositeLit, fnName string) {
 	}
 	elts := comp.Elts
 	last := elts[len(elts)-1]
-	chainSteps := elts[:len(elts)-1]
+	// Clipped so appending copies: elts is the AST's own slice, shared
+	// by the package's variants, which are checked concurrently.
+	chainSteps := slices.Clip(elts[:len(elts)-1])
 
 	// Determine method spec.
 	var methodName string
