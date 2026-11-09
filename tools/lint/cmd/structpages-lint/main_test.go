@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -89,5 +90,33 @@ func TestRun_tagSetsAndCache(t *testing.T) {
 	}
 	if n := cacheEntries(t); n != 4 {
 		t.Fatalf("-cache=false wrote to the cache: it holds %d, want 4", n)
+	}
+}
+
+// TestSortedFindings pins the output order: by file, then numerically
+// by line and column, then by text.
+func TestSortedFindings(t *testing.T) {
+	in := []string{
+		"b.go:2:1: [x] one\n",
+		"a.go:105:3: [x] late\n",
+		"a.go:23:9: [x] second\n",
+		"a.go:23:10: [x] third\n",
+		"a.go:23:9: [a] first\n",
+		`C:\src\a.go:1:1: [x] drive` + "\n",
+	}
+	lines := map[string]bool{}
+	for _, l := range in {
+		lines[l] = true
+	}
+	want := []string{
+		`C:\src\a.go:1:1: [x] drive` + "\n",
+		"a.go:23:9: [a] first\n",
+		"a.go:23:9: [x] second\n",
+		"a.go:23:10: [x] third\n",
+		"a.go:105:3: [x] late\n",
+		"b.go:2:1: [x] one\n",
+	}
+	if got := sortedFindings(lines); !slices.Equal(got, want) {
+		t.Errorf("sortedFindings:\n got %q\nwant %q", got, want)
 	}
 }

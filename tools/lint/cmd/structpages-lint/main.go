@@ -21,15 +21,19 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -144,7 +148,7 @@ func run(stdout io.Writer, tagSets []string, useCache bool, patterns []string) i
 			}
 		}
 	}
-	for _, line := range slices.Sorted(maps.Keys(lines)) {
+	for _, line := range sortedFindings(lines) {
 		io.WriteString(stdout, line)
 	}
 	return code
@@ -210,7 +214,7 @@ func analyse(graph *lint.Graph) (string, int) {
 		}
 	})
 	parallel(len(dirs), func(i int) { scanTemplates(dirs[i], emit) })
-	for _, line := range slices.Sorted(maps.Keys(lines)) {
+	for _, line := range sortedFindings(lines) {
 		out.WriteString(line + "\n")
 	}
 	if out.Len() > 0 {
@@ -282,4 +286,41 @@ func parallel(n int, f func(int)) {
 	}
 	close(next)
 	wg.Wait()
+}
+
+// findingPos matches a finding's leading "file:line:col: ". The file is
+// matched greedily so a path holding a colon (a Windows drive) stays
+// whole.
+var findingPos = regexp.MustCompile(`^(.*):(\d+):(\d+): `)
+
+// sortedFindings returns the findings in lines (keys are findings,
+// trailing newline or not) in position order: by file, then numerically
+// by line and column, then by text. A finding without a position sorts
+// by text after the positioned ones in its file.
+func sortedFindings(lines map[string]bool) []string {
+	type key struct {
+		file      string
+		line, col int
+		text      string
+	}
+	keyOf := func(s string) key {
+		m := findingPos.FindStringSubmatch(s)
+		if m == nil {
+			return key{file: s, line: math.MaxInt, text: s}
+		}
+		line, _ := strconv.Atoi(m[2])
+		col, _ := strconv.Atoi(m[3])
+		return key{file: m[1], line: line, col: col, text: s}
+	}
+	out := slices.Collect(maps.Keys(lines))
+	slices.SortFunc(out, func(a, b string) int {
+		ka, kb := keyOf(a), keyOf(b)
+		return cmp.Or(
+			cmp.Compare(ka.file, kb.file),
+			cmp.Compare(ka.line, kb.line),
+			cmp.Compare(ka.col, kb.col),
+			cmp.Compare(ka.text, kb.text),
+		)
+	})
+	return out
 }
