@@ -429,7 +429,7 @@ func (sp *StructPages) buildHandler(page *PageNode) http.Handler {
 	if h := sp.asHandler(page); h != nil {
 		return h
 	}
-	if len(page.Components) == 0 && len(page.Props) == 0 {
+	if len(page.Components) == 0 && page.Props == nil {
 		return nil
 	}
 
@@ -499,7 +499,7 @@ func selectComponent(page *PageNode, target RenderTarget) (*reflect.Method, erro
 		if m, ok := page.Components["Page"]; ok {
 			return &m, nil
 		}
-		if _, hasProps := page.Props["Props"]; hasProps {
+		if page.Props != nil {
 			return nil, fmt.Errorf("page %s has no Page component, and Props returned no error "+
 				"while the request wants none of its components; return RenderComponent from Props", page.Name)
 		}
@@ -601,9 +601,9 @@ func (sp *StructPages) checkInjection() error {
 	var errs []error
 	for pn := range sp.pc.root.All() {
 		var componentArgs []reflect.Type
-		if m, ok := pn.Props["Props"]; ok && m.Func.IsValid() {
-			errs = append(errs, sp.pc.checkMethodArgs(pn, &m, requestArgTypes, nil))
-			componentArgs = propsResultTypes(&m)
+		if m := pn.Props; m != nil && m.Func.IsValid() {
+			errs = append(errs, sp.pc.checkMethodArgs(pn, m, requestArgTypes, nil))
+			componentArgs = propsResultTypes(m)
 		}
 		for _, name := range slices.Sorted(maps.Keys(pn.Components)) {
 			m := pn.Components[name]
@@ -756,8 +756,8 @@ func (sp *StructPages) execProps(rs *requestScope, pn *PageNode,
 	r *http.Request, w http.ResponseWriter, renderTarget RenderTarget,
 ) ([]reflect.Value, error) {
 	// Look for Props method
-	propMethod, ok := pn.Props["Props"]
-	if !ok {
+	propMethod := pn.Props
+	if propMethod == nil {
 		return nil, nil
 	}
 
@@ -765,7 +765,7 @@ func (sp *StructPages) execProps(rs *requestScope, pn *PageNode,
 		return nil, fmt.Errorf("Props method for page %s has invalid Func", pn.Name)
 	}
 
-	props, err := sp.pc.callMethodIn(rs, pn, &propMethod, requestValues(w, r, renderTarget)...)
+	props, err := sp.pc.callMethodIn(rs, pn, propMethod, requestValues(w, r, renderTarget)...)
 	if err != nil {
 		return nil, fmt.Errorf("error calling Props method %s.Props: %w", pn.Name, err)
 	}

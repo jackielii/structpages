@@ -37,11 +37,14 @@ type PageNode struct {
 	Route         string
 	routeSegments []segment // Pre-parsed route segments for performance
 	Value         reflect.Value
-	Props         map[string]reflect.Method
-	Components    map[string]reflect.Method
-	Middlewares   *reflect.Method
-	Parent        *PageNode
-	Children      []*PageNode
+	// Props is the page's Props method, or nil when it has none. Only the
+	// method named exactly Props is recorded; other methods ending in "Props"
+	// are ordinary helpers.
+	Props       *reflect.Method
+	Components  map[string]reflect.Method
+	Middlewares *reflect.Method
+	Parent      *PageNode
+	Children    []*PageNode
 
 	// idPath is the kebab-cased field-name path from the root (root
 	// excluded) down to this node — the stable identity used to build
@@ -102,7 +105,7 @@ func (pn *PageNode) urlTarget() *PageNode {
 // methods (Components/Props) or implements an ServeHTTP handler. A node that is
 // only a parent of other routes is not routable.
 func (pn *PageNode) routable() bool {
-	if len(pn.Components) > 0 || len(pn.Props) > 0 {
+	if len(pn.Components) > 0 || pn.Props != nil {
 		return true
 	}
 	return pn.hasServeHTTP()
@@ -184,8 +187,8 @@ func (pn PageNode) String() string {
 	for name, comp := range pn.Components {
 		sb.WriteString("\n  component: " + name + " -> " + formatMethod(&comp))
 	}
-	for name, props := range pn.Props {
-		sb.WriteString("\n  prop: " + name + " -> " + formatMethod(&props))
+	if pn.Props != nil {
+		sb.WriteString("\n  props: " + formatMethod(pn.Props))
 	}
 	for i, child := range pn.Children {
 		fmt.Fprintf(&sb, "\n  child %d:", i+1)

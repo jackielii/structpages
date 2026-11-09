@@ -644,10 +644,8 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 
 	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
 	pn := &PageNode{
-		Name: "test",
-		Props: map[string]reflect.Method{
-			"Props": propsMethod,
-		},
+		Name:  "test",
+		Props: &propsMethod,
 		Value: reflect.ValueOf(&pageWithErrorProps{}),
 	}
 
@@ -858,6 +856,71 @@ func TestWithWarnEmptyRoute_DefaultWarning(t *testing.T) {
 	expectedPrefix := "⚠️  Warning: page route has no children and no handler, skipping route registration: EmptyPage"
 	if !strings.Contains(outputStr, expectedPrefix) {
 		t.Errorf("Expected default warning message containing %q, got %q", expectedPrefix, outputStr)
+	}
+}
+
+// helperPropsOnlyPage has a method ending in "Props" but no Props method and
+// no components: it is not routable.
+type helperPropsOnlyPage struct{}
+
+func (helperPropsOnlyPage) UserListProps() (string, error) { return "users", nil }
+
+// propsWithHelperPage has Props plus an ordinary UserListProps helper.
+type propsWithHelperPage struct{}
+
+func (p propsWithHelperPage) Props() (string, error) { return p.UserListProps() }
+
+func (propsWithHelperPage) UserListProps() (string, error) { return "from-props", nil }
+
+func (propsWithHelperPage) Page(s string) testComponent { return testComponent{content: s} }
+
+func TestOnlyExactPropsIsPropsMethod(t *testing.T) {
+	type pages struct {
+		Helper     helperPropsOnlyPage `route:"/helper Helper"`
+		WithHelper propsWithHelperPage `route:"/with Helper"`
+	}
+
+	var warned []string
+	mux := http.NewServeMux()
+	sp, err := Mount(mux, &pages{}, "/", "Test", WithWarnEmptyRoute(func(pn *PageNode) {
+		warned = append(warned, pn.Name)
+	}))
+	if err != nil {
+		t.Fatalf("Mount failed: %v", err)
+	}
+	if diff := cmp.Diff([]string{"Helper"}, warned); diff != "" {
+		t.Errorf("empty-route warnings (-want +got):\n%s", diff)
+	}
+
+	var helper, withHelper *PageNode
+	for pn := range sp.pc.root.All() {
+		switch pn.Name {
+		case "Helper":
+			helper = pn
+		case "WithHelper":
+			withHelper = pn
+		}
+	}
+	if helper == nil || withHelper == nil {
+		t.Fatal("pages not found in tree")
+	}
+	if helper.Props != nil {
+		t.Errorf("Helper.Props = %s, want nil", helper.Props.Name)
+	}
+	if withHelper.Props == nil || withHelper.Props.Name != "Props" {
+		t.Errorf("WithHelper.Props = %v, want the Props method", withHelper.Props)
+	}
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/helper", http.NoBody))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /helper status = %d, want 404", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/with", http.NoBody))
+	if rec.Code != http.StatusOK || rec.Body.String() != "from-props" {
+		t.Errorf("GET /with = %d %q, want 200 %q", rec.Code, rec.Body.String(), "from-props")
 	}
 }
 
