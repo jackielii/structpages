@@ -12,8 +12,8 @@ A route struct's methods say what kind of route it is. Follow one rule and the f
 
 | Route struct | Kind | What it does |
 |---|---|---|
-| Has `Page` (`Content` optional; `Props` returns data and an error) | **Page** | A document. `Page` renders the whole document; `Content`, when present, serves in-shell swaps. |
-| No `Page`; `Props(...) error` returning `RenderComponent(...)` | **Fragment** | Markup meant to be swapped into a document: a dialog, a region, a row. Props picks the component and renders it explicitly. |
+| Has `Page`, plus any region components (`Content`, `Orders`, `Invoices`, …); `Props` returns data and an error | **Page** | A document. A navigation gets `Page`; an htmx request for a region gets that component, on the page's own URL: `Content` for in-shell swaps, `Orders` to refresh the orders table. These are the page's **partials**. |
+| No `Page`; `Props(...) error` returning `RenderComponent(...)` | **Fragment** | Markup with its own route, only ever swapped into a document: a dialog, a lazily loaded panel, a row. Props picks the component and renders it explicitly. |
 | `ServeHTTP(w, r, ...) error` | **Action** | Does something. A POST, PATCH or DELETE may answer with a refreshed region; a GET only redirects or fails ("jump to message", an old alias). |
 | `ServeHTTP(w, r, ...)` with no error | **Protocol** | Owns the response: downloads, JSON, server-sent events, OAuth callbacks. |
 | Only child routes | **Group** | No handler of its own. Its `/{$}` child is its index page. |
@@ -44,7 +44,79 @@ component (p product) Content(prod Product) {
 }
 ```
 
-`Content` is optional. Add it when your layout swaps the main area (`hx-target="#content"`) and the page should answer with just that part. Regions of a page that refresh on their own (a stats widget, a results list) are components of the page too, chosen with `target.Is` as described in [HTMX Integration](./htmx.md).
+`Content` is optional. Add it when your layout swaps the main area (`hx-target="#content"`) and the page should answer with just that part.
+
+### Partials: regions of a page
+
+A page usually has more than one region that refreshes on its own: two tables, a filter panel, a stats widget. Each is a component of the page, served from the page's own URL. `Props` returns one value per region, asks `target.Is` which region the request wants, and loads only that region's data:
+
+```go
+type account struct{}
+
+func (p account) Props(r *http.Request, target structpages.RenderTarget, store *Store) (Account, []Order, []Invoice, error) {
+    id := r.PathValue("accountId")
+    switch {
+    case target.Is(p.Orders):
+        orders, err := store.Orders(id, r.FormValue("status"))
+        return Account{}, orders, nil, err
+    case target.Is(p.Invoices):
+        invoices, err := store.Invoices(id)
+        return Account{}, nil, invoices, err
+    }
+    // Page and Content: everything.
+    acct, err := store.Account(id)
+    if err != nil {
+        return Account{}, nil, nil, err
+    }
+    orders, err := store.Orders(id, "")
+    if err != nil {
+        return Account{}, nil, nil, err
+    }
+    invoices, err := store.Invoices(id)
+    return acct, orders, invoices, err
+}
+```
+
+```gsx
+component (p account) Page(acct Account, orders []Order, invoices []Invoice) {
+	<Layout>
+		<p.Content acct={acct} orders={orders} invoices={invoices}/>
+	</Layout>
+}
+
+component (p account) Content(acct Account, orders []Order, invoices []Invoice) {
+	<h1>{ acct.Name }</h1>
+	<p.Orders orders={orders}/>
+	<p.Invoices invoices={invoices}/>
+}
+
+component (p account) Orders(orders []Order) {
+	<section id={account.Orders |> id}>
+		<select
+			name="status"
+			hx-get={account{} |> url}
+			hx-target={account.Orders |> target}
+			hx-swap="outerHTML"
+		>…</select>
+		<table>…</table>
+	</section>
+}
+
+component (p account) Invoices(invoices []Invoice) {
+	<section id={account.Invoices |> id}><table>…</table></section>
+}
+```
+
+| Request | Renders | Data loaded |
+|---|---|---|
+| navigation to `/accounts/42` | `Page` | everything |
+| htmx, `hx-target="#content"` | `Content` | everything |
+| htmx, target `account.Orders` | `Orders` | orders only |
+| htmx, target `account.Invoices` | `Invoices` | invoices only |
+
+Each component takes only its own values, filled by type from Props' results, so give each region its own type. The framework renders the component the target `Is`, so Props only branches to load less; it doesn't need `RenderComponent`. The full matching rules are in [HTMX Integration](./htmx.md#rendertarget-in-props).
+
+**Partial or fragment?** A partial has no URL of its own: a navigation to the page's URL gets the whole page, so there is nothing to guard. Make a region a partial when it is part of the page on first load and refreshes in place. Make it a [fragment](#fragments), with its own route, when it is only fetched on demand (a dialog, a panel opened by a click) or needs parameters the page doesn't have, such as the id of the row being edited.
 
 ## Fragments
 
@@ -258,7 +330,7 @@ The guard repairs a fragment URL that a browser opens. It is better never to put
 
 ## Checklist
 
-- A GET that shows a document has `Page`.
+- A GET that shows a document has `Page`. Its regions are components of the same page, chosen with `target.Is`.
 - A GET that shows part of a document has no `Page`, and its `Props` returns `RenderComponent(...)` or an error.
 - No component of a fragment is named `Page`.
 - A GET `ServeHTTP` only redirects or fails.

@@ -70,7 +70,7 @@ already accept `(T, error)` and hoist the error out of `Render`. Full rules in Â
 | **page group** | a page with no render of its own (no component methods, `Props` or `ServeHTTP`), only child pages; served through its `/{$}` child |
 | **component** | a standalone `component Foo(...)`: mount-independent, package-prefixed id |
 | **page component** | a method component `component (p Page) Foo(...)`: mount-aware, includes `Page` and `Content`. Composed inside another page component, or returned alone as a partial |
-| **partial** | a page component (or component) rendered alone as an HTMX response; a role, not a kind |
+| **partial** | a page component (or component) rendered alone as an HTMX response from its page's own URL (`Content`, `UserList`); a role, not a kind. Contrast **fragment**, which has its own route |
 | **key** | the identity of one instance of a component rendered per item (a row, a card), like React's `key`. In the instance's id (`key` filter); Props reads it back with `KeyOf(t)` |
 | **Props method** | `Props(...)`: loads data through DI and returns the **props** (one or more values) handed by type to the page component that renders |
 | **fragment** | a page with no `Page` whose `Props` returns only an error, rendering a named component with `RenderComponent`: a dialog, rows, a panel swapped into another page |
@@ -126,8 +126,8 @@ type adminPages struct {
 
 | Route struct | Kind |
 |---|---|
-| Has `Page` (`Content` optional; `Props` returns data and an error) | page: a document |
-| No `Page`; `Props(...) error` returning `RenderComponent(p.Dialog(...))` | fragment: swapped into a page, never a document |
+| Has `Page`, plus any region components (`Content`, `Orders`, `Invoices`, â€¦); `Props` returns data and an error | page: a document. Navigation gets `Page`; an htmx request for a region gets that component (a partial) from the page's own URL, Props loading only its data |
+| No `Page`; `Props(...) error` returning `RenderComponent(p.Dialog(...))` | fragment: its own route, swapped into a page, never a document |
 | `ServeHTTP(w, r, ...) error` | action: POST/PATCH/DELETE may render a region; a GET only redirects or fails |
 | `ServeHTTP(w, r, ...)`, no error | protocol: downloads, JSON, SSE, callbacks |
 
@@ -188,7 +188,9 @@ component (p editDialog) Dialog(it store.Item) {
 }
 ```
 
-No `Page`, and `Props` returns only `error`. With several components, choose with `target.Is` inside
+No `Page`, and `Props` returns only `error`. Use a fragment for what is fetched on demand or needs its own
+params (a dialog, a click-opened panel); a region that loads with the page and refreshes in place is a
+partial of that page instead. With several components, choose with `target.Is` inside
 `Props` and still return `RenderComponent`. Never name a fragment's component `Page` (a browser opening the
 URL gets bare markup) and never return data for the fallback to render (with no `Page`, a request that
 wants none of its components is an error).

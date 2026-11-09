@@ -13,13 +13,13 @@ structpages has its own canonical terms for its recurring patterns. Where a Reac
 | Term | What it is | Cross-ref |
 |---|---|---|
 | **page** | a route-tagged struct — a node in the route tree | Next/RR route/page |
-| **fragment** | a page with no `Page`: its `Props` returns only an error and renders a named component with `RenderComponent`. Swapped into other pages; never a document. See [Route Conventions](./route-conventions.md) | — |
+| **fragment** | a page with no `Page`: its own route, whose `Props` returns only an error and renders a named component with `RenderComponent`. Swapped into other pages; never a document. See [Route Conventions](./route-conventions.md) | — |
 | **action** | a page whose **handler method** does something (save, delete, redirect). A GET action only redirects or fails | — |
 | **page group** | a page with no render of its own (no `Page` or `ServeHTTP`), only child pages; served through its `/{$}` page | — (not a "layout route") |
 | **component** | a standalone `component Foo(...)` — reusable, mount-independent, package-prefixed id | React component |
 | **page component** | a method component `component (p Page) Foo(...)` — mount-aware, receiver in scope (incl. `Page`, `Content`). Used two ways: **composition** (called inside another page component) and **re-rendering** (returned alone as a partial) | React component (bound) |
 | **children** | a `children gsx.Node` parameter rendered with `{ children }` | React children |
-| **partial** | a page component returned on its own as an HTMX response to re-render just that region — a *role* a page component plays, not a distinct kind | HTMX |
+| **partial** | a page component returned on its own as an HTMX response to re-render just that region, from the page's own URL (`Content`, `UserList`, `Orders`) — a *role* a page component plays, not a distinct kind. Contrast **fragment**, which has its own route | HTMX |
 
 ## The props cluster
 

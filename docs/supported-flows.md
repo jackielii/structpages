@@ -10,8 +10,8 @@ There are five main shapes — choose based on what the page does. The first two
 
 | Shape | Entry | When to use |
 |---|---|---|
-| **Renders a page** | `Props(...)` + `Page(props)` | Standard pages, HTMX partials — the primary pattern |
-| **Renders a fragment** | `Props(...) error` returning `RenderComponent(...)`, no `Page` | Dialogs, rows, panels that only exist inside another page |
+| **Renders a page** | `Props(...)` + `Page(props)`, plus region components (`Content`, `UserList`, …) | Standard pages, and their HTMX partials served from the page's own URL — the primary pattern |
+| **Renders a fragment** | `Props(...) error` returning `RenderComponent(...)`, no `Page` | Dialogs, rows, panels on their own route, that only exist inside another page |
 | **Returns a partial** | `ServeHTTP(w, r, deps...) error` | Form actions (POST, PATCH, DELETE) that mutate then refresh a region |
 | **Redirects** | `ServeHTTP(w, r, deps...) error` | Post-action navigation, and GETs that only redirect (old URLs, "jump to" links) |
 | **Serves JSON** | `ServeHTTP(w, r, deps...)` *(no error return)* | API endpoints |
