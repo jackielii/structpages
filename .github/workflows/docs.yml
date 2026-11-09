@@ -9,6 +9,7 @@ on:
       - '**/*.go'
       - '!**/*_test.go'
       - 'README.md'
+      - 'site/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -25,17 +26,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout docs-site branch
-        uses: actions/checkout@v4
-        with:
-          ref: docs-site
-          path: site
-
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          path: main
+      - uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -49,38 +40,10 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Copy markdown content from main
+      - name: Copy content into the site
         run: |
-          set -euo pipefail
-          mkdir -p site/docs site/docs/reference site/docs/examples
-          cp main/docs/*.md site/docs/
-          {
-            printf -- '---\n'
-            printf -- 'title: Examples\n'
-            printf -- '---\n\n'
-            cat main/examples/README.md
-          } > site/docs/examples/index.md
-          # Rewrite cross-directory `../X` links (any sibling of docs/) to
-          # absolute GitHub URLs so they resolve on the rendered site.
-          find site/docs -name '*.md' -print0 | xargs -0 sed -i -E \
-            -e 's#\]\(\.\./([^)]+)\)#](https://github.com/jackielii/structpages/tree/main/\1)#g'
-          # Examples README uses `./<name>/` links (relative to examples/).
-          # In docs/examples/index.md those would resolve to /structpages/<name>
-          # which doesn't exist, so rewrite to absolute GitHub URLs.
-          sed -i -E \
-            -e 's#\]\(\./([^)]+/?)\)#](https://github.com/jackielii/structpages/tree/main/examples/\1)#g' \
-            site/docs/examples/index.md
-
-      - name: Generate package reference
-        run: |
-          set -euo pipefail
           go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
-          cd main
-          gomarkdoc -o ../site/docs/reference/package.md ./
-          # gomarkdoc anchors with <a name>, which VitePress never scrolls to.
-          # Move each anchor onto the heading it precedes as a {#id} so
-          # #CurrentPage lands below the navbar; the rest become <a id>.
-          perl -0pi -e 's/<a name="([^"]+)"><\/a>\n(#+ [^\n]*)/$2 {#$1}/g; s/<a name="([^"]+)"><\/a>/<a id="$1"><\/a>/g' ../site/docs/reference/package.md
+          site/sync-content.sh
 
       - name: Install site dependencies
         working-directory: site
