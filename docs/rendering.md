@@ -240,7 +240,7 @@ component (p exportPage) Table(rows Rows) { … }
 component (p exportPage) Card(rows Rows) { … }
 ```
 
-Don't leave the choice to the normal flow. When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error (`page <name> has no Page component…`). And don't name a fragment's component `Page` to fill the gap: a browser that opens the fragment's URL would get its bare markup as a document. [Route Conventions](./route-conventions.md) sets out the rule, and a middleware that redirects such navigations to the page hosting the fragment.
+Don't leave the choice to the normal flow. When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error (`page <name> has no Page component…`). And don't name a fragment's component `Page` to fill the gap: a browser that opens the fragment's URL would get its bare markup as a document. [Route Conventions](./route-conventions.md) sets out the rule, and [Guarding Fragment URLs](./fragment-guard.md) a middleware that redirects such navigations to the page hosting the fragment.
 
 ### A custom selector
 

@@ -304,7 +304,7 @@ The rule generalizes: **one page component per independently-swappable region, o
 
 `hx-push-url` puts a request's URL in the address bar, and the browser treats that URL as a document from then on: reload, Back, a copied link. Push only page URLs. A nav link that swaps `#content` from a page's URL is fine, since the page answers a navigation with its whole `Page`. A request to a fragment (a dialog, a row) should push nothing, or push the hosting page's URL.
 
-Responses that differ by htmx headers also need `Vary: HX-Request, HX-Target`, or an HTTP cache can answer a navigation with a partial. [Route Conventions](./route-conventions.md#guarding-fragment-urls) has a middleware that sets these headers and redirects a browser that opens a fragment URL anyway.
+Responses that differ by htmx headers also need `Vary: HX-Request, HX-Target`, or an HTTP cache can answer a navigation with a partial. [Guarding Fragment URLs](./fragment-guard.md) has a middleware that sets these headers and redirects a browser that opens a fragment URL anyway.
 
 ## Custom target selectors
 
@@ -342,6 +342,6 @@ A custom target carries the key of a [keyed component](#keyed-components-one-ins
 ## See also
 
 - [How a Request Is Rendered](./rendering.md) for the full flow, including where parameter values come from.
-- [Route Conventions](./route-conventions.md) for pages vs fragments, and guarding fragment URLs.
+- [Route Conventions](./route-conventions.md) for pages vs fragments, and [Guarding Fragment URLs](./fragment-guard.md) for keeping fragment URLs out of the address bar.
 - `examples/htmx`, `examples/todo`, and `examples/htmx-render-target` in the [repository](https://github.com/jackielii/structpages/tree/main/examples) for complete working code.
 - [Error Handling](./error-handling.md) for HTMX-aware redirects (`HX-Location`).

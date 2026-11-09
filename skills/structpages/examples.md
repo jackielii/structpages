@@ -337,7 +337,7 @@ The hosting page loads it into a placeholder:
 
 Don't name the fragment's component `Page`: a browser that opens the fragment's URL (new tab, reload after
 `hx-push-url`) would get its bare markup as a document. Don't push a fragment URL to history. The
-navigation guard in docs/route-conventions.md redirects such navigations to the page above the fragment.
+navigation guard in docs/fragment-guard.md redirects such navigations to the page above the fragment.
 
 ---
 

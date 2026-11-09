@@ -19,14 +19,15 @@ import (
 // the guard redirects to the page that hosts it without running Props.
 //
 // It also marks responses that differ by request headers as such (Vary), so
-// a cache never answers a navigation with a partial, and makes fragments and
-// partials no-store by default.
+// a cache never answers a navigation with a partial, makes fragments and
+// partials no-store by default, and keeps fragment URLs out of history.
 func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 	_, hasPage := pn.Components["Page"]
 	fragment := !hasPage && pn.Props != nil
 	if !hasPage && !fragment {
 		return next // ServeHTTP pages: actions, redirects, downloads, JSON
 	}
+	_, landsItself := pn.Value.Interface().(SelfLanding)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		addVary(w.Header(), varyHeaders...)
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -40,7 +41,19 @@ func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 			// before returning RenderComponent.
 			w.Header().Set("Cache-Control", "private, no-store")
 		}
-		if !fragment || intent == partial {
+		if intent == partial {
+			// A partial is never answered 304: the browser's copy may be
+			// another representation of the same URL.
+			r = r.Clone(r.Context())
+			r.Header.Del("If-None-Match")
+			r.Header.Del("If-Modified-Since")
+			if fragment {
+				// A fragment URL never reaches the address bar, whatever
+				// hx-push-url the element says.
+				w.Header().Set("HX-Push-Url", "false")
+			}
+		}
+		if !fragment || intent == partial || landsItself {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -113,6 +126,11 @@ func requestIntent(r *http.Request) intent {
 	return partial
 }
 
+// Partial reports whether a read asks for part of a page. Only a
+// SelfLanding fragment needs it: the guard has already answered every other
+// fragment's page loads.
+func Partial(r *http.Request) bool { return requestIntent(r) == partial }
+
 // targetsBody reports whether an htmx request swaps the whole body: htmx 4
 // sends HX-Target "body" or "body#id"; htmx 2 sends the target's id, so a
 // boosted request into an id-less body has no HX-Target.
@@ -125,9 +143,17 @@ func targetsBody(r *http.Request) bool {
 }
 
 // Landing is implemented by a fragment whose hosting page is not an
-// ancestor, to name where a document navigation should go instead.
+// ancestor, to name where a document navigation should go instead. It
+// builds the URL from the request alone: no lookups, no access checks.
 type Landing interface {
 	Landing(r *http.Request) (string, error)
+}
+
+// SelfLanding marks a fragment whose landing page needs a lookup or an
+// access check, which the guard never makes. The guard lets its page loads
+// through, and its Props redirects when !Partial(r).
+type SelfLanding interface {
+	LandsItself()
 }
 
 var errNoLanding = errors.New("no page hosts this fragment")
