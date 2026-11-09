@@ -13,7 +13,7 @@ import (
 	_gsxio "io"
 )
 
-//line components.gsx:17:1
+//line components.gsx:18:1
 type AlertKind string
 
 const (
@@ -33,17 +33,17 @@ func alertClasses(kind AlertKind) string {
 	}
 }
 
-//line components.gsx:36:1
+//line components.gsx:37:1
 func Alert(kind AlertKind, msg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line components.gsx:37:2
+//line components.gsx:38:2
 		if msg != "" {
-//line components.gsx:38:3
+//line components.gsx:39:3
 			_gsxgw.S("<div class=\"")
 			_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("rounded border px-3 py-2 text-sm"), _gsxrt.Class(alertClasses(kind)))
 			_gsxgw.S("\">")
-//line components.gsx:39:4
+//line components.gsx:40:4
 			_gsxgw.Text(string(msg))
 			_gsxgw.S("</div>")
 		}
@@ -51,61 +51,61 @@ func Alert(kind AlertKind, msg string) _gsxrt.Node {
 	})
 }
 
-//line components.gsx:44:1
+//line components.gsx:45:1
 func Card(title string, children gsx.Node) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line components.gsx:45:2
+//line components.gsx:46:2
 		_gsxgw.S("<section class=\"rounded-lg border bg-white p-5 shadow-sm\">")
-//line components.gsx:46:3
+//line components.gsx:47:3
 		if title != "" {
-//line components.gsx:47:4
+//line components.gsx:48:4
 			_gsxgw.S("<h2 class=\"mb-3 text-base font-semibold text-slate-900\">")
-//line components.gsx:48:5
+//line components.gsx:49:5
 			_gsxgw.Text(string(title))
 			_gsxgw.S("</h2>")
 		}
-//line components.gsx:51:3
+//line components.gsx:52:3
 		_gsxgw.Node(ctx, children)
 		_gsxgw.S("</section>")
 		return _gsxgw.Err()
 	})
 }
 
-//line components.gsx:55:1
+//line components.gsx:56:1
 // Button takes its label plus an attrs bag: unmatched call-site attributes
 // (type, hx-*, etc.) collect in attrs and land on the root <button>.
 
-//line components.gsx:57:1
+//line components.gsx:58:1
 func Button(label string, attrs gsx.Attrs) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line components.gsx:58:2
+//line components.gsx:59:2
 		_gsxgw.S("<button class=\"")
 		_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("inline-flex items-center rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"), _gsxrt.Class(attrs.Class()))
 		_gsxgw.S("\"")
 		_gsxgw.StyleMerged("", attrs.Style())
 		_gsxgw.Spread(ctx, "button", attrs, _gsxrt.AttrSinks{}, []string{"class", "style"})
 		_gsxgw.S(">")
-//line components.gsx:62:3
+//line components.gsx:63:3
 		_gsxgw.Text(string(label))
 		_gsxgw.S("</button>")
 		return _gsxgw.Err()
 	})
 }
 
-//line components.gsx:66:1
+//line components.gsx:67:1
 func Input(name, label, value, errMsg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line components.gsx:67:2
+//line components.gsx:68:2
 		_gsxgw.S("<label class=\"block text-sm\">")
-//line components.gsx:68:3
+//line components.gsx:69:3
 		_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">")
-//line components.gsx:68:55
+//line components.gsx:69:55
 		_gsxgw.Text(string(label))
 		_gsxgw.S("</span>")
-//line components.gsx:69:3
+//line components.gsx:70:3
 		_gsxgw.S("<input name=\"")
 		_gsxgw.AttrValue(string(name))
 		_gsxgw.S("\" value=\"")
@@ -113,11 +113,11 @@ func Input(name, label, value, errMsg string) _gsxrt.Node {
 		_gsxgw.S("\" class=\"")
 		_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("w-full rounded border px-2 py-1.5 text-sm"), _gsxrt.ClassIf("border-slate-300", errMsg == ""), _gsxrt.ClassIf("border-red-400", errMsg != ""))
 		_gsxgw.S("\">")
-//line components.gsx:76:3
+//line components.gsx:77:3
 		if errMsg != "" {
-//line components.gsx:77:4
+//line components.gsx:78:4
 			_gsxgw.S("<span class=\"mt-1 block text-xs text-red-600\">")
-//line components.gsx:77:50
+//line components.gsx:78:50
 			_gsxgw.Text(string(errMsg))
 			_gsxgw.S("</span>")
 		}
@@ -126,31 +126,31 @@ func Input(name, label, value, errMsg string) _gsxrt.Node {
 	})
 }
 
-//line components.gsx:82:1
+//line components.gsx:83:1
 func Textarea(name, label, value, errMsg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line components.gsx:83:2
+//line components.gsx:84:2
 		_gsxgw.S("<label class=\"block text-sm\">")
-//line components.gsx:84:3
+//line components.gsx:85:3
 		_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">")
-//line components.gsx:84:55
+//line components.gsx:85:55
 		_gsxgw.Text(string(label))
 		_gsxgw.S("</span>")
-//line components.gsx:85:3
+//line components.gsx:86:3
 		_gsxgw.S("<textarea name=\"")
 		_gsxgw.AttrValue(string(name))
 		_gsxgw.S("\" rows=\"6\" class=\"")
 		_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("w-full rounded border px-2 py-1.5 text-sm"), _gsxrt.ClassIf("border-slate-300", errMsg == ""), _gsxrt.ClassIf("border-red-400", errMsg != ""))
 		_gsxgw.S("\">")
-//line components.gsx:91:4
+//line components.gsx:92:4
 		_gsxgw.Text(string(value))
 		_gsxgw.S("</textarea>")
-//line components.gsx:92:3
+//line components.gsx:93:3
 		if errMsg != "" {
-//line components.gsx:93:4
+//line components.gsx:94:4
 			_gsxgw.S("<span class=\"mt-1 block text-xs text-red-600\">")
-//line components.gsx:93:50
+//line components.gsx:94:50
 			_gsxgw.Text(string(errMsg))
 			_gsxgw.S("</span>")
 		}
@@ -163,7 +163,7 @@ func Textarea(name, label, value, errMsg string) _gsxrt.Node {
 // given page number; callers typically call structpages.URLFor with the
 // "?page={page}" template form.
 //
-//line components.gsx:98:1
+//line components.gsx:99:1
 type PageNav struct {
 	Page     int
 	PageSize int
@@ -203,21 +203,21 @@ func (p PageNav) HasNext() bool { return p.Page < p.Pages() }
 // Pagination is rendered as a standalone function component so HTMX requests
 // with HX-Target: #pagination resolve here regardless of which page hosts it.
 
-//line components.gsx:139:1
+//line components.gsx:140:1
 func Pagination(p PageNav) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 		var _gsxnum [32]byte
-//line components.gsx:140:2
+//line components.gsx:141:2
 		_gsxgw.S("<nav id=\"pagination\" class=\"flex items-center justify-between text-sm\">")
-//line components.gsx:141:3
+//line components.gsx:142:3
 		_gsxgw.S("<span class=\"text-slate-500\">")
-//line components.gsx:141:32
+//line components.gsx:142:32
 		_gsxgw.Text(string(p.Range()))
 		_gsxgw.S("</span>")
-//line components.gsx:142:3
+//line components.gsx:143:3
 		_gsxgw.S("<div class=\"flex gap-2\">")
-//line components.gsx:143:4
+//line components.gsx:144:4
 		_gsxgw.S("<a class=\"")
 		_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("rounded border px-2 py-1"), _gsxrt.ClassIf("hover:bg-slate-50", p.HasPrev()), _gsxrt.ClassIf("text-slate-300", !p.HasPrev()))
 		_gsxgw.S("\"")
@@ -231,15 +231,15 @@ func Pagination(p PageNav) _gsxrt.Node {
 			_gsxgw.S("\"")
 		}
 		_gsxgw.S(">← Prev</a>")
-//line components.gsx:151:4
+//line components.gsx:152:4
 		_gsxgw.S("<span class=\"px-2 py-1 text-slate-600\">Page ")
-//line components.gsx:152:10
+//line components.gsx:153:10
 		_gsxgw.IntInto(_gsxnum[:], int64(p.Page))
 		_gsxgw.S(" of ")
-//line components.gsx:152:24
+//line components.gsx:153:24
 		_gsxgw.IntInto(_gsxnum[:], int64(p.Pages()))
 		_gsxgw.S("</span>")
-//line components.gsx:154:4
+//line components.gsx:155:4
 		_gsxgw.S("<a class=\"")
 		_gsxgw.Class(_gsxrt.DefaultClassMerge, _gsxrt.Class("rounded border px-2 py-1"), _gsxrt.ClassIf("hover:bg-slate-50", p.HasNext()), _gsxrt.ClassIf("text-slate-300", !p.HasNext()))
 		_gsxgw.S("\"")
@@ -257,43 +257,43 @@ func Pagination(p PageNav) _gsxrt.Node {
 	})
 }
 
-//line components.gsx:166:1
+//line components.gsx:167:1
 // ErrorPage is the full document rendered by main.errorHandler for non-HTMX
 // errors. ErrorBlock is the partial used for HTMX requests.
 
-//line components.gsx:168:1
+//line components.gsx:169:1
 func ErrorPage(status int, msg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
 		var _gsxnum [32]byte
 		_gsxgw.S("<!DOCTYPE html>")
-//line components.gsx:170:2
+//line components.gsx:171:2
 		_gsxgw.S("<html lang=\"en\">")
-//line components.gsx:171:3
+//line components.gsx:172:3
 		_gsxgw.S("<head>")
-//line components.gsx:172:4
-		_gsxgw.S("<meta charset=\"utf-8\">")
 //line components.gsx:173:4
+		_gsxgw.S("<meta charset=\"utf-8\">")
+//line components.gsx:174:4
 		_gsxgw.S("<title>Error ")
-//line components.gsx:173:17
+//line components.gsx:174:17
 		_gsxgw.IntInto(_gsxnum[:], int64(status))
 		_gsxgw.S("</title>")
-//line components.gsx:174:4
+//line components.gsx:175:4
 		_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
 		_gsxgw.Nonce(ctx)
 		_gsxgw.S("></script></head>")
-//line components.gsx:176:3
+//line components.gsx:177:3
 		_gsxgw.S("<body class=\"bg-slate-50 text-slate-900\">")
-//line components.gsx:177:4
+//line components.gsx:178:4
 		_gsxgw.S("<main class=\"mx-auto max-w-md px-4 py-16\">")
-//line components.gsx:178:5
+//line components.gsx:179:5
 		_gsxgw.NodeResult(_gsxrenderErrorBlock(ctx, _gsxgw, status, msg))
 		_gsxgw.S("</main></body></html>")
 		return _gsxgw.Err()
 	})
 }
 
-//line components.gsx:184:1
+//line components.gsx:185:1
 func ErrorBlock(status int, msg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
@@ -306,19 +306,19 @@ func _gsxrenderErrorBlock(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, status int
 		return _gsxerr
 	}
 	var _gsxnum [32]byte
-//line components.gsx:185:2
+//line components.gsx:186:2
 	_gsxgw.S("<div class=\"rounded-lg border border-red-200 bg-red-50 p-6 text-center\">")
-//line components.gsx:186:3
+//line components.gsx:187:3
 	_gsxgw.S("<div class=\"text-4xl font-semibold text-red-700\">")
-//line components.gsx:186:52
+//line components.gsx:187:52
 	_gsxgw.IntInto(_gsxnum[:], int64(status))
 	_gsxgw.S("</div>")
-//line components.gsx:187:3
+//line components.gsx:188:3
 	_gsxgw.S("<p class=\"mt-2 text-red-700\">")
-//line components.gsx:187:32
+//line components.gsx:188:32
 	_gsxgw.Text(string(msg))
 	_gsxgw.S("</p>")
-//line components.gsx:188:3
+//line components.gsx:189:3
 	_gsxgw.S("<a class=\"mt-4 inline-block text-sm text-red-700 underline\"")
 	_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (structpages.Ref("home")))
 	if _gsxerr != nil {

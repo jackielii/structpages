@@ -27,10 +27,10 @@ import (
 // returns RequireAdmin, which would otherwise lock unauthenticated users
 // out of the very form they need to sign in with.
 type rootPages struct {
-	blog      blogpkg.Pages   `route:"/ Blog"`
+	blog      blogpkg.Pages     `route:"/ Blog"`
 	loginPage admin.LoginPage   `route:"GET /admin/login Admin Login"`
 	login     admin.LoginAction `route:"POST /admin/login Sign In"`
-	admin     admin.Pages     `route:"/admin Admin"`
+	admin     admin.Pages       `route:"/admin Admin"`
 }
 
 func main() {
