@@ -191,7 +191,7 @@ Some routes aren't HTML at all: file downloads, JSON APIs, server-sent event str
 
 Fragments have URLs, and browsers will open them: a link opened in a new tab, a notification click, a bookmark, Back or reload after a URL was pushed to history. Each of these gets bare markup with no layout, no scripts and no styles.
 
-Under these conventions the fix is one generic middleware. A [`MiddlewareFunc`](./middleware.md) receives each route's `*PageNode` at mount time, and the node already says what kind of route it is: `pn.Components["Page"]` for a page, `pn.Props["Props"]` without `Page` for a fragment. For a fragment, the guard looks at what the request wants:
+Under these conventions the fix is one generic middleware. A [`MiddlewareFunc`](./middleware.md) receives each route's `*PageNode` at mount time, and the node already says what kind of route it is: `pn.Components["Page"]` for a page, `pn.Props` without `Page` for a fragment. For a fragment, the guard looks at what the request wants:
 
 | Request | Wants | Guard's response |
 |---|---|---|
@@ -214,8 +214,7 @@ The guard also keeps caches from mixing representations: every rendering route g
 ```go
 func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
     _, hasPage := pn.Components["Page"]
-    _, hasProps := pn.Props["Props"]
-    fragment := !hasPage && hasProps
+    fragment := !hasPage && pn.Props != nil
     if !hasPage && !fragment {
         return next // ServeHTTP routes: actions, redirects, protocols
     }

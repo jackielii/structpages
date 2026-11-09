@@ -21,8 +21,7 @@ import (
 // never answers a navigation with a partial.
 func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
 	_, hasPage := pn.Components["Page"]
-	_, hasProps := pn.Props["Props"]
-	fragment := !hasPage && hasProps
+	fragment := !hasPage && pn.Props != nil
 	if !hasPage && !fragment {
 		return next // ServeHTTP pages: actions, redirects, downloads, JSON
 	}

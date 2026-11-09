@@ -95,7 +95,7 @@ func loggingMiddleware(next http.Handler, pn *structpages.PageNode) http.Handler
 }
 ```
 
-Middleware can also act on what kind of route it wraps, since the `PageNode` exposes the page's components (`pn.Components["Page"]`), Props (`pn.Props["Props"]`), parents and children. [Route Conventions](./route-conventions.md#guarding-fragment-urls) builds a navigation guard this way: for a fragment route (no `Page`), it redirects a browser navigation to the nearest page above it, found by walking `pn.Parent` and resolved with `URLFor`.
+Middleware can also act on what kind of route it wraps, since the `PageNode` exposes the page's components (`pn.Components["Page"]`), Props method (`pn.Props`, nil when it has none), parents and children. [Route Conventions](./route-conventions.md#guarding-fragment-urls) builds a navigation guard this way: for a fragment route (no `Page`), it redirects a browser navigation to the nearest page above it, found by walking `pn.Parent` and resolved with `URLFor`.
 
 ## Middleware execution order
 
