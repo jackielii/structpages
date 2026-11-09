@@ -131,8 +131,12 @@ type adminPages struct {
 | `ServeHTTP(w, r, ...) error` | action: POST/PATCH/DELETE may render a region; a GET only redirects or fails |
 | `ServeHTTP(w, r, ...)`, no error | protocol: downloads, JSON, SSE, callbacks |
 
-Full write-up, including a middleware that redirects a browser opening a fragment URL to the page above
-it: docs/route-conventions.md (https://jackielii.github.io/structpages/route-conventions).
+One route type per HTTP method: a GET fragment and its POST action are separate types sharing plain
+functions, never one handler switching on `r.Method`. Full write-up: docs/route-conventions.md
+(https://jackielii.github.io/structpages/route-conventions). A middleware that lands a browser opening a
+fragment URL on the page above it (default ancestor, a `Landing` override, or a `SelfLanding` fragment
+that redirects itself), and keeps fragment URLs out of history and caches: docs/fragment-guard.md
+(https://jackielii.github.io/structpages/fragment-guard).
 
 ### Props + Page (rendering page)
 

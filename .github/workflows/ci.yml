@@ -93,6 +93,7 @@ jobs:
           - simple
           - htmx
           - htmx-render-target
+          - fragment-guard
           - todo
           - lint-misuse
           - blog

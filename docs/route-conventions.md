@@ -18,7 +18,7 @@ A route struct's methods say what kind of route it is. Follow one rule and the f
 | `ServeHTTP(w, r, ...)` with no error | **Protocol** | Owns the response: downloads, JSON, server-sent events, OAuth callbacks. |
 | Only child routes | **Group** | No handler of its own. Its `/{$}` child is its index page. |
 
-None of this needs a library change. It is a way of using what structpages already does, and the [navigation guard](#guarding-fragment-urls) below builds on it.
+None of this needs a library change. It is a way of using what structpages already does, and [Guarding Fragment URLs](./fragment-guard.md) builds a navigation guard on it.
 
 ## Pages
 
@@ -187,204 +187,50 @@ Keep pages and actions apart, too. `ServeHTTP` takes precedence over `Page`, so 
 
 Some routes aren't HTML at all: file downloads, JSON APIs, server-sent event streams, OAuth callbacks, static assets. Use the [no-error `ServeHTTP` form](./supported-flows.md#servehttp-signatures) so writes go straight to the wire and the HTML error handler stays out of it. If your app checks routes against these conventions (a linter, a test that visits every GET), give protocol routes an explicit marker, such as a method of your own, so they are an exception you declared rather than one you guessed.
 
-## Guarding fragment URLs
+## One route type per method
 
-Fragments have URLs, and browsers will open them: a link opened in a new tab, a notification click, a bookmark, Back or reload after a URL was pushed to history. Each of these gets bare markup with no layout, no scripts and no styles.
-
-Under these conventions the fix is one generic middleware. A [`MiddlewareFunc`](./middleware.md) receives each route's `*PageNode` at mount time, and the node already says what kind of route it is: `pn.Components["Page"]` for a page, `pn.Props` without `Page` for a fragment. For a fragment, the guard looks at what the request wants:
-
-| Request (GET or HEAD) | Wants | Guard's response |
-|---|---|---|
-| `Sec-Fetch-Mode: navigate`, or `Sec-Fetch-Dest: document`, `iframe` or `frame` | a document, whatever htmx headers it carries | 303 to the landing page |
-| `HX-History-Restore-Request: true` | a document | 303 (htmx 2 restores history with its own request, which follows redirects but ignores response headers) |
-| `HX-Request: true` that swaps the body: `HX-Target` of `body` (htmx 4), or no `HX-Target` with `HX-Boosted: true` (htmx 2) | a whole page | `HX-Location` to the landing page |
-| `HX-Request: true`, otherwise | a part of a page | the fragment, as usual |
-| anything else: no htmx headers, curl, tests | a document | 303 to the landing page |
-
-Don't read htmx 4's `HX-Request-Type: full` as a page load. htmx 4 sends `full` when the target is the body, but also for any `hx-select` swap into an element; a guard that redirects every `full` request navigates away from the page when a dialog loads with `hx-select`. The target says what is being replaced, so the guard asks it.
-
-Only htmx requests that swap part of the page get the fragment; everything else counts as a navigation. The guard redirects **without running Props**, so it loads no data and doesn't depend on the fragment's parameters being valid. Writes pass straight through: for a POST, any htmx request is an htmx request, and your error handler can answer it as one.
-
-The landing page is, in order:
-
-1. the fragment's own choice, when it implements a `Landing(*http.Request) (string, error)` method. Use this when the page that hosts the fragment is a sibling rather than an ancestor;
-2. the nearest ancestor with `Page`, or a group's `/{$}` index page, whose path parameters the request can fill;
-3. otherwise, your app's not-found page.
-
-**The redirect comes before the fragment's access checks.** Props hasn't run, so a visitor who may not see the record gets the same 303 as one who may, not the fragment's 403 or 404. The landing page then applies its own authorization. Choose landings that reveal nothing on their own (the URL already carries the ids the fragment's URL did), and test a fragment's access with the partial request (`HX-Request: true` and an `HX-Target`), not a plain GET, which only ever sees the redirect.
-
-The guard also keeps caches from mixing representations:
-
-- Every rendering route gets `Vary` on the htmx and `Sec-Fetch` headers. The guard merges its tokens into any `Vary` other middleware set, so each appears once.
-- Fragment and partial responses default to `Cache-Control: private, no-store`, and so do the guard's redirects. A fragment whose successful response is safe to keep, such as a notification count, sets its own header in `Props` just before returning `RenderComponent` (`w.Header().Set("Cache-Control", "private, max-age=3600")`). Set it only on that success path: Props' writer isn't buffered, so a header set before an error stays on the error response.
+A form usually has a GET that shows it and a POST that saves it, at the same path. Give each method its own route type: the GET is a fragment (or a page) with `Props`, and the POST, PATCH or DELETE is an action with `ServeHTTP`. They share plain functions for what they have in common, such as loading the record:
 
 ```go
-func NavigationGuard(next http.Handler, pn *structpages.PageNode) http.Handler {
-    _, hasPage := pn.Components["Page"]
-    fragment := !hasPage && pn.Props != nil
-    if !hasPage && !fragment {
-        return next // ServeHTTP pages: actions, redirects, downloads, JSON
-    }
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        addVary(w.Header(), varyHeaders...)
-        if r.Method != http.MethodGet && r.Method != http.MethodHead {
-            next.ServeHTTP(w, r) // writes: any htmx request stays an htmx request
-            return
-        }
-        intent := requestIntent(r)
-        if intent == partial || fragment {
-            // The default. A fragment whose successful response may be
-            // cached privately sets its own Cache-Control in Props, just
-            // before returning RenderComponent.
-            w.Header().Set("Cache-Control", "private, no-store")
-        }
-        if !fragment || intent == partial {
-            next.ServeHTTP(w, r)
-            return
-        }
-        // Redirect before Props runs, so before the fragment's own access
-        // checks: the landing page applies its own.
-        to, err := landingURL(r, pn)
-        if err != nil {
-            http.NotFound(w, r) // render your app's error page here
-            return
-        }
-        if intent == wholePage {
-            w.Header().Set("HX-Location", to)
-            return
-        }
-        http.Redirect(w, r, to, http.StatusSeeOther)
-    })
+type pages struct {
+    rename     renameDialog `route:"GET /widgets/{widget}/rename Rename widget"`
+    saveRename saveRename   `route:"POST /widgets/{widget}/rename Rename widget"`
 }
 
-var varyHeaders = []string{
-    "HX-Request", "HX-Target", "HX-Request-Type", "HX-Boosted",
-    "HX-History-Restore-Request", "Sec-Fetch-Mode", "Sec-Fetch-Dest",
+// loadRename is the shared part. Both route types call it; neither calls the other.
+func loadRename(r *http.Request, store *Store) (renameForm, error) {
+    w, err := store.Widget(r.Context(), r.PathValue("widget"))
+    if err != nil {
+        return renameForm{}, err
+    }
+    return renameForm{Widget: w, Name: w.Name}, nil
 }
 
-// addVary adds tokens to the Vary header once each, keeping what other
-// middleware already put there.
-func addVary(h http.Header, tokens ...string) {
-    var all []string
-    for _, v := range h.Values("Vary") {
-        for _, t := range strings.Split(v, ",") {
-            if t = strings.TrimSpace(t); t != "" {
-                all = append(all, t)
-            }
-        }
+// Props shows the dialog: no form parsing, no writes.
+func (p renameDialog) Props(r *http.Request, store *Store) error {
+    f, err := loadRename(r, store)
+    if err != nil {
+        return err
     }
-    for _, t := range tokens {
-        if !slices.ContainsFunc(all, func(s string) bool { return strings.EqualFold(s, t) }) {
-            all = append(all, t)
-        }
-    }
-    h.Set("Vary", strings.Join(all, ", "))
+    return structpages.RenderComponent(p.Dialog(f))
 }
 
-type intent int
-
-const (
-    document  intent = iota // a browser navigation, curl, a test: wants a document
-    wholePage               // an htmx request that swaps the whole body (boosted links)
-    partial                 // an htmx request for part of a page
-)
-
-// requestIntent reads what kind of response a read is for. Anything that is
-// not an htmx request counts as a document.
-func requestIntent(r *http.Request) intent {
-    switch r.Header.Get("Sec-Fetch-Dest") {
-    case "document", "iframe", "frame":
-        return document
+// ServeHTTP saves the new name, the only place that parses the form and writes.
+func (saveRename) ServeHTTP(w http.ResponseWriter, r *http.Request, store *Store) error {
+    f, err := loadRename(r, store)
+    if err != nil {
+        return err
     }
-    // htmx 2 restores history on a cache miss with its own request, which
-    // follows redirects but reads no response headers: send it a 303.
-    if r.Header.Get("Sec-Fetch-Mode") == "navigate" ||
-        r.Header.Get("HX-History-Restore-Request") == "true" ||
-        r.Header.Get("HX-Request") != "true" {
-        return document
-    }
-    if targetsBody(r) {
-        return wholePage
-    }
-    // Everything else is a partial, including htmx 4's HX-Request-Type: full,
-    // which it also sends for any hx-select swap into an element.
-    return partial
-}
-
-// targetsBody reports whether an htmx request swaps the whole body: htmx 4
-// sends HX-Target "body" or "body#id"; htmx 2 sends the target's id, so a
-// boosted request into an id-less body has no HX-Target.
-func targetsBody(r *http.Request) bool {
-    target := r.Header.Get("HX-Target")
-    if tag, _, _ := strings.Cut(target, "#"); tag == "body" {
-        return true
-    }
-    return target == "" && r.Header.Get("HX-Boosted") == "true"
-}
-
-// Landing is implemented by a fragment whose hosting page is not an
-// ancestor, to name where a document navigation should go instead.
-type Landing interface {
-    Landing(r *http.Request) (string, error)
-}
-
-var errNoLanding = errors.New("no page hosts this fragment")
-
-// landingURL returns where a document navigation to fragment pn goes: its
-// Landing, else the nearest ancestor that is a page (or a group's index
-// page) whose URL the request's path parameters can fill.
-func landingURL(r *http.Request, pn *structpages.PageNode) (string, error) {
-    if l, ok := pn.Value.Interface().(Landing); ok {
-        return l.Landing(r)
-    }
-    for a := pn.Parent; a != nil; a = a.Parent {
-        for _, n := range append([]*structpages.PageNode{a}, a.Children...) {
-            if n != a && strings.Trim(n.Route, "/") != "{$}" {
-                continue // only a itself, or its index child
-            }
-            if !isGETPage(n) {
-                continue
-            }
-            to, err := structpages.URLFor(r.Context(), func(c *structpages.PageNode) bool { return c == n })
-            if err == nil {
-                return to, nil
-            }
-        }
-    }
-    return "", errNoLanding
-}
-
-func isGETPage(pn *structpages.PageNode) bool {
-    _, hasPage := pn.Components["Page"]
-    return hasPage && (pn.Method == http.MethodGet || pn.Method == "ALL")
+    f.Name = r.PostFormValue("name")
+    // validate, save, and answer with the refreshed widget
 }
 ```
 
-Register it with the rest of your middleware:
+Never switch on `r.Method` inside one handler, and never call another route's handler. A shared handler hides the POST's parsing and writes behind the GET, and middleware that reads the route's shape sees a fragment where there is also an action. The one exception is HEAD on a protocol resource, which the same no-error `ServeHTTP` answers.
 
-```go
-sp, err := structpages.Mount(mux, index{}, "/", "App",
-    structpages.WithTargetSelector(structpages.HTMXRenderTarget),
-    structpages.WithMiddlewares(NavigationGuard),
-)
-```
+## Fragment URLs in the browser
 
-`URLFor` works inside middleware: structpages puts the route tree and the request's path parameters in the context before your middleware runs, so `/items/{id}/edit` lands on `/items/{id}` with the same `id`. A predicate that compares nodes (`c == n`) finds exactly the ancestor the guard chose.
-
-The [htmx example](https://github.com/jackielii/structpages/tree/main/examples/htmx) runs this guard, and its `navguard_test.go` drives each request kind through it.
-
-Adapt it to your app where it differs:
-
-- **Authentication.** Put the guard before your sign-in middleware if a signed-out visitor should come back to the landing page rather than the fragment URL. Middleware after it still sees the request's htmx headers, `HX-Target` included; the guard doesn't rewrite them.
-- **Error pages.** Replace `http.NotFound` with your app's full-document error page.
-- **Query strings.** The landing URL carries path parameters only. A fragment that should keep, say, `?tab=`, builds its URL in its `Landing` method.
-
-### Keep fragment URLs out of history
-
-The guard repairs a fragment URL that a browser opens. It is better never to put one in the address bar:
-
-- Only push or replace page URLs. Use `hx-push-url="true"` on requests to a page (the htmx example's nav links swap `#content` from page URLs), and on a fragment request set `hx-push-url="false"` or push the hosting page's URL explicitly.
-- `Vary` keeps HTTP caches apart, but the browser's back-forward cache stores whole documents, not responses. A document whose address is a fragment URL can only be fixed by a reload, which the guard then redirects.
+Fragments have URLs, and browsers will open them: a link in a new tab, a bookmark, a notification click, Back or reload after a URL was pushed. Each of these gets bare markup with no layout. Because the route kinds above are visible on every `*PageNode`, one middleware can fix this for every fragment at once. [Guarding Fragment URLs](./fragment-guard.md) is the full pattern: telling a page load from a partial, choosing where a fragment's page load lands, keeping fragment URLs out of history and caches, and enforcing the shapes.
 
 ## Checklist
 
@@ -394,10 +240,12 @@ The guard repairs a fragment URL that a browser opens. It is better never to put
 - A GET `ServeHTTP` only redirects or fails.
 - Non-HTML routes use the no-error `ServeHTTP` form.
 - No route has both `Page` and `ServeHTTP`.
+- Each HTTP method has its own route type; nothing switches on `r.Method`.
 - Only page URLs are pushed to history.
 
 ## See also
 
+- [Guarding Fragment URLs](./fragment-guard.md): the navigation guard, landing pages, history and caching.
 - [Page Response Patterns](./supported-flows.md): the shapes in code, with the todo example.
 - [How a Request Is Rendered](./rendering.md): the target selector, Props, and which component renders.
 - [Middleware](./middleware.md): `MiddlewareFunc` and the `*PageNode` it receives.

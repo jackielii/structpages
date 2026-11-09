@@ -49,4 +49,5 @@ A request is matched to a page, its Props method loads data, and a page componen
 - [Testing](./testing.md) for rendering pages and components in unit tests.
 - [Examples](./examples/index.md) for full working apps in `examples/` you can clone.
 - [Page Response Patterns](./supported-flows.md) for choosing between the Props/Page and `ServeHTTP` shapes.
-- [Route Conventions](./route-conventions.md) for telling pages, fragments and actions apart, and keeping fragment URLs out of the address bar.
+- [Route Conventions](./route-conventions.md) for telling pages, fragments and actions apart.
+- [Guarding Fragment URLs](./fragment-guard.md) for keeping fragment URLs out of the address bar.

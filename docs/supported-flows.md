@@ -178,7 +178,8 @@ Only the error-returning forms are buffered; what that means for writing `w` is 
 
 ## See also
 
-- [Route Conventions](./route-conventions.md) — pages, fragments, actions and protocols, and guarding fragment URLs.
+- [Route Conventions](./route-conventions.md) — pages, fragments, actions and protocols.
+- [Guarding Fragment URLs](./fragment-guard.md) — what happens when a browser opens a fragment URL.
 - [How a Request Is Rendered](./rendering.md) — the flow: target selector, Props, which component renders.
 - [HTMX Integration](./htmx.md) — `RenderTarget`, partial selection, the id loop.
 - [Error Handling](./error-handling.md) — buffering rules, typed errors, redirects, JSON.
