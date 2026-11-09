@@ -107,12 +107,12 @@ When adding new features:
 
 ## Docs Site
 
-The published site (https://jackielii.github.io/structpages/) is built from **two sources**:
+The published site (https://jackielii.github.io/structpages/) is built from `main` alone:
 
-- **Markdown content** comes from `docs/*.md` and `examples/README.md` on `main`, plus a package reference generated with gomarkdoc — the Docs Site workflow copies it in at build time.
-- **The site shell** (VitePress config and sidebar in `.vitepress/config.mts`, homepage in `index.md`, the gsx TextMate grammar for ```` ```gsx ```` fences) lives on the separate `docs-site` branch, checked out as a worktree at `../structpages-docs-site`. New doc pages need a sidebar entry there.
+- **Markdown content** is `docs/*.md` and `examples/README.md`, plus a package reference generated with gomarkdoc. `site/sync-content.sh` copies it into `site/docs/` (git-ignored).
+- **The site shell** lives in `site/`: VitePress config and sidebar in `site/.vitepress/config.mts`, homepage in `site/index.md`, the gsx TextMate grammar for ```` ```gsx ```` fences. New doc pages need a sidebar entry there. `site/go.mod` keeps the directory out of the structpages module zip.
 
-The workflow only auto-triggers on pushes to `main`. After pushing to `docs-site`, deploy manually with `gh workflow run "Docs Site"`. When changing repo-wide claims (e.g. the Alpha→Beta status, June 2026), remember the homepage hero in `index.md` on `docs-site` — it's hardcoded there and not covered by grepping `main`.
+The Docs Site workflow deploys on pushes to `main` that touch docs, the examples README, Go API files or `site/`. Preview locally with `cd site && npm ci && ./sync-content.sh && npm run dev`. When changing repo-wide claims (e.g. the Alpha→Beta status, June 2026), remember the homepage hero in `site/index.md`: it's hardcoded there.
 
 ## Claude Code Skill
 
