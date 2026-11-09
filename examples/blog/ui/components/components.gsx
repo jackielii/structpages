@@ -10,6 +10,8 @@ package components
 import (
 	"fmt"
 
+	"github.com/jackielii/structpages"
+
 	"github.com/gsxhq/gsx"
 )
 
@@ -184,7 +186,10 @@ component ErrorBlock(status int, msg string) {
 	<div class="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
 		<div class="text-4xl font-semibold text-red-700">{ status }</div>
 		<p class="mt-2 text-red-700">{ msg }</p>
-		<a class="mt-4 inline-block text-sm text-red-700 underline" href="/">
+		<a
+			class="mt-4 inline-block text-sm text-red-700 underline"
+			href={structpages.Ref("home") |> url}
+		>
 			Back to home
 		</a>
 	</div>

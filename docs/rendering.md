@@ -12,7 +12,7 @@ One sentence covers the whole model:
 
 - The **target selector** reads the request and produces a `RenderTarget`: *what the request wants*.
 - **`Props`** loads data. Returning `(results…, nil)` continues the normal flow: the framework renders what the request wants, using those results. Returning an error breaks the flow. `RenderComponent`, `ErrSkipPageRender` and real errors are all errors.
-- **The framework** renders the component the target `Is`, or `Page` if it `Is` none of them.
+- **The framework** renders the component the target `Is`, or `Page` if it `Is` none of them. A [fragment](./route-conventions.md#fragments) has no `Page` and always breaks the flow with `RenderComponent`.
 
 Everything on this page follows from those three steps.
 
@@ -218,27 +218,29 @@ func (p dashboard) Props(t structpages.RenderTarget, store *Store) (Stats, []Not
 
 A request for the widget renders `Page`, not the widget. Asking `Is` changes nothing: after `Props`, the framework asks the target about the page's own components, the widget is none of them, so `Page` renders. Return `RenderComponent(ui.StatsWidget(s))` to render it.
 
-### A page without `Page`
+### A page without `Page`: a fragment
+
+A page without `Page` is a **fragment**: markup that is only ever swapped into some other page, such as a dialog or a list's rows. Its `Props` returns only an error, and chooses what renders itself:
 
 ```gsx
 type exportPage struct{}
 
-func (p exportPage) Props(r *http.Request, store *Store) (Rows, error) {
+func (p exportPage) Props(r *http.Request, store *Store) error {
     rows, err := store.Rows(r.Context())
     if err != nil {
-        return nil, err
+        return err
     }
     if r.URL.Query().Get("view") == "table" {
-        return nil, structpages.RenderComponent(p.Table(rows))
+        return structpages.RenderComponent(p.Table(rows))
     }
-    return rows, nil // wants Card? renders Card. Wants nothing? error.
+    return structpages.RenderComponent(p.Card(rows))
 }
 
 component (p exportPage) Table(rows Rows) { … }
 component (p exportPage) Card(rows Rows) { … }
 ```
 
-When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error (`page <name> has no Page component…`). `Props` must choose with `RenderComponent`.
+Don't leave the choice to the normal flow. When the request wants none of its components, a page without `Page` has nothing to fall back to: returning no error is an error (`page <name> has no Page component…`). And don't name a fragment's component `Page` to fill the gap: a browser that opens the fragment's URL would get its bare markup as a document. [Route Conventions](./route-conventions.md) sets out the rule, and a middleware that redirects such navigations to the page hosting the fragment.
 
 ### A custom selector
 

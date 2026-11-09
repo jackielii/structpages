@@ -13,41 +13,55 @@ import (
 	_gsxio "io"
 )
 
-/*line login.gsx:11:1*/ // LoginPage handles both GET and POST at /admin/login. It is mounted as a
-// sibling of admin.Pages (in main), so RequireAdmin does not gate it.
+// LoginPage is the sign-in document at GET /admin/login, and LoginAction
+// handles the form's POST to the same path. They are mounted by main as
+// siblings of admin.Pages, so RequireAdmin does not gate them.
 //
-// Because it defines ServeHTTP, structpages routes everything to that
-// method directly — there's no Props/Page split for this page.
+// The split follows the route convention: a GET that shows something is a
+// page (it has Page), and ServeHTTP only does things — here, sign in and
+// redirect, or show the form again with the error.
+//
+//line login.gsx:11:1
 type LoginPage struct{}
 
-func (LoginPage) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Service) error {
-	var (
-		username string
-		errMsg   string
-	)
-	if r.Method == http.MethodPost {
-		username = r.FormValue("username")
-		password := r.FormValue("password")
-		if _, err := a.Login(w, username, password); err != nil {
-			errMsg = "Invalid username or password."
-		} else {
-			http.Redirect(w, r, "/admin/", http.StatusSeeOther)
-			return nil
-		}
-	}
-	return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+//line login.gsx:20:1
+func (p LoginPage) Page() _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line login.gsx:33:37
-		_gsxgw.NodeResult(_gsxrenderLoginShell(ctx, _gsxgw, username, errMsg))
+//line login.gsx:21:2
+		_gsxgw.NodeResult(_gsxrenderLoginShell(ctx, _gsxgw, "", ""))
 		return _gsxgw.Err()
-	}) /*line login.gsx:33:86*/)
+	})
 }
 
-// LoginShell is rendered by LoginPage.ServeHTTP above. gsx requires
+/*line login.gsx:22:2*/
+
+type LoginAction struct{}
+
+func (LoginAction) ServeHTTP(w http.ResponseWriter, r *http.Request, a *auth.Service) error {
+	username := r.FormValue("username")
+	if _, err := a.Login(w, username, r.FormValue("password")); err != nil {
+		return structpages.RenderComponent(_gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+			_gsxgw := _gsxrt.W(_gsxw)
+//line login.gsx:29:38
+			_gsxgw.NodeResult(_gsxrenderLoginShell(ctx, _gsxgw, username, "Invalid username or password."))
+			return _gsxgw.Err()
+		}) /*line login.gsx:29:110*/)
+	}
+	dashboard, err := structpages.URLFor(r.Context(), structpages.Ref("dashboard"))
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, dashboard, http.StatusSeeOther)
+	return nil
+}
+
+// LoginShell is the whole sign-in document, rendered by LoginPage.Page and,
+// with an error, by LoginAction. gsx requires
 // component names to be Capitalized (lowercase = HTML element), so the templ
 // `loginShell` becomes `LoginShell`.
 //
-//line login.gsx:39:1
+//line login.gsx:43:1
 func LoginShell(username, errMsg string) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
@@ -60,55 +74,55 @@ func _gsxrenderLoginShell(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, username, 
 		return _gsxerr
 	}
 	_gsxgw.S("<!DOCTYPE html>")
-//line login.gsx:41:2
+//line login.gsx:45:2
 	_gsxgw.S("<html lang=\"en\">")
-//line login.gsx:42:3
+//line login.gsx:46:3
 	_gsxgw.S("<head>")
-//line login.gsx:43:4
+//line login.gsx:47:4
 	_gsxgw.S("<meta charset=\"utf-8\">")
-//line login.gsx:44:4
+//line login.gsx:48:4
 	_gsxgw.S("<title>Sign in — blog admin</title>")
-//line login.gsx:45:4
+//line login.gsx:49:4
 	_gsxgw.S("<script src=\"https://cdn.tailwindcss.com\"")
 	_gsxgw.Nonce(ctx)
 	_gsxgw.S("></script></head>")
-//line login.gsx:47:3
+//line login.gsx:51:3
 	_gsxgw.S("<body class=\"bg-slate-100 text-slate-900\">")
-//line login.gsx:48:4
+//line login.gsx:52:4
 	_gsxgw.S("<main class=\"mx-auto max-w-sm px-4 py-16\">")
-//line login.gsx:49:5
+//line login.gsx:53:5
 	_gsxgw.Node(ctx, components.Card("Sign in", _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line login.gsx:50:6
+//line login.gsx:54:6
 		_gsxgw.S("<form method=\"POST\" class=\"space-y-3\">")
-//line login.gsx:51:7
-		_gsxgw.Node(ctx, components.Alert(components.AlertError, errMsg))
 //line login.gsx:55:7
+		_gsxgw.Node(ctx, components.Alert(components.AlertError, errMsg))
+//line login.gsx:59:7
 		_gsxgw.S("<label class=\"block text-sm\">")
-//line login.gsx:56:8
+//line login.gsx:60:8
 		_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">Username</span>")
-//line login.gsx:59:8
+//line login.gsx:63:8
 		_gsxgw.S("<input name=\"username\" value=\"")
 		_gsxgw.AttrValue(string(username))
 		_gsxgw.S("\"")
 		_gsxgw.BoolAttr("required", true)
 		_gsxgw.BoolAttr("autofocus", true)
 		_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"></label>")
-//line login.gsx:67:7
+//line login.gsx:71:7
 		_gsxgw.S("<label class=\"block text-sm\">")
-//line login.gsx:68:8
+//line login.gsx:72:8
 		_gsxgw.S("<span class=\"mb-1 block font-medium text-slate-700\">Password</span>")
-//line login.gsx:71:8
+//line login.gsx:75:8
 		_gsxgw.S("<input type=\"password\" name=\"password\"")
 		_gsxgw.BoolAttr("required", true)
 		_gsxgw.S(" class=\"w-full rounded border border-slate-300 px-2 py-1.5 text-sm\"></label>")
-//line login.gsx:78:7
+//line login.gsx:82:7
 		_gsxgw.S("<button type=\"submit\" class=\"inline-flex w-full items-center justify-center rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700\">Sign in</button>")
-//line login.gsx:84:7
+//line login.gsx:88:7
 		_gsxgw.S("<p class=\"text-xs text-slate-500\">Demo credentials: ")
-//line login.gsx:85:26
+//line login.gsx:89:26
 		_gsxgw.S("<code>admin</code> / ")
-//line login.gsx:85:47
+//line login.gsx:89:47
 		_gsxgw.S("<code>admin</code></p></form>")
 		return _gsxgw.Err()
 	})))

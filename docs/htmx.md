@@ -300,6 +300,12 @@ component (d FooDetail) Detail(props FooProps) {
 
 The rule generalizes: **one page component per independently-swappable region, outer wraps inner, embed/target the innermost that has no chrome above it.**
 
+## History and fragment URLs
+
+`hx-push-url` puts a request's URL in the address bar, and the browser treats that URL as a document from then on: reload, Back, a copied link. Push only page URLs. A nav link that swaps `#content` from a page's URL is fine, since the page answers a navigation with its whole `Page`. A request to a fragment (a dialog, a row) should push nothing, or push the hosting page's URL.
+
+Responses that differ by htmx headers also need `Vary: HX-Request, HX-Target`, or an HTTP cache can answer a navigation with a partial. [Route Conventions](./route-conventions.md#guarding-fragment-urls) has a middleware that sets these headers and redirects a browser that opens a fragment URL anyway.
+
 ## Custom target selectors
 
 The built-in selectors cover htmx. `HTMXRenderTarget` reads htmx 1.x/2.x headers (`HX-Request`, `HX-Target` as a bare id). For htmx 4 — which reshaped `HX-Target` to `"<tag>#<id>"` and added `HX-Request-Type` — use `HTMXv4RenderTarget`; it also wants `Page` for `HX-Request-Type: full` (boosted links, `hx-select`). Both match `HX-Target` against the served page's components by the generated id (keyed or not), the component name with or without the page prefix, or a suffix of it.
@@ -336,5 +342,6 @@ A custom target carries the key of a [keyed component](#keyed-components-one-ins
 ## See also
 
 - [How a Request Is Rendered](./rendering.md) for the full flow, including where parameter values come from.
+- [Route Conventions](./route-conventions.md) for pages vs fragments, and guarding fragment URLs.
 - `examples/htmx`, `examples/todo`, and `examples/htmx-render-target` in the [repository](https://github.com/jackielii/structpages/tree/main/examples) for complete working code.
 - [Error Handling](./error-handling.md) for HTMX-aware redirects (`HX-Location`).

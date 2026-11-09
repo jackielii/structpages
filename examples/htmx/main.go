@@ -26,7 +26,7 @@ func main() {
 		// htmx 2.x: route HX-Target to the page's partials.
 		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithErrorHandler(errorHandler),
-		structpages.WithMiddlewares(PrintRoutes(&routes)),
+		structpages.WithMiddlewares(PrintRoutes(&routes), NavigationGuard),
 	)
 	if err != nil {
 		log.Fatalf("Failed to mount pages: %v", err)

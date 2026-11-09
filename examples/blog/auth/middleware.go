@@ -17,14 +17,20 @@ func UserFromContext(ctx context.Context) (store.User, bool) {
 }
 
 // RequireAdmin gates descendant pages. It redirects unauthenticated visitors
-// to /admin/login and forbids non-admin users. The authenticated user is
+// to the login page and forbids non-admin users. The authenticated user is
 // stashed in the request context so admin pages can read it without re-querying.
 func RequireAdmin(a *Service) structpages.MiddlewareFunc {
 	return func(next http.Handler, _ *structpages.PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			u, ok := a.Current(r)
 			if !ok {
-				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+				// Ref, not LoginPage{}: admin imports auth, so auth can't import admin.
+				login, err := structpages.URLFor(r.Context(), structpages.Ref("loginPage"))
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				http.Redirect(w, r, login, http.StatusSeeOther)
 				return
 			}
 			if !u.IsAdmin {

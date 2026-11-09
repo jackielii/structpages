@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/gsxhq/gsx"
+	"github.com/jackielii/structpages"
 )
 
 type index struct {
@@ -14,7 +15,14 @@ type index struct {
 }
 type product struct{}
 type team struct{}
-type contact struct{}
+type contact struct {
+	details contactDetails `route:"GET /details Contact Details"`
+}
+
+// contactDetails and throw are fragments: no Page, and Props decides what
+// to render. NavigationGuard sends a browser that opens one directly to the
+// page that hosts it (contact, or index for throw).
+type contactDetails struct{}
 type throw struct{}
 
 component (p index) Page() {
@@ -62,11 +70,27 @@ component (p contact) Page() {
 component (p contact) Content() {
 	<h1>Contact Page</h1>
 	<p>This is the contact page.</p>
+	<div id={contactDetails.Details |> id}>
+		<button
+			hx-get={contactDetails{} |> url}
+			hx-target={contactDetails.Details |> target}
+		>
+			Show details
+		</button>
+	</div>
 }
 
-func errFunc() (string, error) { return "", fmt.Errorf("this is an error") }
-component (p throw) Page() {
-	<p>{ errFunc() }</p>
+func (p contactDetails) Props() error {
+	return structpages.RenderComponent(p.Details())
+}
+
+component (p contactDetails) Details() {
+	<p>Email us at hello@example.com, or call 555-0100.</p>
+}
+
+// Props fails, so the error handler renders the response.
+func (throw) Props() error {
+	return errors.New("this is an error")
 }
 
 component Layout(children gsx.Node) {

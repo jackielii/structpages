@@ -13,6 +13,8 @@ structpages has its own canonical terms for its recurring patterns. Where a Reac
 | Term | What it is | Cross-ref |
 |---|---|---|
 | **page** | a route-tagged struct — a node in the route tree | Next/RR route/page |
+| **fragment** | a page with no `Page`: its `Props` returns only an error and renders a named component with `RenderComponent`. Swapped into other pages; never a document. See [Route Conventions](./route-conventions.md) | — |
+| **action** | a page whose **handler method** does something (save, delete, redirect). A GET action only redirects or fails | — |
 | **page group** | a page with no render of its own (no `Page` or `ServeHTTP`), only child pages; served through its `/{$}` page | — (not a "layout route") |
 | **component** | a standalone `component Foo(...)` — reusable, mount-independent, package-prefixed id | React component |
 | **page component** | a method component `component (p Page) Foo(...)` — mount-aware, receiver in scope (incl. `Page`, `Content`). Used two ways: **composition** (called inside another page component) and **re-rendering** (returned alone as a partial) | React component (bound) |
@@ -35,7 +37,7 @@ The chain reads: the **Props method** returns a **props struct**; that **props**
 |---|---|---|
 | **Page method** | `Page(props)` | the main render entry — a page component that composes the full page (layout + content) |
 | **Props method** | `Props(...)` | loads data via DI → returns the props struct (or several values, each page component taking the ones it needs by type) |
-| **handler method** | `ServeHTTP(...)` | imperative entry: mutate / redirect / serve JSON, or render a partial via `RenderComponent` — the Go `http.Handler` shape |
+| **handler method** | `ServeHTTP(...)` | imperative entry: mutate / redirect / serve JSON, or (for a POST, PATCH or DELETE) render a partial via `RenderComponent` — the Go `http.Handler` shape. A GET never renders through it: what a GET shows belongs in `Props` |
 | **Middlewares method** | `Middlewares()` | declares middleware for the page + descendants |
 
 (`Content` is not a framework concept — just a conventional page component name for a layout's main region; the matcher treats it like any other page component.)

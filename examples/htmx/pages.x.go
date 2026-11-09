@@ -3,16 +3,17 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 
 	_gsxctx "context"
 	"github.com/gsxhq/gsx"
 	_gsxrt "github.com/gsxhq/gsx"
+	"github.com/jackielii/structpages"
 	_gsxf0 "github.com/jackielii/structpages"
 	_gsxio "io"
 )
 
-//line pages.gsx:9:1
+//line pages.gsx:10:1
 type index struct {
 	product `route:"/product Product"`
 	team    `route:"/team Team"`
@@ -21,17 +22,24 @@ type index struct {
 }
 type product struct{}
 type team struct{}
-type contact struct{}
+type contact struct {
+	details contactDetails `route:"GET /details Contact Details"`
+}
+
+// contactDetails and throw are fragments: no Page, and Props decides what
+// to render. NavigationGuard sends a browser that opens one directly to the
+// page that hosts it (contact, or index for throw).
+type contactDetails struct{}
 type throw struct{}
 
-//line pages.gsx:20:1
+//line pages.gsx:28:1
 func (p index) Page() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:21:2
+//line pages.gsx:29:2
 		_gsxgw.NodeResult(_gsxrenderLayout(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:22:3
+//line pages.gsx:30:3
 			_gsxgw.Node(ctx, p.Content())
 			return _gsxgw.Err()
 		})))
@@ -39,15 +47,15 @@ func (p index) Page() _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:26:1
+//line pages.gsx:34:1
 func (p index) Content() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:27:2
+//line pages.gsx:35:2
 		_gsxgw.S("<h1>Welcome to the Index Page</h1>")
-//line pages.gsx:28:2
+//line pages.gsx:36:2
 		_gsxgw.S("<p>Navigate to the product, team, or contact pages using the links below:</p>")
-//line pages.gsx:31:2
+//line pages.gsx:39:2
 		_gsxgw.S("<a")
 		_gsxv0, _gsxerr := _gsxf0.URLFor(ctx, (throw{}))
 		if _gsxerr != nil {
@@ -60,14 +68,14 @@ func (p index) Content() _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:34:1
+//line pages.gsx:42:1
 func (p product) Page() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:35:2
+//line pages.gsx:43:2
 		_gsxgw.NodeResult(_gsxrenderLayout(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:36:3
+//line pages.gsx:44:3
 			_gsxgw.Node(ctx, p.Content())
 			return _gsxgw.Err()
 		})))
@@ -75,26 +83,26 @@ func (p product) Page() _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:40:1
+//line pages.gsx:48:1
 func (p product) Content() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:41:2
+//line pages.gsx:49:2
 		_gsxgw.S("<h1>Product Page</h1>")
-//line pages.gsx:42:2
+//line pages.gsx:50:2
 		_gsxgw.S("<p>This is the product page.</p>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:45:1
+//line pages.gsx:53:1
 func (p team) Page() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:46:2
+//line pages.gsx:54:2
 		_gsxgw.NodeResult(_gsxrenderLayout(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:47:3
+//line pages.gsx:55:3
 			_gsxgw.Node(ctx, p.Content())
 			return _gsxgw.Err()
 		})))
@@ -102,26 +110,26 @@ func (p team) Page() _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:51:1
+//line pages.gsx:59:1
 func (p team) Content() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:52:2
+//line pages.gsx:60:2
 		_gsxgw.S("<h1>Team Page</h1>")
-//line pages.gsx:53:2
+//line pages.gsx:61:2
 		_gsxgw.S("<p>This is the team page.</p>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:56:1
+//line pages.gsx:64:1
 func (p contact) Page() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:57:2
+//line pages.gsx:65:2
 		_gsxgw.NodeResult(_gsxrenderLayout(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:58:3
+//line pages.gsx:66:3
 			_gsxgw.Node(ctx, p.Content())
 			return _gsxgw.Err()
 		})))
@@ -129,39 +137,66 @@ func (p contact) Page() _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:62:1
+//line pages.gsx:70:1
 func (p contact) Content() _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:63:2
+//line pages.gsx:71:2
 		_gsxgw.S("<h1>Contact Page</h1>")
-//line pages.gsx:64:2
+//line pages.gsx:72:2
 		_gsxgw.S("<p>This is the contact page.</p>")
-		return _gsxgw.Err()
-	})
-}
-
-//line pages.gsx:67:1
-func errFunc() (string, error) { return "", fmt.Errorf("this is an error") }
-
-//line pages.gsx:68:1
-func (p throw) Page() _gsxrt.Node {
-	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
-		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:69:2
-		_gsxgw.S("<p>")
-//line pages.gsx:69:5
-		_gsxv1, _gsxerr := errFunc()
+//line pages.gsx:73:2
+		_gsxgw.S("<div")
+		_gsxv1, _gsxerr := _gsxf0.ID(ctx, (contactDetails.Details))
 		if _gsxerr != nil {
 			return _gsxerr
 		}
-		_gsxgw.Text(string(_gsxv1))
-		_gsxgw.S("</p>")
+		_gsxgw.S(" id=\"")
+		_gsxgw.AttrValue(string(_gsxv1))
+		_gsxgw.S("\">")
+//line pages.gsx:74:3
+		_gsxgw.S("<button")
+		_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (contactDetails{}))
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" hx-get=\"")
+		_gsxgw.AttrValue(string(_gsxv2))
+		_gsxgw.S("\"")
+		_gsxv3, _gsxerr := _gsxf0.IDTarget(ctx, (contactDetails.Details))
+		if _gsxerr != nil {
+			return _gsxerr
+		}
+		_gsxgw.S(" hx-target=\"")
+		_gsxgw.AttrValue(string(_gsxv3))
+		_gsxgw.S("\">Show details</button></div>")
 		return _gsxgw.Err()
 	})
 }
 
-//line pages.gsx:72:1
+//line pages.gsx:83:1
+func (p contactDetails) Props() error {
+	return structpages.RenderComponent(p.Details())
+}
+
+//line pages.gsx:87:1
+func (p contactDetails) Details() _gsxrt.Node {
+	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
+		_gsxgw := _gsxrt.W(_gsxw)
+//line pages.gsx:88:2
+		_gsxgw.S("<p>Email us at hello@example.com, or call 555-0100.</p>")
+		return _gsxgw.Err()
+	})
+}
+
+// Props fails, so the error handler renders the response.
+//
+//line pages.gsx:91:1
+func (throw) Props() error {
+	return errors.New("this is an error")
+}
+
+//line pages.gsx:96:1
 func Layout(children gsx.Node) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
@@ -174,86 +209,86 @@ func _gsxrenderLayout(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, children gsx.N
 		return _gsxerr
 	}
 	_gsxgw.S("<!DOCTYPE html>")
-//line pages.gsx:74:2
+//line pages.gsx:98:2
 	_gsxgw.S("<html lang=\"en\">")
-//line pages.gsx:75:3
+//line pages.gsx:99:3
 	_gsxgw.S("<head>")
-//line pages.gsx:76:4
+//line pages.gsx:100:4
 	_gsxgw.S("<link rel=\"stylesheet\" href=\"https://unpkg.com/missing.css@1.1.3\">")
-//line pages.gsx:77:4
+//line pages.gsx:101:4
 	_gsxgw.S("<script src=\"https://unpkg.com/htmx.org@2.0.4\"")
 	_gsxgw.Nonce(ctx)
 	_gsxgw.S("></script>")
-//line pages.gsx:78:4
+//line pages.gsx:102:4
 	_gsxgw.S("<title>HTMX Example</title></head>")
-//line pages.gsx:80:3
+//line pages.gsx:104:3
 	_gsxgw.S("<body>")
-//line pages.gsx:81:4
+//line pages.gsx:105:4
 	_gsxgw.S("<header class=\"navbar\">")
-//line pages.gsx:82:5
+//line pages.gsx:106:5
 	_gsxgw.S("<nav>")
-//line pages.gsx:83:6
+//line pages.gsx:107:6
 	_gsxgw.S("<ul role=\"list\" hx-push-url=\"true\" hx-target=\"#content\">")
-//line pages.gsx:84:7
+//line pages.gsx:108:7
 	_gsxgw.S("<li>")
-//line pages.gsx:85:8
+//line pages.gsx:109:8
 	_gsxgw.S("<a")
-	_gsxv2, _gsxerr := _gsxf0.URLFor(ctx, (index{}))
-	if _gsxerr != nil {
-		return _gsxerr
-	}
-	_gsxgw.S(" hx-get=\"")
-	_gsxgw.AttrValue(string(_gsxv2))
-	_gsxgw.S("\">Home</a></li>")
-//line pages.gsx:87:7
-	_gsxgw.S("<li>")
-//line pages.gsx:88:8
-	_gsxgw.S("<a")
-	_gsxv3, _gsxerr := _gsxf0.URLFor(ctx, (product{}))
-	if _gsxerr != nil {
-		return _gsxerr
-	}
-	_gsxgw.S(" hx-get=\"")
-	_gsxgw.AttrValue(string(_gsxv3))
-	_gsxgw.S("\">Product</a></li>")
-//line pages.gsx:90:7
-	_gsxgw.S("<li>")
-//line pages.gsx:91:8
-	_gsxgw.S("<a")
-	_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (team{}))
+	_gsxv4, _gsxerr := _gsxf0.URLFor(ctx, (index{}))
 	if _gsxerr != nil {
 		return _gsxerr
 	}
 	_gsxgw.S(" hx-get=\"")
 	_gsxgw.AttrValue(string(_gsxv4))
-	_gsxgw.S("\">Team</a></li>")
-//line pages.gsx:93:7
+	_gsxgw.S("\">Home</a></li>")
+//line pages.gsx:111:7
 	_gsxgw.S("<li>")
-//line pages.gsx:94:8
+//line pages.gsx:112:8
 	_gsxgw.S("<a")
-	_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (contact{}))
+	_gsxv5, _gsxerr := _gsxf0.URLFor(ctx, (product{}))
 	if _gsxerr != nil {
 		return _gsxerr
 	}
 	_gsxgw.S(" hx-get=\"")
 	_gsxgw.AttrValue(string(_gsxv5))
+	_gsxgw.S("\">Product</a></li>")
+//line pages.gsx:114:7
+	_gsxgw.S("<li>")
+//line pages.gsx:115:8
+	_gsxgw.S("<a")
+	_gsxv6, _gsxerr := _gsxf0.URLFor(ctx, (team{}))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-get=\"")
+	_gsxgw.AttrValue(string(_gsxv6))
+	_gsxgw.S("\">Team</a></li>")
+//line pages.gsx:117:7
+	_gsxgw.S("<li>")
+//line pages.gsx:118:8
+	_gsxgw.S("<a")
+	_gsxv7, _gsxerr := _gsxf0.URLFor(ctx, (contact{}))
+	if _gsxerr != nil {
+		return _gsxerr
+	}
+	_gsxgw.S(" hx-get=\"")
+	_gsxgw.AttrValue(string(_gsxv7))
 	_gsxgw.S("\">Contact</a></li></ul></nav></header>")
-//line pages.gsx:99:4
+//line pages.gsx:123:4
 	_gsxgw.S("<main id=\"content\">")
-//line pages.gsx:99:23
+//line pages.gsx:123:23
 	_gsxgw.Node(ctx, children)
 	_gsxgw.S("</main></body></html>")
 	return _gsxgw.Err()
 }
 
-//line pages.gsx:104:1
+//line pages.gsx:128:1
 func ErrorPage(err error) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:105:2
+//line pages.gsx:129:2
 		_gsxgw.NodeResult(_gsxrenderLayout(ctx, _gsxgw, _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 			_gsxgw := _gsxrt.W(_gsxw)
-//line pages.gsx:106:3
+//line pages.gsx:130:3
 			_gsxgw.NodeResult(_gsxrenderErrorComp(ctx, _gsxgw, err))
 			return _gsxgw.Err()
 		})))
@@ -261,7 +296,7 @@ func ErrorPage(err error) _gsxrt.Node {
 	})
 }
 
-//line pages.gsx:110:1
+//line pages.gsx:134:1
 func ErrorComp(err error) _gsxrt.Node {
 	return _gsxrt.Func(func(ctx _gsxctx.Context, _gsxw _gsxio.Writer) error {
 		_gsxgw := _gsxrt.W(_gsxw)
@@ -273,11 +308,11 @@ func _gsxrenderErrorComp(ctx _gsxctx.Context, _gsxgw *_gsxrt.Writer, err error) 
 	if _gsxerr := _gsxgw.Err(); _gsxerr != nil {
 		return _gsxerr
 	}
-//line pages.gsx:111:2
+//line pages.gsx:135:2
 	_gsxgw.S("<h1>Error</h1>")
-//line pages.gsx:112:2
+//line pages.gsx:136:2
 	_gsxgw.S("<p>")
-//line pages.gsx:112:5
+//line pages.gsx:136:5
 	_gsxgw.Text(string(err.Error()))
 	_gsxgw.S("</p>")
 	return _gsxgw.Err()

@@ -73,7 +73,8 @@ already accept `(T, error)` and hoist the error out of `Render`. Full rules in Â
 | **partial** | a page component (or component) rendered alone as an HTMX response; a role, not a kind |
 | **key** | the identity of one instance of a component rendered per item (a row, a card), like React's `key`. In the instance's id (`key` filter); Props reads it back with `KeyOf(t)` |
 | **Props method** | `Props(...)`: loads data through DI and returns the **props** (one or more values) handed by type to the page component that renders |
-| **handler method** | `ServeHTTP(...)`: mutate, redirect, serve JSON, or render via `RenderComponent` |
+| **fragment** | a page with no `Page` whose `Props` returns only an error, rendering a named component with `RenderComponent`: a dialog, rows, a panel swapped into another page |
+| **handler method** | `ServeHTTP(...)`: mutate, redirect, serve JSON, or (POST/PATCH/DELETE) render a partial via `RenderComponent`. A GET handler method only redirects or fails |
 | **Middlewares method** | `Middlewares(...)`: middleware for the page and its descendants |
 
 A layout is just a component that takes `children gsx.Node`; there is no layout route. `Content` is a
@@ -121,6 +122,18 @@ type adminPages struct {
 
 ## 2. Page shapes
 
+**Props decides what to show; ServeHTTP decides what to do.** The methods say what kind of route it is:
+
+| Route struct | Kind |
+|---|---|
+| Has `Page` (`Content` optional; `Props` returns data and an error) | page: a document |
+| No `Page`; `Props(...) error` returning `RenderComponent(p.Dialog(...))` | fragment: swapped into a page, never a document |
+| `ServeHTTP(w, r, ...) error` | action: POST/PATCH/DELETE may render a region; a GET only redirects or fails |
+| `ServeHTTP(w, r, ...)`, no error | protocol: downloads, JSON, SSE, callbacks |
+
+Full write-up, including a middleware that redirects a browser opening a fragment URL to the page above
+it: docs/route-conventions.md (https://jackielii.github.io/structpages/route-conventions).
+
 ### Props + Page (rendering page)
 
 ```gsx
@@ -155,15 +168,37 @@ rendered component's parameters by type, each result used at most once, so one `
 values serves several components, each declaring only what it needs. Components can also take the
 per-request values, request args and `WithArgs` values.
 Only the method named exactly `Props` is invoked; `UserListProps`-style helpers are ordinary methods you
-call yourself. A page can also omit `Props`, or have only `Props` and pick what to render with
-`RenderComponent`.
+call yourself. A page can also omit `Props` when `Page` needs no data.
+
+### Props only (fragment)
+
+```gsx
+type editDialog struct{}
+
+func (p editDialog) Props(r *http.Request, s *store.Store) error {
+    it, err := s.Item(r.Context(), r.PathValue("itemId"))
+    if err != nil {
+        return err
+    }
+    return structpages.RenderComponent(p.Dialog(it))
+}
+
+component (p editDialog) Dialog(it store.Item) {
+    <dialog open>{ it.Name }</dialog>
+}
+```
+
+No `Page`, and `Props` returns only `error`. With several components, choose with `target.Is` inside
+`Props` and still return `RenderComponent`. Never name a fragment's component `Page` (a browser opening the
+URL gets bare markup) and never return data for the fallback to render (with no `Page`, a request that
+wants none of its components is an error).
 
 ### Handler methods (`ServeHTTP`)
 
 | Signature | Writer | Use for |
 |---|---|---|
 | `ServeHTTP(w, r)` | direct | plain `http.Handler` |
-| `ServeHTTP(w, r) error` | buffered | HTML actions: return a partial, an error or a redirect signal |
+| `ServeHTTP(w, r) error` | buffered | HTML actions: return a partial (non-GET), an error or a redirect signal |
 | `ServeHTTP(w, r, deps...)` | direct | JSON/API endpoints that own their status codes |
 | `ServeHTTP(w, r, deps...) error` | buffered | HTML actions that need DI (`RenderTarget` is injectable too) |
 
@@ -543,5 +578,7 @@ reference.md Â§Lint lists the categories, the gsx specifics and the suppression 
 9. Plain strings pass through `id`/`target` unchanged (`"body" |> target` is `body`).
 10. htmx apps must opt in: `WithTargetSelector(HTMXRenderTarget)` (htmx 1/2) or
     `WithTargetSelector(HTMXv4RenderTarget)` (htmx 4). Without it every request renders `Page`.
-11. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
+11. A GET that shows something is a page (`Page`) or a fragment (no `Page`, `Props(...) error` returning
+    `RenderComponent`); a GET `ServeHTTP` only redirects or fails. Push only page URLs to history.
+12. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
     them.

@@ -220,6 +220,10 @@ rendered component's parameters by type), optionally a trailing `error`.
 
 Calling `t.Is(...)` changes nothing; recognising a target and returning no error is still the normal flow.
 
+A fragment (a page with no `Page`) returns only `error` from `Props` and always renders with
+`RenderComponent`: with no `Page` to fall back to, `(nil)` for a request that wants none of its
+components is an error. See docs/route-conventions.md.
+
 The writer is **not** buffered. Headers and cookies are fine (set `Content-Type`, then `w.WriteHeader(status)`, before returning
 `RenderComponent` to send a status: the framework can't set the header after the status); a body write is sent immediately and is not undone by a later error.
 
